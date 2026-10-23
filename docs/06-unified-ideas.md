@@ -98,40 +98,44 @@ Fill these in discussion. Leave the prompt text. Add decisions under each headin
 
 **How to write a decision:** one paragraph, the alternative rejected, and which doc must change if the decision sticks. If a partner booth upgrades a card to CONFIRM, paste the card text.
 
+D1–D4 below are Saturn’s decisions from 2026-10-23. D5–D8 stay empty stubs for Gaia to amend.
+
 ### Discussion log
 
 | Date | People | Topic | Decision id |
 |---|---|---|---|
-| | Saturn, Gaia | | |
+| 2026-10-23 | Saturn | Host split; Pine Labs rail; Shopping × Grocery; Grocery demo cadence | D1–D4 |
+| 2026-10-23 | Gaia (owns separately) | Visual lesson fidelity; Chotuchotu audio; Greptile and Vobiz; Saturday demo — stubs left open | D5–D8 |
 
 ### D1 — Host split
 
-- **Question:** Replit only, or Replit UI plus Render secrets/Postgres? See [partner architecture §8.1](05-partner-stack-architecture.md).
-- **Decision:**
-- **Rejected alternative:**
-- **Follow-through:**
+- **Question:** Replit only, or Replit UI plus Render secrets/Postgres? See [partner architecture §8.1](05-partner-stack-architecture.md). **Resolved 2026-10-23 (Saturn).**
+- **Decision:** Replit-only for Saturday as the public phone URL, auth stub, DB counter, and secrets host. Render Web Service + Postgres stays documented as a backup slide / post-event shape, not a second live host on the day.
+- **Gaia alternative (conditional):** If the Saturday demo is Commerce (Shopping/Grocery), prefer Replit UI + Render secrets/Postgres for Pine Labs webhooks and merchant keys; if Learning or Creators, Replit-only is enough.
+- **Rejected alternative:** Dual Replit UI + Render secrets/Postgres on Saturday (seam risk near 18:00; Airtribe URL + 20-user counter must not depend on two half-configured hosts).
+- **Follow-through:** The §3 diagram caption and §8 item 1 in [partner architecture](05-partner-stack-architecture.md) now record Saturday’s primary pick as Replit-only. Render table names stay for later. Warm-up / keepalive notes still apply if anyone later turns Render on.
 
 ### D2 — Pine Labs rail
 
-- **Question:** Payment link, Toolkit `createOrder`, or P3P mandate for the judged pay tap? Credentials actually received at the booth:
-- **Decision:**
-- **What the UI is allowed to say:**
-- **Follow-through:**
+- **Question:** Payment link, Toolkit `createOrder`, or P3P mandate for the judged pay tap? Credentials actually received at the booth: **UNKNOWN** as of 2026-10-23. **Resolved 2026-10-23 (Saturn)** for the rail; paste the booth credential answer on this line when it arrives.
+- **Decision:** Judged pay path is Pine Labs Agent Toolkit `createOrder` (or the payment-link equivalent from the Toolkit) returning `{order_id, url}`. The browser opens `url`. The return path calls `getOrder` and writes the order row. P3P / UPI ReservePay / mandates are a stretch second screen only if booth credentials confirm P3P is enabled; otherwise narrate from the keynote and keep the live path on the link. Partner tools stay first-class: Pine Labs Agent Toolkit, MCP at build time, and P3P as stretch — not a generic payment gateway.
+- **What the UI is allowed to say:** “Sandbox payment” or “Demo order” when the call is sandbox. Never claim settlement or delivered goods for sandbox or mocks. If credentials are late, ship the shortlist or cadence artifact and label the receipt **mock**.
+- **Follow-through:** Shared server-side `pay(amount, sku_label, user_id)` wrapper on Replit. `cancelOrder` and `createRefund` are staff-only. Record booth credential answers in this stub when known. Noted on [partner architecture §8](05-partner-stack-architecture.md) item 2.
 
 ### D3 — Shopping AI × Grocery AI
 
-- **Question:** Two products with a shared `pay()`, or one app with a mode? Cadence storage if Grocery stays separate:
-- **Decision:**
-- **Rejected alternative:**
-- **Follow-through:**
+- **Question:** Two products with a shared `pay()`, or one app with a mode? Cadence storage if Grocery stays separate: **Resolved 2026-10-23 (Saturn).**
+- **Decision:** Two products. They share only `pay()` and the Replit URL / user-counter pattern. No mode flag merges them. Grocery owns `groc_plans` (or the Replit DB equivalent) with daily, weekly, and monthly clock fields as first-class data, not prompt text. Shopping owns the episodic shortlist and checkout and has no cadence fields.
+- **Rejected alternative:** One Commerce app with a mode switch. That collapses the Grocery thesis that cadence is the product.
+- **Follow-through:** Idea docs [01](01-shopping-ai.md) and [02](02-grocery-ai-cadences.md) stay separate. The matrix on this page stays two rows. Noted on [partner architecture §8](05-partner-stack-architecture.md) item 3.
 
 ### D4 — Grocery demo cadence
 
-- **Question:** Which clock is polished (proposal: weekly), and are daily and monthly still one tap?
-- **Price book owner and freeze time:**
-- **Charge:** full sandbox total, or a labeled ₹ hold?
-- **Decision:**
-- **Follow-through:**
+- **Question:** Which clock is polished (proposal: weekly), and are daily and monthly still one tap? **Resolved 2026-10-23 (Saturn).**
+- **Price book owner and freeze time:** Team-owned static book in the DB. Freeze by noon Saturday. No quick-commerce private APIs.
+- **Charge:** Full sandbox basket total via the Pine Labs path, clearly labeled sandbox. Not a silent ₹ hold that judges might misread as production.
+- **Decision:** Polish **weekly** for the judged path: household basket, then a vendor quote from the price book, then pay. Daily and monthly remain one-tap secondary demos using the same plan schema.
+- **Follow-through:** Seed the weekly plan and the price book in the Replit DB early afternoon.
 
 ### D5 — Visual lesson fidelity
 
