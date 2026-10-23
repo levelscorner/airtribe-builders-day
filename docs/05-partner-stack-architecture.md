@@ -41,7 +41,7 @@ Event-day **credit amounts** for Pine Labs, Replit, Render, ElevenLabs, Greptile
 
 ## 3. System sketch
 
-**PROPOSAL.** One shape, four callers. Saturday may drop Render and run entirely on Replit if claiming two hosts is the thing that slips. The diagram shows the full proposal so a critique can delete boxes.
+**PROPOSAL.** One shape, four callers. Saturday may drop Render and run entirely on Replit if claiming two hosts is the thing that slips. The diagram shows the full proposal so a critique can delete boxes. **Accepted for Saturday (Saturn, D1, 2026-10-23):** Replit-only. Render in this diagram stays the backup / post-event shape. The conditional Gaia alternative is under §8 item 1.
 
 ```mermaid
 flowchart TB
@@ -283,12 +283,23 @@ Bring-your-own model key in parallel. There is no partner booth for it.
 These are the decisions most likely to be wrong. They are **PROPOSAL**s.
 
 1. **Two hosts.** Replit for the URL plus Render for secrets and Postgres. Attack: one host is enough and the seam will break at 18:00. Defence: Pine Labs webhooks and a warm DB are awkward inside a pure Agent deploy. Pick before building.
+
+   **Accepted for Saturday (Saturn, D1):** Replit-only as the public phone URL, auth stub, DB counter, and secrets host. **Rejected for Saturday:** dual Replit UI + Render secrets/Postgres as the live plan (seam risk near 18:00). Render Web Service + Postgres stays a backup slide / post-event shape. Keep the §4.6 table names for later. Warm-up / keepalive still applies if anyone later turns Render on.
+
+   **Gaia alternative (conditional):** If the Saturday demo is Commerce (Shopping/Grocery), prefer Replit UI + Render secrets/Postgres for Pine Labs webhooks and merchant keys; if Learning or Creators, Replit-only is enough.
+
 2. **Payment link over P3P for the 20 users.** Attack: the keynote is P3P, so a link looks timid. Defence: a link is a real phone pay; a narrated mandate that never charged is a slide. Show P3P only with credentials.
+
+   **Accepted for Saturday (Saturn, D2):** Judged pay path is Pine Labs Agent Toolkit `createOrder` (or the payment-link equivalent from the Toolkit) returning `{order_id, url}`; the browser opens `url`; `getOrder` writes the row. P3P / UPI ReservePay / mandates stay a stretch second screen only if booth credentials confirm P3P is enabled. **Rejected for Saturday:** a generic payment gateway, or P3P as the only judged tap without those credentials. UI may say “Sandbox payment” or “Demo order”; it must not claim settlement or delivered goods. Late credentials → shortlist or cadence artifact and a receipt labeled **mock**.
+
 3. **Shopping and Grocery share `pay()` and nothing else.** Attack: one Commerce app with a mode flag ships faster. Defence: cadence, pantry, and vendor quote are a different aggregate. See [Grocery](02-grocery-ai-cadences.md).
-4. **Visual lessons without an image model.** Attack: “visual” that is only cards will disappoint. Defence: SVG from a tiny schema fails closed; a bitmap model is an unpartnered dependency.
-5. **Chotuchotu audio as a side service `(media_ref, script, language)`.** Attack: the studio may already have a half-built audio hook, and a side service forks it. Defence: the private repo was not readable here. First hour of architecture time is reading it and deleting this service if a hook exists.
-6. **Greptile stays off the four homepages.** Attack: a toolkit judge wants to see their product. Defence: a disconnected widget reads as bait. Use Greptile when the artifact is code.
-7. **Text fallback for every voice feature except Chotuchotu.** Attack: the Learning brief says language and voice. Defence: the hall is loud; the scorecard still has to happen.
+
+   **Accepted for Saturday (Saturn, D3):** Two products. Share only `pay()` and the Replit URL / user-counter pattern. Grocery owns `groc_plans` (or the Replit DB equivalent) with daily, weekly, and monthly clock fields as data. Shopping owns the episodic shortlist and has no cadence fields. **Rejected for Saturday:** one Commerce app with a mode switch.
+
+4. **Visual lessons without an image model.** Attack: “visual” that is only cards will disappoint. Defence: SVG from a tiny schema fails closed; a bitmap model is an unpartnered dependency. **D5 (Gaia, 2026-10-23):** accepted. Citation cards plus that SVG; fail closed if extraction or the schema is empty; no unpartnered bitmap or image-gen API; ElevenLabs narration stays an optional toggle, default off. [D5](06-unified-ideas.md).
+5. **Chotuchotu audio as a side service `(media_ref, script, language)`.** Attack: the studio may already have a half-built audio hook, and a side service forks it. Defence: the private repo was not readable here. First hour of architecture time is reading it and deleting this service if a hook exists. **D6 (Gaia, 2026-10-23):** the side-service contract stays the plan until that hour; if a hook exists, delete the plan and attach there. Saturday artifact is a side-by-side audio file and video (mux only if the studio already muxes). Repo, branch, export, and “checkout autoshort” stay **UNKNOWN**. Job log is Replit DB while D1’s accepted host is Replit-only. Vobiz stays out of the spoken script unless a DID is live by noon IST. [D6](06-unified-ideas.md).
+6. **Greptile stays off the four homepages.** Attack: a toolkit judge wants to see their product. Defence: a disconnected widget reads as bait. Use Greptile when the artifact is code. **D7 (Gaia, 2026-10-23):** accepted. Staff tool, and Builders backlog B2/B5 only. Not a Shopping, Grocery, visual-learning, or Chotuchotu user flow. [D7](06-unified-ideas.md).
+7. **Text fallback for every voice feature except Chotuchotu.** Attack: the Learning brief says language and voice. Defence: the hall is loud; the scorecard still has to happen. **D7 (Gaia, 2026-10-23):** Vobiz is never the only path. Browser mic or file → ElevenLabs first. A DID is stretch and drops from the script if it is not live by noon IST. Noon DID status stays blank until the day. [D7](06-unified-ideas.md).
 
 ## 9. Critique checklist
 
