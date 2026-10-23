@@ -70,7 +70,7 @@ flowchart TD
   pay --> receipt[Shareable receipt card]
 ```
 
-1. User opens the Replit (or Render-fronted) URL.
+1. User opens the Replit URL. Saturday’s host is Replit-only (D1). Render is not in front of this flow.
 2. User types, or speaks via ElevenLabs if that path is on: “earbuds under ₹3,000, good for calls, over-ear is fine.”
 3. Agent answers with three cards. Each card has a price band, two reasons it fits, one reason it might not, and the criterion used. No ad slot.
 4. User tightens one constraint (“must work with a laptop dongle I don’t have — so Bluetooth”).
@@ -104,32 +104,32 @@ flowchart TD
 4. Tap **Pay / Hold**. Complete Pine Labs checkout for a small test amount (research suggests a ₹1–₹49 test SKU or an intent hold — pick one and label it).
 5. Land on a receipt card. Optional: vote which pick they would buy if the payment were real delivery.
 
-**What judges can see.** A live count of unique names, completed shortlists, and payment intents, stored in **Render Postgres** if that service is up, or in Replit’s DB if Render is the thing that slipped.
+**What judges can see.** A live count of unique names, completed shortlists, and payment intents, stored in **Replit DB** (D1). **Render** Postgres is a backup slide / post-event shape only. It is not the Saturday counter.
 
 **What the team says out loud.** “This is a sandbox order against our demo catalog. We are not shipping you earbuds from the venue.”
 
 ## Architecture sketch
 
-**PROPOSAL** for Saturn / Gaia. Names are partner tools, not “an LLM and payments.”
+**PROPOSAL** for Saturn / Gaia. Names are partner tools, not “an LLM and payments.” Saturday’s host is the accepted **D1** decision: **Replit-only**. Replit holds the UI, the DB counter, the secrets, and the tool host. **Render** Postgres and **Render** Web Service are backup / post-event only. They are not the Saturday live path. Named components and 2-coder ownership for the day: [Saturday Shopping components](08-shopping-ai-saturday-components.md).
 
 ```mermaid
 flowchart LR
-  phone[Phone browser] --> replit[Replit: UI, auth stub, phone URL]
+  phone[Phone browser] --> replit[Replit: UI, DB counter, secrets, tool host]
   replit --> agent[Shopping agent loop]
   agent --> llm[BYO model or Replit Agent model]
-  agent --> catalog[Demo catalog in Render Postgres]
+  agent --> catalog[Demo catalog in Replit DB]
   agent --> pine[Pine Labs Agent Toolkit]
   pine --> link[Payment link / UPI / card]
   agent --> el[ElevenLabs STT optional]
-  render[Render Web Service] --- agent
-  render --- catalog
+  render[Render Postgres + Web Service] -. backup slide only .-> agent
 ```
 
 | Piece | Tool | Role on this idea |
 |---|---|---|
-| Phone URL | **Replit** Agent + deploy | Homepage, one-tap signup, the URL on the QR |
-| System of record | **Render** Postgres | Users, shortlist events, order ids. Free tier spins down after ~15 minutes idle — keepalive, or accept Replit as the only host if cold start would kill 19:30 |
-| Tool host | **Render** Web Service, or a Replit server route | Holds the Pine Labs secret. The browser never sees the merchant key |
+| Phone URL, UI, DB counter, secrets, tool host | **Replit** Agent + deploy | Saturday primary host (D1). Homepage, one-tap signup, the URL on the QR, the session counter, and the server route that holds the Pine Labs secret. The browser never sees the merchant key |
+| System of record | **Replit** DB | Saturday store for users, shortlist events, and order ids. The mentor-visible count is the row count |
+| Backup system of record | **Render** Postgres | Backup slide only. Post-event shape, not the Saturday live path. Free tier spins down after ~15 minutes idle — keepalive only if someone later turns Render on |
+| Backup tool host | **Render** Web Service | Backup slide only. Post-event shape, not required for Saturday. Would hold the Pine Labs secret only in a later split-host shape |
 | Catalog reasoner | BYO LLM (**not** an event partner) | Rank and explain. Must cite catalog fields, not invent a fourth product |
 | Checkout | **Pine Labs Agent Enablement Toolkit** `@plural_pinelabs/agent-toolkit` | Tools: `createOrder`, `getOrder`, `cancelOrder`, `createRefund` ([toolkit docs](https://www.pinelabs.com/docs/online-payments/ai/agent-enablement-toolkit)) |
 | Agent ops | **Pine Labs MCP server** | Natural-language payment ops from Cursor/Claude during the build. Optional at runtime |

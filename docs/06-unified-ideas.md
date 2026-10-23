@@ -106,6 +106,7 @@ D1–D4 below are Saturn’s decisions from 2026-10-23. D5–D8 are Gaia’s dec
 |---|---|---|---|
 | 2026-10-23 | Saturn | Host split; Pine Labs rail; Shopping × Grocery; Grocery demo cadence | D1–D4 |
 | 2026-10-23 | Gaia | D5–D8 (visual, Chotuchotu, Greptile/Vobiz, Saturday demo) | D5–D8 |
+| 2026-10-23 | Sol / Saturn | Saturday Shopping component stub; Gaia Commerce→Render rejected for 24 Oct | D8 |
 
 ### D1 — Host split
 
@@ -172,7 +173,8 @@ This stub is the only place a single demo is allowed to be chosen, and only for 
 - **Demo chosen for the room:** **Shopping AI.** Architecture recommendation for the day, unlockable morning-of (**PROPOSAL**). It does not retire Grocery AI, visual learning, or Chotuchotu. D1–D4 stay Saturn’s.
 - **Why:** Pine Labs is the **CONFIRM** title partner, and the keynote is **CONFIRM**: “The New OS for Commerce: Building the Agent Ecosystem.” The clearest booth shape is **INFER** Pine Labs card 1, “agent that buys.” Peer Capital “commerce that converts” is **INFER**, and it is true of this demo if `createOrder` or a payment link works. The Commerce brief is **CONFIRM**. Aligned with Saturn on the commerce demo and on D2’s Pine Labs rail. D3 stays two products; this choice does not fold Grocery in.
 - **Why the others wait:** Grocery AI is the morning pivot if the booth card is kirana, list, or cadence-shaped. Visual learning is the Learning-track path if Commerce credentials fail. Chotuchotu is the Creators path if the studio boots and audio is the gap.
-- **Mock vs live partner calls:** Replit URL is live, on the Replit-only host D1 accepted (phone URL, auth stub, DB counter, secrets). Pine Labs is live if sandbox credentials arrive; otherwise the receipt is labeled **mock** (never fake a successful charge). Credential arrival is **UNKNOWN** until the booth. A live pay call follows D2: Pine Labs Agent Toolkit `createOrder` or the Toolkit payment-link equivalent. ElevenLabs stays off for the Shopping default. Greptile and Vobiz are not in the user flow. Render stays D1’s backup slide. This recommendation does not turn on D1’s conditional Commerce alternative (Replit UI + Render).
+- **Mock vs live partner calls:** Replit URL is live, on the Replit-only host D1 accepted (phone URL, auth stub, DB counter, secrets). Pine Labs is live if sandbox credentials arrive; otherwise the receipt is labeled **mock** (never fake a successful charge). Credential arrival is **UNKNOWN** until the booth. A live pay call follows D2: Pine Labs Agent Toolkit `createOrder` or the Toolkit payment-link equivalent. ElevenLabs stays off for the Shopping default. Greptile and Vobiz are not in the user flow. Render stays D1’s backup slide. Gaia’s conditional “Commerce → Replit UI + Render secrets/Postgres” is **rejected for Saturday 24 Oct** under the 2-coder constraint; **D1 Replit-only stands.**
+- **Components and ownership:** Named component list and 2-coder ownership for the day: [Saturday Shopping components](08-shopping-ai-saturday-components.md). Grocery AI, visual learning, and Chotuchotu stay in their own docs.
 - **User-count method:** A unique name, or the auth stub, writes a row in Replit DB (D1). The mentor-visible counter is that row count. No spreadsheet on stage. Postgres stays the backup shape only if Render is later turned on.
 - **Sentence for Peer Capital:** “An agent that buys — shortlist under constraints, then a real Pine Labs pay action — not a chat that only recommends.”
 
