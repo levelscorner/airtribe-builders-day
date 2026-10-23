@@ -10,7 +10,7 @@ The four ideas cover that bar on purpose:
 
 | Idea | Outcome the user leaves with | Why it stays in the portfolio |
 |---|---|---|
-| [Shopping AI](01-shopping-ai.md) | Three ranked picks with tradeoffs, then a Pine Labs order or payment link | Broad agentic commerce. Matches the title-partner keynote. Any category, including ones that are not food. |
+| [Shopping AI](01-shopping-ai.md) | Three ranked picks with tradeoffs, then a Pine Labs order or payment link | Broad agentic commerce. Matches the title-partner keynote. Any category, including ones that are not food. Saturday’s component list and 2-coder ownership: [Saturday Shopping components](08-shopping-ai-saturday-components.md). |
 | [Grocery AI](02-grocery-ai-cadences.md) | A household list tied to a **daily, weekly, or monthly** cadence, then payment | Recurring need with a planning loop Shopping AI does not have. Vendor relationship and repeat payment are the product. |
 | [Visual learning](03-visual-learning-pdf.md) | A visual lesson and a three-question quiz **grounded in an uploaded PDF** | Learning-track brief. Students already carry syllabi. The artifact is a lesson, not a chat transcript. |
 | [Chotuchotu](04-chotuchotu-studio.md) | A short from the existing studio, with an ElevenLabs audio track attached | Creators-track brief. The studio already exists. The missing piece is audio, which the event’s voice partners can fill. |
@@ -92,5 +92,5 @@ The room is Polaris in Brookefield: campus students plus a tech-park crowd, on p
 
 1. [Unified matrix](06-unified-ideas.md) — one table, four ideas, partners, inferred problem shape, status.
 2. [Partner stack](05-partner-stack-architecture.md) — how each named tool plugs in, with CONFIRM vs INFER.
-3. The idea doc under review, especially “Out of scope” and “Open questions”.
+3. The idea doc under review, especially “Out of scope” and “Open questions”. For the Saturday Shopping build, read [Saturday Shopping components](08-shopping-ai-saturday-components.md) with [Shopping AI](01-shopping-ai.md).
 4. Write the result back into the Saturn / Gaia stubs in the unified doc. Those sections are intentionally empty of decisions.

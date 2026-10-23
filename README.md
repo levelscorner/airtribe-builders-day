@@ -24,6 +24,7 @@ Official track briefs and the partner roster are **CONFIRM**. Numbered booth cha
 | Doc | Idea | Track | Status in this repo |
 |---|---|---|---|
 | [Shopping AI](docs/01-shopping-ai.md) | Broad buy / shortlist / agentic checkout. Any category. Pine Labs closes the loop. | Commerce | Architecture draft |
+| [Saturday Shopping components](docs/08-shopping-ai-saturday-components.md) | Named component list and 2-coder ownership for the Saturday Shopping AI build. Host is Replit-only (D1). Does not retire Grocery, visual learning, or Chotuchotu. | Commerce / Saturday build | Day-of stub |
 | [Grocery AI](docs/02-grocery-ai-cadences.md) | Household replenishment on **daily / weekly / monthly** cadences, vendors, and payment. | Commerce (vertical) | Architecture draft |
 | [PDF → visual learning](docs/03-visual-learning-pdf.md) | Syllabus or PDF page becomes a grounded visual lesson and a quiz. | Learning | Architecture draft |
 | [Chotuchotu](docs/04-chotuchotu-studio.md) | Existing private video studio (“checkout autoshort”). Audio is the gap. ElevenLabs, with Vobiz as a stretch. | Creators | Architecture draft; studio internals **UNKNOWN** here |
@@ -35,7 +36,7 @@ Shopping AI and Grocery AI are both Commerce. They are different products. Groce
 
 1. **Ten minutes.** This page, then [the single-pane matrix](docs/06-unified-ideas.md).
 2. **Portfolio thesis and non-goals.** [Overview](docs/00-overview.md). TableTalk is named there once and stays out of this repo.
-3. **One product.** Its idea doc (`docs/01`–`docs/04`), then the partner sections it cites in [partner architecture](docs/05-partner-stack-architecture.md).
+3. **One product.** Its idea doc (`docs/01`–`docs/04`), then the partner sections it cites in [partner architecture](docs/05-partner-stack-architecture.md). Saturday Shopping build: [component stub](docs/08-shopping-ai-saturday-components.md).
 4. **Architecture review (Saturn / Gaia).** Start at [partner architecture](docs/05-partner-stack-architecture.md), work the open questions at the bottom of each idea doc, and write decisions into the stubs in [unified ideas](docs/06-unified-ideas.md).
 5. **Citations.** [docs/research/](docs/research/) is the archive of the three source memos (VC demand, partners and market, CONFIRM vs INFER problem cards). Idea docs cite those files instead of restating every source URL.
 
@@ -51,6 +52,7 @@ docs/04-chotuchotu-studio.md
 docs/05-partner-stack-architecture.md
 docs/06-unified-ideas.md
 docs/07-backlog-demos.md
+docs/08-shopping-ai-saturday-components.md
 docs/research/builders-day-vc-research.md
 docs/research/builders-day-partners-and-market.md
 docs/research/builders-day-partner-problem-statements.md
