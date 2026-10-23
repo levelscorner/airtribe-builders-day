@@ -110,7 +110,7 @@ flowchart TD
 
 ## Architecture sketch
 
-**PROPOSAL** for Saturn / Gaia. Names are partner tools, not “an LLM and payments.” Saturday’s host is the accepted **D1** decision: **Replit-only**. Replit holds the UI, the DB counter, the secrets, and the tool host. **Render** Postgres and **Render** Web Service are backup / post-event only. They are not the Saturday live path. Named components and 2-coder ownership for the day: [Saturday Shopping components](08-shopping-ai-saturday-components.md).
+**PROPOSAL** for Saturn / Gaia. Names are partner tools, not “an LLM and payments.” Saturday’s host is the accepted **D1** decision: **Replit-only**. Replit holds the UI, the DB counter, the secrets, and the tool host. **Render** Postgres and **Render** Web Service are backup / post-event only. They are not the Saturday live path. Named components and 2-coder ownership for the day: [Saturday Shopping components](08-shopping-ai-saturday-components.md). The Ranker is a node in the lite orchestration DAG (a supervisor only routes; verify from the order or the mock label, not from the model’s words): [shared orchestration](09-shared-orchestration.md).
 
 ```mermaid
 flowchart LR

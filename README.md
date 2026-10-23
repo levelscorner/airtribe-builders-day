@@ -27,7 +27,9 @@ Official track briefs and the partner roster are **CONFIRM**. Numbered booth cha
 | [Saturday Shopping components](docs/08-shopping-ai-saturday-components.md) | Named component list and 2-coder ownership for the Saturday Shopping AI build. Host is Replit-only (D1). Does not retire Grocery, visual learning, or Chotuchotu. | Commerce / Saturday build | Day-of stub |
 | [Grocery AI](docs/02-grocery-ai-cadences.md) | Household replenishment on **daily / weekly / monthly** cadences, vendors, and payment. | Commerce (vertical) | Architecture draft |
 | [PDF → visual learning](docs/03-visual-learning-pdf.md) | Syllabus or PDF page becomes a grounded visual lesson and a quiz. | Learning | Architecture draft |
-| [Chotuchotu](docs/04-chotuchotu-studio.md) | Existing private video studio (“checkout autoshort”). Audio is the gap. ElevenLabs, with Vobiz as a stretch. | Creators | Architecture draft; studio internals **UNKNOWN** here |
+| [Chotuchotu](docs/04-chotuchotu-studio.md) | Existing private video studio (“checkout autoshort”). Audio is the gap. ElevenLabs, with Vobiz as a stretch. Saturday slice: [Saturday walkthrough](docs/04-chotuchotu-studio.md#saturday-walkthrough). | Creators | Architecture draft; studio internals **UNKNOWN** here |
+| [Shared orchestration](docs/09-shared-orchestration.md) | Lite DAG for Saturday: supervisor routes, then Ranker / Checkout / Verify (Shopping) or Script / Voice / Verify (Chotu). AI SDK runtime. Not an agentswitch port. | Shared / Saturday build | Locked extract |
+| [Tomorrow’s approach](docs/10-tomorrow-problem-approach.md) | Eight steps for any booth card. Default demo is Shopping AI; pivot keeps the same orchestration pattern. | Saturday build | Locked extract |
 | [Backlog demos](docs/07-backlog-demos.md) | L1 Interview Drill Coach, B1 Multiplayer Prompt Room, B3 Small Software Deploy, CR1 Clip Autopilot | Learning / Builders / Creators | Backlog, not first-class |
 
 Shopping AI and Grocery AI are both Commerce. They are different products. Grocery is the recurring-cadence vertical. Shopping AI is the open-category agent that can check out. Read both before treating one as a mode of the other.
@@ -36,14 +38,16 @@ Shopping AI and Grocery AI are both Commerce. They are different products. Groce
 
 1. **Ten minutes.** This page, then [the single-pane matrix](docs/06-unified-ideas.md).
 2. **Portfolio thesis and non-goals.** [Overview](docs/00-overview.md). TableTalk is named there once and stays out of this repo.
-3. **One product.** Its idea doc (`docs/01`–`docs/04`), then the partner sections it cites in [partner architecture](docs/05-partner-stack-architecture.md). Saturday Shopping build: [component stub](docs/08-shopping-ai-saturday-components.md).
-4. **Architecture review (Saturn / Gaia).** Start at [partner architecture](docs/05-partner-stack-architecture.md), work the open questions at the bottom of each idea doc, and write decisions into the stubs in [unified ideas](docs/06-unified-ideas.md).
-5. **Citations.** [docs/research/](docs/research/) is the archive of the three source memos (VC demand, partners and market, CONFIRM vs INFER problem cards). Idea docs cite those files instead of restating every source URL.
+3. **One product.** Its idea doc (`docs/01`–`docs/04`), then the partner sections it cites in [partner architecture](docs/05-partner-stack-architecture.md). Saturday Shopping build: [component stub](docs/08-shopping-ai-saturday-components.md) and [shared orchestration](docs/09-shared-orchestration.md). Chotu on Saturday: the [Saturday walkthrough](docs/04-chotuchotu-studio.md#saturday-walkthrough) inside the studio doc.
+4. **Day-of method.** [How to approach any problem tomorrow](docs/10-tomorrow-problem-approach.md), then the [orchestration decision memo](docs/research/agent-orchestration-memo.md) if you need the framework comparison.
+5. **Architecture review (Saturn / Gaia).** Start at [partner architecture](docs/05-partner-stack-architecture.md), work the open questions at the bottom of each idea doc, and write decisions into the stubs in [unified ideas](docs/06-unified-ideas.md).
+6. **Citations.** [docs/research/](docs/research/) is the archive (VC demand, partners and market, CONFIRM vs INFER problem cards, and the Neptune orchestration memo). Idea docs cite those files instead of restating every source URL.
 
 ## Map
 
 ```
 README.md
+docs/README.md
 docs/00-overview.md
 docs/01-shopping-ai.md
 docs/02-grocery-ai-cadences.md
@@ -53,9 +57,12 @@ docs/05-partner-stack-architecture.md
 docs/06-unified-ideas.md
 docs/07-backlog-demos.md
 docs/08-shopping-ai-saturday-components.md
+docs/09-shared-orchestration.md
+docs/10-tomorrow-problem-approach.md
 docs/research/builders-day-vc-research.md
 docs/research/builders-day-partners-and-market.md
 docs/research/builders-day-partner-problem-statements.md
+docs/research/agent-orchestration-memo.md
 ```
 
 ## Labels used everywhere
@@ -72,3 +79,4 @@ docs/research/builders-day-partner-problem-statements.md
 - [VC demand + five ideas per track](docs/research/builders-day-vc-research.md)
 - [Partners, market gaps, earlier top bets](docs/research/builders-day-partners-and-market.md)
 - [Partner problem statements (CONFIRM vs INFER)](docs/research/builders-day-partner-problem-statements.md)
+- [Agent orchestration decision memo (Neptune)](docs/research/agent-orchestration-memo.md)

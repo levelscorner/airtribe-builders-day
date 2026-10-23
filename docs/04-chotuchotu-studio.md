@@ -1,6 +1,6 @@
 # Chotuchotu studio
 
-**Status:** architecture draft for the **audio gap**. The studio itself already exists in a private repo. This documentation repo cannot see that code, so studio internals stay **UNKNOWN** until Saturn / Gaia read them.
+**Status:** architecture draft for the **audio gap**. The studio itself already exists in a private repo. This documentation repo cannot see that code, so studio internals stay **UNKNOWN** until Saturn / Gaia read them. Saturday’s named components, lite DAG, and the auto-shorts mini are in [Saturday walkthrough](#saturday-walkthrough).
 **Track:** Creators.
 **Working name from Abhinav:** private-repo video studio, “checkout autoshort.”
 
@@ -161,3 +161,48 @@ flowchart LR
 6. Is Vobiz in the Saturday script at all, or only a diagram?
 7. Caption burn-in: studio feature, or explicitly side-by-side files?
 8. Consent and retention: whose face is in the sample clip, and do we delete uploads after the demo?
+
+## Saturday walkthrough
+
+Same shape as [Shopping’s Saturday stub](08-shopping-ai-saturday-components.md): a problem, a person, an outcome, named components, and a lite DAG. The architecture above still holds. This section is the day-of slice, not a second spec.
+
+**Problem.** The Creators brief is a studio in one phone, in an Indian language. The studio (`auto-shorts` / chotu.studio) already makes the picture. **Audio is the gap.**
+
+**Who.** Someone with a 20–40s clip (or the team’s sample) who needs a voiceover and captions, not another editor.
+
+**Outcome.** A playable **audio file**, with the video beside it. Not a fake “posted Reel.”
+
+**Partners.** ElevenLabs is **required**. Replit only if the studio is not already public. Vobiz is a stretch. Pine Labs is not day one. Greptile stays off.
+
+**Core loop.** `(media_ref, script, language) → ElevenLabs TTS → audio_url + captions`. Mux only if the studio already muxes. Otherwise the share artifact is side by side. That is the same contract as the [build rule](#architecture-sketch) above.
+
+**If the studio will not boot at the venue.** Do not rebuild it. Run a Replit audio module on a **pre-exported sample**, and say “this is the voice layer the studio was missing.”
+
+### Named components
+
+Mentors should be able to point at each of these, the way they can point at Shopping’s six.
+
+1. Phone shell (script + language + Play)
+2. Session / render counter
+3. Media ref (sample or upload)
+4. Script agent (optional draft from one line)
+5. Voice executor (ElevenLabs TTS)
+6. Job + share card (audio URL logged)
+
+### Lite DAG
+
+Supervisor → **Script node** → **Voice node** → **Verify** (the file plays, or the job row exists). No Ranker and no catalog. Ranker is Shopping-only. Same orchestration pattern, different nodes. See [shared orchestration](09-shared-orchestration.md).
+
+### Mini from auto-shorts
+
+Hackathon slice only. The audio service does **not** reimplement cutting, hooks, or thumbnails.
+
+| auto-shorts idea | Mini version |
+|---|---|
+| `brief.md` + stages | One script box + one “Generate voice” stage |
+| Project folder / run manifest | One DB row: script, language, voice id, audio URL |
+| SSE live run | Spinner + poll job id (or stream when that is easy) |
+| Human-in-the-loop refine | Edit the script and regenerate. Do not rebuild a timeline |
+| Provider keys | ElevenLabs key in Replit secrets |
+| Money / DP / entitlements | **Out** for the Saturday demo |
+| Brand kit / multi-size exports | **Out** |
