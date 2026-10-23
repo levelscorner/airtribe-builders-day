@@ -17,7 +17,7 @@ This stub locks the component list and ownership for tomorrow. It does **not** r
 | Freeze build | ~16:00 |
 | 20 outside users | before 19:30 |
 
-Core loop: shortlist → Pine Labs Toolkit `createOrder` / sandbox pay on phone. Stretch: ElevenLabs voice; P3P mandate screen. Greptile and Vobiz stay off the homepage.
+Core loop: shortlist → Pine Labs Toolkit `createOrder` / sandbox pay on phone. The Ranker is a node in the [shared orchestration](09-shared-orchestration.md) DAG (supervisor routes; checkout is a button, not a free model call). Stretch: ElevenLabs voice; P3P mandate screen. Greptile and Vobiz stay off the homepage.
 
 ## Named components (label these on the architecture diagram)
 
@@ -111,5 +111,6 @@ Five seams on **one** Replit host. Dual Replit + Render looks richer on a slide 
 ## Related docs
 
 - [01 Shopping AI](01-shopping-ai.md) — product flows and risks
+- [09 Shared orchestration](09-shared-orchestration.md) — lite DAG the Ranker and Checkout nodes sit inside
 - [05 Partner stack](05-partner-stack-architecture.md) — D1 host, D2 rail
 - [06 Unified ideas](06-unified-ideas.md) — D1–D8 discussion log

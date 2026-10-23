@@ -10,10 +10,10 @@ The four ideas cover that bar on purpose:
 
 | Idea | Outcome the user leaves with | Why it stays in the portfolio |
 |---|---|---|
-| [Shopping AI](01-shopping-ai.md) | Three ranked picks with tradeoffs, then a Pine Labs order or payment link | Broad agentic commerce. Matches the title-partner keynote. Any category, including ones that are not food. Saturday’s component list and 2-coder ownership: [Saturday Shopping components](08-shopping-ai-saturday-components.md). |
+| [Shopping AI](01-shopping-ai.md) | Three ranked picks with tradeoffs, then a Pine Labs order or payment link | Broad agentic commerce. Matches the title-partner keynote. Any category, including ones that are not food. Saturday’s component list and 2-coder ownership: [Saturday Shopping components](08-shopping-ai-saturday-components.md). The Ranker sits in the [shared orchestration](09-shared-orchestration.md) DAG. |
 | [Grocery AI](02-grocery-ai-cadences.md) | A household list tied to a **daily, weekly, or monthly** cadence, then payment | Recurring need with a planning loop Shopping AI does not have. Vendor relationship and repeat payment are the product. |
 | [Visual learning](03-visual-learning-pdf.md) | A visual lesson and a three-question quiz **grounded in an uploaded PDF** | Learning-track brief. Students already carry syllabi. The artifact is a lesson, not a chat transcript. |
-| [Chotuchotu](04-chotuchotu-studio.md) | A short from the existing studio, with an ElevenLabs audio track attached | Creators-track brief. The studio already exists. The missing piece is audio, which the event’s voice partners can fill. |
+| [Chotuchotu](04-chotuchotu-studio.md) | A short from the existing studio, with an ElevenLabs audio track attached | Creators-track brief. The studio already exists. The missing piece is audio, which the event’s voice partners can fill. Saturday’s named components and lite DAG: [Saturday walkthrough](04-chotuchotu-studio.md#saturday-walkthrough). |
 
 [Backlog demos](07-backlog-demos.md) (L1, B1, B3, CR1) stay available. They were strong same-day shapes in the partner memo. They are not the products this portfolio is organising around.
 
@@ -35,7 +35,7 @@ Each first-class idea has three layers, and this repo only finishes the first tw
 | Layer | Meaning | Where it lives |
 |---|---|---|
 | Idea | Who it is for and what “done” feels like | `docs/01`–`docs/04` |
-| Research | VC demand, partner roster, inferred booth problems | `docs/research/` |
+| Research | VC demand, partner roster, inferred booth problems, and the orchestration framework pick | `docs/research/` including the [agent orchestration memo](research/agent-orchestration-memo.md) |
 | Architecture | Named partner tools, demo shape, open questions | Idea docs + [partner stack](05-partner-stack-architecture.md) |
 | Build | Running software | **Not this repo.** Saturn / Gaia discussion stubs in [unified ideas](06-unified-ideas.md) are the handoff. |
 
@@ -88,9 +88,22 @@ The room is Polaris in Brookefield: campus students plus a tech-park crowd, on p
 - Creators can use a booth clip because the studio already exists and the missing layer is speech, which ElevenLabs is in the room to provide.
 - Voice and Hinglish / Kannada / Hindi are part of the India wedge in the [India VC notes](research/builders-day-vc-research.md) and the [market memo](research/builders-day-partners-and-market.md). Each idea names where language matters and where English is enough for the 20-user pass.
 
+## Saturday operating notes
+
+These lock how to build on the day. They do not retire Grocery, visual learning, or Chotuchotu. Shopping AI is the default demo; [how to approach any problem tomorrow](10-tomorrow-problem-approach.md) is the pivot if a morning booth card points elsewhere.
+
+| Doc | What it locks |
+|---|---|
+| [Saturday Shopping components](08-shopping-ai-saturday-components.md) | Named boxes, ownership, Replit-only host |
+| [Shared orchestration](09-shared-orchestration.md) | Lite DAG: supervisor routes, Ranker / Checkout / Verify. Chotu uses Script / Voice / Verify |
+| [How to approach any problem tomorrow](10-tomorrow-problem-approach.md) | Eight steps that stay the same if the product changes |
+| [Agent orchestration memo](research/agent-orchestration-memo.md) | Neptune’s framework comparison. Runtime default is Vercel AI SDK |
+
+Chotu’s day-of slice is a section of the existing studio doc, not a new file: [Saturday walkthrough](04-chotuchotu-studio.md#saturday-walkthrough).
+
 ## Reading order for a critique
 
 1. [Unified matrix](06-unified-ideas.md) — one table, four ideas, partners, inferred problem shape, status.
 2. [Partner stack](05-partner-stack-architecture.md) — how each named tool plugs in, with CONFIRM vs INFER.
-3. The idea doc under review, especially “Out of scope” and “Open questions”. For the Saturday Shopping build, read [Saturday Shopping components](08-shopping-ai-saturday-components.md) with [Shopping AI](01-shopping-ai.md).
+3. The idea doc under review, especially “Out of scope” and “Open questions”. For the Saturday Shopping build, read [Saturday Shopping components](08-shopping-ai-saturday-components.md) with [Shopping AI](01-shopping-ai.md) and [shared orchestration](09-shared-orchestration.md). For a Chotu Saturday read, open the [Saturday walkthrough](04-chotuchotu-studio.md#saturday-walkthrough) inside the studio doc.
 4. Write the result back into the Saturn / Gaia stubs in the unified doc. Those sections are intentionally empty of decisions.
