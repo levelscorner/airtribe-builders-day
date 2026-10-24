@@ -457,7 +457,11 @@ async function beginPrompts(ctx: OrchestratorContext, chatId: string, videoId: s
 }
 
 function mediaEnv(ctx: OrchestratorContext): NodeJS.ProcessEnv {
-  return { ...process.env, MOCK: ctx.mock ? "1" : "0" };
+  const env: NodeJS.ProcessEnv = { ...process.env, MOCK: ctx.mock ? "1" : "0" };
+  // Seedance is not verified. Unset CLIP_MOCK stays on mock clips (slideshow).
+  // CLIP_MOCK=0 opts into the live video call.
+  if (!env.CLIP_MOCK?.trim()) env.CLIP_MOCK = "1";
+  return env;
 }
 
 /** The scene pipeline opts into gpt-image-2. A blank IMAGE_PROVIDER elsewhere stays on Ark. */
@@ -612,32 +616,52 @@ async function beginClips(ctx: OrchestratorContext, chatId: string, videoId: str
       provider: "mock",
       model: "",
     });
-    const generated = await media.clips.generate({
-      imageUrl: String(image.payload.url ?? mockAssets.keyframe),
-      videoPrompt,
-      elementIds: [],
-      durationMs,
-      aspectRatio: video.aspectRatio,
-    });
-    const provider = asMediaProvider(generated.provider);
-    const model = generated.model ?? "";
-    const providerLabel = generated.providerLabel ?? (provider === "mock" ? "Mock" : provider);
-    const artefact = await store.updateArtefact(ctx.db, pending.id, {
-      state: "awaiting_approval",
-      payload: { url: generated.url, provider, model, providerLabel, imageId: image.id },
-    });
-    publishMedia(chatId, {
-      jobId: pending.id,
-      artefactId: artefact.id,
-      kind: "clip",
-      status: "done",
-      percent: 100,
-      url: generated.url,
-      sceneId: image.sceneId,
-      provider,
-      model,
-    });
-    await approvalCard(ctx, chatId, "clips", artefact, `Clip · scene`);
+    try {
+      const generated = await media.clips.generate({
+        imageUrl: String(image.payload.url ?? mockAssets.keyframe),
+        videoPrompt,
+        elementIds: [],
+        durationMs,
+        aspectRatio: video.aspectRatio,
+      });
+      const provider = asMediaProvider(generated.provider);
+      const model = generated.model ?? "";
+      const providerLabel = generated.providerLabel ?? (provider === "mock" ? "Mock" : provider);
+      const artefact = await store.updateArtefact(ctx.db, pending.id, {
+        state: "awaiting_approval",
+        payload: { url: generated.url, provider, model, providerLabel, imageId: image.id },
+      });
+      publishMedia(chatId, {
+        jobId: pending.id,
+        artefactId: artefact.id,
+        kind: "clip",
+        status: "done",
+        percent: 100,
+        url: generated.url,
+        sceneId: image.sceneId,
+        provider,
+        model,
+      });
+      await approvalCard(ctx, chatId, "clips", artefact, `Clip · scene`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "clip failed";
+      console.error(`[media] clip generate failed: ${message}`, error);
+      await store.updateArtefact(ctx.db, pending.id, {
+        state: "failed",
+        payload: { imageId: image.id, error: message, provider: "mock" },
+      });
+      publishMedia(chatId, {
+        jobId: pending.id,
+        artefactId: pending.id,
+        kind: "clip",
+        status: "failed",
+        error: message,
+        sceneId: image.sceneId,
+        provider: "mock",
+        model: "",
+      });
+      throw error;
+    }
   });
 }
 
@@ -674,38 +698,58 @@ async function beginAudio(ctx: OrchestratorContext, chatId: string, videoId: str
       provider: "mock",
       model: "",
     });
-    const generated = await media.voice.generate({
-      text: spoken,
-      voiceId,
-      language: video.language,
-    });
-    const provider = asMediaProvider(generated.provider);
-    const model = generated.model ?? "";
-    const providerLabel = generated.providerLabel ?? (provider === "elevenlabs" ? "ElevenLabs" : "Mock");
-    const artefact = await store.updateArtefact(ctx.db, pending.id, {
-      state: "awaiting_approval",
-      payload: {
+    try {
+      const generated = await media.voice.generate({
+        text: spoken,
+        voiceId,
+        language: video.language,
+      });
+      const provider = asMediaProvider(generated.provider);
+      const model = generated.model ?? "";
+      const providerLabel = generated.providerLabel ?? (provider === "elevenlabs" ? "ElevenLabs" : "Mock");
+      const artefact = await store.updateArtefact(ctx.db, pending.id, {
+        state: "awaiting_approval",
+        payload: {
+          url: generated.url,
+          durationMs: generated.durationMs,
+          provider,
+          model,
+          providerLabel,
+          voiceId,
+          narration: spoken,
+        },
+      });
+      publishMedia(chatId, {
+        jobId: pending.id,
+        artefactId: artefact.id,
+        kind: "voice",
+        status: "done",
+        percent: 100,
         url: generated.url,
-        durationMs: generated.durationMs,
+        sceneId: scene.id,
         provider,
         model,
-        providerLabel,
-        voiceId,
-        narration: spoken,
-      },
-    });
-    publishMedia(chatId, {
-      jobId: pending.id,
-      artefactId: artefact.id,
-      kind: "voice",
-      status: "done",
-      percent: 100,
-      url: generated.url,
-      sceneId: scene.id,
-      provider,
-      model,
-    });
-    await approvalCard(ctx, chatId, "audio", artefact, `Voice · ${scene.title ?? scene.idx}`);
+      });
+      await approvalCard(ctx, chatId, "audio", artefact, `Voice · ${scene.title ?? scene.idx}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "voice failed";
+      console.error(`[media] voice generate failed: ${message}`, error);
+      await store.updateArtefact(ctx.db, pending.id, {
+        state: "failed",
+        payload: { voiceId, narration: spoken, error: message, provider: "mock" },
+      });
+      publishMedia(chatId, {
+        jobId: pending.id,
+        artefactId: pending.id,
+        kind: "voice",
+        status: "failed",
+        error: message,
+        sceneId: scene.id,
+        provider: "mock",
+        model: "",
+      });
+      throw error;
+    }
   });
 }
 
