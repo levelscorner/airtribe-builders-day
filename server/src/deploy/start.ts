@@ -9,6 +9,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getDb, migrate } from "../db/client.js";
 import { resolveLlmProvider } from "../llm/provider.js";
+import { mediaRoot } from "../media/files.js";
 import { createV1Router } from "../routes/v1.js";
 import { createSessionMiddleware, createSessionStore } from "../sessions.js";
 
@@ -52,7 +53,7 @@ export async function startServer(options?: { port?: number; listen?: boolean })
   if (existsSync(publicDir)) {
     app.use(express.static(publicDir, { fallthrough: true }));
   }
-  const mediaDir = process.env.MEDIA_ROOT?.trim() || resolve(__dirname, "../../data/media");
+  const mediaDir = mediaRoot(process.env);
   app.use("/media", express.static(mediaDir, { fallthrough: true }));
 
   const expoWeb =
