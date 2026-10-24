@@ -21,7 +21,7 @@ import type {
   RejectArtefactRequest,
   RejectArtefactResponse,
 } from "@chotu/shared";
-import type { StudioEvent } from "./media-contract";
+import type { RegenerateSceneRequest, StudioEvent } from "./media-contract";
 
 /**
  * Client surface for docs/14 REST + SSE.
@@ -42,6 +42,7 @@ export interface StudioClient {
     artefactId: string,
     confirm: 0 | 1,
     feedback?: string,
+    scope?: RegenerateSceneRequest,
   ): Promise<RegeneratePreviewResponse | RegenerateConfirmResponse>;
   approveAllRemaining(videoId: string): Promise<ApproveAllRemainingResponse>;
   listCast(): Promise<ListCastResponse>;

@@ -1,8 +1,8 @@
 import type { ArtefactKind, ChatMessage, QuestionMessage } from "@chotu/shared";
 import { readAgentReview, reviewFeedback, reviewFixes, reviewStatusLabel, reviewTone } from "../src/agent-review";
 import { openQuestion } from "../src/chat/open-question";
-import { parseMediaProgress, providerChipLabel, type MediaProgressEvent } from "../src/media-contract";
-import { STARTER_CREDITS, VOICES } from "../src/mock-fixtures";
+import { parseMediaProgress, providerChipLabel, readFinal, readStoryboard, type MediaProgressEvent } from "../src/media-contract";
+import { REGEN_COST, STARTER_CREDITS, VOICES } from "../src/mock-fixtures";
 import { createMockStudio } from "../src/mock-studio";
 import { readRejectNote } from "../src/reject-note";
 import { sessionFromCheckout } from "../src/checkout";
@@ -412,6 +412,15 @@ async function main(): Promise<void> {
   assert(done.video.brief.artStyle?.includes("2D"), "kids default art style");
   assert((done.video.brief.castIds ?? []).join() === "cast_chintu,cast_mini", "cast optionIds should stick");
   assert(done.video.brief.topic?.includes("barish"), "opening line should stay the topic");
+  const board = readStoryboard(done.artefacts);
+  assert(board?.board.scenes.length === 4, "storyboard has four scenes");
+  assert(
+    board?.board.scenes.every((scene) => scene.durationSec === 5 || scene.durationSec === 10),
+    "scene duration is 5 or 10 seconds",
+  );
+  const finalCut = done.artefacts.find((item) => item.kind === "final");
+  const file = readFinal(finalCut);
+  assert(file?.url.startsWith("mock://") && file.downloadUrl.startsWith("mock://"), "final cut has a mock download url");
 
   const packs = await api.listPacks();
   assert(packs.packs.length === 3, "three video packs");
@@ -435,6 +444,75 @@ async function main(): Promise<void> {
   }
   assert(unknownPack, "unknown pack fails checkout");
   assert((await api.getMe()).creditBalance === beforePacks + STARTER_CREDITS, "failed checkout leaves the balance");
+}
+
+async function storyboardCases(): Promise<void> {
+  const api = createMockStudio({ delayMs: 0 });
+  const seen: MediaProgressEvent[] = [];
+  await api.createUser({ displayName: "Asha", phoneOrEmail: "asha@example.com" });
+  const opened = await api.createChat({ initialMessage: "barish kaise banti hai" });
+  const stop = api.subscribe(opened.chatId, (event) => {
+    const progress = parseMediaProgress(event);
+    if (progress?.sceneId) seen.push(progress);
+  });
+  await answerBrief(api, opened.chatId, opened.videoId);
+  for (let step = 0; step < 40; step += 1) {
+    await pump();
+    const snap = await api.getVideo(opened.videoId);
+    if (snap.video.stage === "images") break;
+    if (snap.artefacts.some((item) => item.state === "awaiting_approval")) {
+      await api.approveAllRemaining(opened.videoId);
+    }
+  }
+  await pump(40);
+  const snap = await api.getVideo(opened.videoId);
+  assert(snap.video.stage === "images", "storyboard opens on the images stage");
+  const board = readStoryboard(snap.artefacts);
+  assert(board, "storyboard missing");
+  assert(board.board.scenes.length === 4, "four storyboard scenes");
+  const durations = new Set(board.board.scenes.map((scene) => scene.durationSec));
+  assert(durations.has(5) && durations.has(10), "mock scenes use both 5s and 10s");
+  for (const scene of board.board.scenes) {
+    assert(scene.imagePrompt.includes("barish"), "image prompt keeps the topic");
+    assert(scene.motionPrompt.length > 0 && scene.vo.length > 0 && scene.voiceId.length > 0, "scene fields");
+    const rows = board.media.filter((item) => item.sceneId === scene.id);
+    const image = rows.find((item) => item.kind === "image");
+    const clip = rows.find((item) => item.kind === "clip");
+    const voice = rows.find((item) => item.kind === "voice");
+    assert(image?.provider === "openai" && image.model === "gpt-image-2" && image.providerLabel === "GPT Image 2", "image face");
+    assert(clip?.provider === "ark" && clip.model.includes("seedance-2-5") && clip.providerLabel === "Seedance 2.5", "clip face");
+    assert(voice?.provider === "elevenlabs" && voice.providerLabel === "ElevenLabs", "voice face");
+  }
+  const scene1 = board.board.scenes.find((scene) => scene.index === 1);
+  const scene4 = board.board.scenes.find((scene) => scene.index === 4);
+  assert(scene1 && scene4, "scene indexes");
+  const doneAt = seen.findIndex((event) => event.sceneId === scene1.id && event.kind === "image" && event.status === "done");
+  const failAt = seen.findIndex((event) => event.status === "failed");
+  assert(doneAt !== -1 && failAt !== -1 && doneAt < failAt, "scene 1 finishes before the staggered VO failure");
+  const failed = seen[failAt];
+  assert(failed?.sceneId === scene4.id && failed.kind === "voice" && failed.error === "VO line drop", "scene 4 VO fails");
+  const sceneIds = new Set(seen.map((event) => event.sceneId));
+  assert(sceneIds.size === 4, "progress ticks carry every scene id");
+  const image = board.media.find((item) => item.sceneId === scene1.id && item.kind === "image");
+  const clip = board.media.find((item) => item.sceneId === scene1.id && item.kind === "clip");
+  assert(image && clip, "scene 1 media");
+  const preview = await api.regenerateArtefact(image.id, 0, undefined, {
+    sceneId: scene1.id,
+    target: "clip",
+    feedback: "push in",
+  });
+  assert("canAfford" in preview, "scene regenerate previews a cost");
+  assert(preview.artefactId === clip.id, "target clip is the regenerated artefact");
+  assert(preview.creditCost === REGEN_COST.clip, "clip regenerate uses the clip cost");
+  await api.regenerateArtefact(image.id, 1, undefined, { sceneId: scene1.id, target: "clip", feedback: "push in" });
+  await pump(20);
+  const after = await api.getVideo(opened.videoId);
+  const clipAfter = after.artefacts.find((item) => item.id === clip.id);
+  const imageAfter = after.artefacts.find((item) => item.id === image.id);
+  assert(clipAfter?.payload.feedback === "push in", "feedback lands on the clip");
+  assert(imageAfter?.payload.feedback !== "push in", "image stays untouched when the target is the clip");
+  assert(clipAfter?.state === "awaiting_approval", "clip returns to review");
+  stop();
 }
 
 async function answerBrief(api: ReturnType<typeof createMockStudio>, chatId: string, videoId: string): Promise<void> {
@@ -510,6 +588,7 @@ async function briefEdges(): Promise<void> {
 main()
   .then(() => briefEdges())
   .then(() => mediaTicks())
+  .then(() => storyboardCases())
   .catch((error: unknown) => {
     console.error(error);
     process.exit(1);

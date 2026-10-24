@@ -69,6 +69,11 @@ export function ChatScreen({ chatId }: { chatId: string }) {
       onConfirmRegenerate: (artefactId: string, feedback?: string) => {
         void stream.confirmRegenerate(artefactId, feedback);
       },
+      onPreviewScene: (artefactId: string, scope: { sceneId: string; target: "image" | "clip" | "voice"; feedback?: string }) =>
+        stream.previewRegenerate(artefactId, scope),
+      onConfirmScene: (artefactId: string, scope: { sceneId: string; target: "image" | "clip" | "voice"; feedback?: string }) => {
+        void stream.confirmRegenerate(artefactId, scope.feedback, scope);
+      },
       onNeedCredits: () => {
         router.push(`/packs?from=${encodeURIComponent(`/chat/${chatId}`)}`);
       },
