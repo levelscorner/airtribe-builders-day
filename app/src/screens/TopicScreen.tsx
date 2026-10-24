@@ -5,7 +5,6 @@ import {
   TextInput,
   Pressable,
   StyleSheet,
-  ActivityIndicator,
   ScrollView,
 } from "react-native";
 import { colors } from "../theme";
@@ -17,6 +16,7 @@ import {
   type UserPublic,
   API_BASE_URL,
 } from "../api";
+import { CtaButton } from "../ui/CtaButton";
 
 type Props = {
   user: UserPublic;
@@ -128,21 +128,19 @@ export function TopicScreen({ user, onCredits, onCreated, onBuyPack, onAdmin }: 
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Pressable
-        onPress={onMake}
-        disabled={busy || apiOk === false || user.credits < 1}
-        style={[styles.cta, (busy || apiOk === false || user.credits < 1) && styles.ctaDisabled]}
-      >
-        {busy ? (
-          <ActivityIndicator color={colors.cream} />
-        ) : (
-          <Text style={styles.ctaText}>Draft script (1 credit)</Text>
-        )}
-      </Pressable>
+      <View style={{ marginTop: 32 }}>
+        <CtaButton
+          label="Draft script (1 credit)"
+          onPress={onMake}
+          busy={busy}
+          disabled={busy || apiOk === false || user.credits < 1}
+          testID="draft-script"
+        />
+      </View>
 
-      <Pressable style={styles.secondary} onPress={onBuyPack}>
-        <Text style={styles.secondaryText}>Buy video pack</Text>
-      </Pressable>
+      <View style={{ marginTop: 12 }}>
+        <CtaButton label="Buy video pack" onPress={onBuyPack} variant="secondary" testID="buy-pack" />
+      </View>
       <Pressable onPress={onAdmin}>
         <Text style={styles.metaLink}>Traction admin</Text>
       </Pressable>

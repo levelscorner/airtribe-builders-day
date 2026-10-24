@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from "react-native";
+import { View, Text, TextInput, Pressable, StyleSheet } from "react-native";
 import { colors } from "../theme";
 import { signup, type UserPublic } from "../api";
+import { CtaButton } from "../ui/CtaButton";
 
 type Props = {
   onSignedIn: (user: UserPublic) => void;
@@ -53,9 +54,9 @@ export function SignupScreen({ onSignedIn, onAdmin }: Props) {
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Pressable style={[styles.cta, busy && styles.disabled]} onPress={onSubmit} disabled={busy}>
-        {busy ? <ActivityIndicator color={colors.cream} /> : <Text style={styles.ctaText}>Continue</Text>}
-      </Pressable>
+      <View style={{ marginTop: 28 }}>
+        <CtaButton label="Continue" onPress={onSubmit} busy={busy} disabled={busy} testID="signup-continue" />
+      </View>
 
       <Pressable onPress={onAdmin} style={styles.linkWrap}>
         <Text style={styles.link}>Traction admin / event log</Text>

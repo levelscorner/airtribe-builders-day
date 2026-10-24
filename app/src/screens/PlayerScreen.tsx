@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Pressable,
   Image,
   Platform,
   Share,
@@ -14,6 +13,7 @@ import { Audio, Video, ResizeMode } from "expo-av";
 import * as Clipboard from "expo-clipboard";
 import { colors } from "../theme";
 import { approveFinal, type JobPublic, type UserPublic } from "../api";
+import { CtaButton } from "../ui/CtaButton";
 
 type Props = {
   job: JobPublic;
@@ -146,27 +146,32 @@ export function PlayerScreen({ job: initial, user, onAgain, onUpdated }: Props) 
       </View>
 
       {needsFinal ? (
-        <Pressable style={styles.cta} onPress={onApproveFinal} disabled={approving}>
-          <Text style={styles.ctaText}>{approving ? "Saving…" : "Approve final cut & unlock download"}</Text>
-        </Pressable>
+        <View style={{ marginTop: 16 }}>
+          <CtaButton
+            label={approving ? "Saving…" : "Approve final cut & unlock download"}
+            onPress={onApproveFinal}
+            busy={approving}
+            disabled={approving}
+            testID="approve-final"
+          />
+        </View>
       ) : null}
 
       {error ? <Text style={styles.warn}>{error}</Text> : null}
 
       <View style={styles.actions}>
         {job.publishUnlocked && job.videoUrl ? (
-          <Pressable style={styles.btnSecondary} onPress={onDownload}>
-            <Text style={styles.btnSecondaryText}>Download</Text>
-          </Pressable>
+          <CtaButton label="Download" onPress={onDownload} variant="secondary" testID="download" />
         ) : null}
         {job.publishUnlocked ? (
-          <Pressable style={styles.btnSecondary} onPress={onShare}>
-            <Text style={styles.btnSecondaryText}>{copied ? "Link copied" : "Share link"}</Text>
-          </Pressable>
+          <CtaButton
+            label={copied ? "Link copied" : "Share link"}
+            onPress={onShare}
+            variant="secondary"
+            testID="share"
+          />
         ) : null}
-        <Pressable style={styles.btnPrimary} onPress={onAgain}>
-          <Text style={styles.btnPrimaryText}>Make another</Text>
-        </Pressable>
+        <CtaButton label="Make another" onPress={onAgain} variant="primary" testID="make-another" />
       </View>
 
       <Text style={styles.actTitle}>Agent activity</Text>

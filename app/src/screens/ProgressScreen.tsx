@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, ActivityIndicator, ScrollView, Pressable } from "react-native";
+import { View, Text, StyleSheet, ActivityIndicator, ScrollView } from "react-native";
 import { colors } from "../theme";
 import {
   approveScript,
@@ -8,6 +8,7 @@ import {
   type StageName,
   type UserPublic,
 } from "../api";
+import { CtaButton } from "../ui/CtaButton";
 
 const STAGE_LABEL: Record<StageName, string> = {
   script: "Script",
@@ -83,13 +84,15 @@ export function ProgressScreen({ jobId, user, onAwaitingFinal, onFail }: Props) 
             </View>
           ))}
           {error ? <Text style={styles.error}>{error}</Text> : null}
-          <Pressable style={styles.cta} onPress={onApproveScript} disabled={approving}>
-            {approving ? (
-              <ActivityIndicator color={colors.cream} />
-            ) : (
-              <Text style={styles.ctaText}>Approve script → make visuals & voice</Text>
-            )}
-          </Pressable>
+          <View style={{ marginTop: 8 }}>
+            <CtaButton
+              label="Approve script → make visuals & voice"
+              onPress={onApproveScript}
+              busy={approving}
+              disabled={approving}
+              testID="approve-script"
+            />
+          </View>
         </View>
       ) : null}
 
