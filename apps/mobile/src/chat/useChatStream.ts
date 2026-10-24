@@ -107,6 +107,11 @@ export function useChatStream(chatId: string) {
   const [artefacts, setArtefacts] = useState<Record<string, ArtefactSummary>>({});
   const [videoId, setVideoId] = useState<string | null>(null);
   const [credits, setCredits] = useState<number | null>(null);
+  const creditsRef = useRef<number | null>(null);
+  const writeCredits = useCallback((next: number | null) => {
+    creditsRef.current = next;
+    setCredits(next);
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
   const [status, setStatus] = useState<ChatLoadStatus>("loading");
@@ -198,7 +203,7 @@ export function useChatStream(chatId: string) {
           }
           return merged;
         });
-        setCredits(me.creditBalance);
+        writeCredits(me.creditBalance);
         setStatus("ready");
       } catch (err) {
         if (!alive) return;
@@ -210,7 +215,7 @@ export function useChatStream(chatId: string) {
       alive = false;
       unsubscribe();
     };
-  }, [chatId, client, retryToken, upsert, writeArtefact]);
+  }, [chatId, client, retryToken, upsert, writeArtefact, writeCredits]);
 
   const reload = useCallback(() => {
     setRetryToken((token) => token + 1);
@@ -218,8 +223,8 @@ export function useChatStream(chatId: string) {
 
   const refreshCredits = useCallback(async () => {
     const me = await client.getMe();
-    setCredits(me.creditBalance);
-  }, [client]);
+    writeCredits(me.creditBalance);
+  }, [client, writeCredits]);
 
   const run = useCallback(async (key: string, work: () => Promise<void>) => {
     if (locks.current.has(key)) return;
@@ -316,29 +321,26 @@ export function useChatStream(chatId: string) {
         const cost = previous?.creditCost ?? 0;
         const drafted = previous ? { ...previous, state: "generating" as const } : null;
         if (drafted) writeArtefact(drafted, false);
-        let rolledCredits = false;
-        setCredits((balance) => {
-          if (balance === null || cost <= 0) return balance;
-          rolledCredits = true;
-          return balance - cost;
-        });
+        const balanceNow = creditsRef.current;
+        const debit = balanceNow !== null && cost > 0 ? cost : 0;
+        if (debit > 0 && balanceNow !== null) writeCredits(balanceNow - debit);
         try {
           const result = await client.regenerateArtefact(artefactId, 1);
           if ("artefact" in result) {
             writeArtefact(result.artefact, false);
-            setCredits(result.balance);
+            writeCredits(result.balance);
           } else {
             await refreshCredits();
           }
         } catch (err) {
           restoreIfUntouched(previous, drafted);
-          if (rolledCredits) {
-            setCredits((balance) => (balance === null ? balance : balance + cost));
+          if (debit > 0 && balanceNow !== null && creditsRef.current === balanceNow - debit) {
+            writeCredits(balanceNow);
           }
           throw err;
         }
       }),
-    [client, refreshCredits, restoreIfUntouched, run, writeArtefact],
+    [client, refreshCredits, restoreIfUntouched, run, writeArtefact, writeCredits],
   );
 
   const approveAll = useCallback(

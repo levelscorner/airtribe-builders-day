@@ -141,7 +141,13 @@ export function ChatScreen({ chatId }: { chatId: string }) {
         ) : null}
         {showComposer ? (
           <Composer
-            placeholder={question?.allowFreeText ? "Jawab yahan likho…" : "Message likho…"}
+            placeholder={
+            question?.allowFreeText
+              ? "Jawab yahan likho…"
+              : question
+                ? "Option likho, ya neeche chuno…"
+                : "Message likho…"
+          }
             onSend={onSend}
           />
         ) : null}
