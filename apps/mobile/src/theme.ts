@@ -21,3 +21,6 @@ export const layout = {
   pad: 16,
   hit: 48,
 };
+
+/** Extra press area so a 48px control stays easy to hit with a thumb. */
+export const hitSlop = { top: 8, bottom: 8, left: 8, right: 8 };

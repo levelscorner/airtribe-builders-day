@@ -16,6 +16,7 @@ import type {
   User,
   VideoSummary,
 } from "@chotu/shared";
+import { applyRejectNote } from "./reject-note";
 import type { StudioClient } from "./studio-client";
 import {
   CAST,
@@ -201,12 +202,14 @@ export function createMockStudio(options?: {
       artefact.state === "awaiting_approval" || artefact.state === "approved" || artefact.state === "rejected"
         ? artefact.state
         : null;
-    const next: ApprovalCardMessage = {
-      ...current,
-      preview: { ...artefact.payload },
-      regenerateCreditCost: artefact.creditCost,
-      state: legal ?? current.state,
-    };
+    const next: ApprovalCardMessage = applyRejectNote(
+      {
+        ...current,
+        regenerateCreditCost: artefact.creditCost,
+        state: legal ?? current.state,
+      },
+      artefact.payload,
+    );
     emit(chat, { type: "message", message: next });
   }
 
@@ -533,7 +536,7 @@ export function createMockStudio(options?: {
 
   function chatTopic(bundle: VideoBundle): string {
     const chat = chats.get(bundle.video.chatId);
-    return chat?.topic || bundle.video.brief.notes || "aaj ka topic";
+    return chat?.answers.topic?.trim() || chat?.topic?.trim() || bundle.video.brief.topic || "aaj ka topic";
   }
 
   async function finishBrief(chat: ChatRuntime): Promise<void> {
@@ -557,7 +560,9 @@ export function createMockStudio(options?: {
     if (!chat.answers.art_style) chat.assumed.push(styleLabel(artStyle));
     if (!chat.answers.cast) chat.assumed.push(castIds.join(","));
 
+    const topic = chatTopic(bundle);
     const brief: Brief = {
+      topic,
       genre,
       language,
       aspectRatio,
@@ -567,7 +572,7 @@ export function createMockStudio(options?: {
       artStyle: styleLabel(artStyle),
       artStyleTraits: styleTraits(artStyle),
       castIds,
-      notes: chat.topic,
+      notes: topic,
     };
     bundle.video = {
       ...bundle.video,
@@ -615,6 +620,14 @@ export function createMockStudio(options?: {
       return null;
     }
     if (!raw) return "Jawab khali hai.";
+    if (field === "topic") {
+      const value = raw.trim().slice(0, 200);
+      if (!value) return "Topic likho, ek line mein.";
+      chat.answers.topic = value;
+      chat.topic = value;
+      chat.qIndex += 1;
+      return null;
+    }
     if (field === "target_seconds") {
       const parsed = Number.parseInt(raw, 10);
       if (!Number.isFinite(parsed)) return "Seconds mein number likho, jaise 45.";
@@ -676,6 +689,7 @@ export function createMockStudio(options?: {
       const label = answerLabel(question, value);
       emitText(chat, "user", label);
       chat.answers[input.field] = value;
+      if (input.field === "topic") chat.topic = value;
       chat.assumed.push(label);
       chat.qIndex += 1;
     } else {
@@ -689,8 +703,24 @@ export function createMockStudio(options?: {
     await askNext(chat);
   }
 
+  function syncScriptScenes(artefact: ArtefactSummary): void {
+    const scenes = artefact.payload.scenes;
+    if (!Array.isArray(scenes)) return;
+    const bundle = mustVideo(artefact.videoId);
+    for (const item of scenes) {
+      if (!item || typeof item !== "object") continue;
+      const row = item as { idx?: unknown; narration?: unknown; title?: unknown };
+      if (typeof row.idx !== "number") continue;
+      const scene = bundle.scenes.find((candidate) => candidate.idx === row.idx);
+      if (!scene) continue;
+      if (typeof row.narration === "string") scene.narration = row.narration;
+      if (typeof row.title === "string") scene.title = row.title;
+    }
+  }
+
   function bumpPayload(kind: ArtefactKind, payload: Record<string, unknown>, version: number): Record<string, unknown> {
     const next: Record<string, unknown> = { ...payload, version };
+    delete next.rejectNote;
     delete next.rejectionNote;
     if (kind === "identity" && Array.isArray(next.members)) {
       next.members = next.members.map((item) => {
@@ -739,7 +769,8 @@ export function createMockStudio(options?: {
       const chatId = nid("chat");
       const videoId = nid("vid");
       const created = now();
-      const topic = body.initialMessage?.trim() || "aaj ka topic";
+      const heardTopic = body.initialMessage?.trim() ?? "";
+      const topic = heardTopic || "aaj ka topic";
       const video: VideoSummary = {
         id: videoId,
         userId: current.id,
@@ -762,9 +793,9 @@ export function createMockStudio(options?: {
         videoId,
         messages: [],
         listeners: new Set(),
-        answers: {},
+        answers: heardTopic ? { topic: heardTopic } : {},
         assumed: [],
-        qIndex: 0,
+        qIndex: heardTopic ? 1 : 0,
         topic,
         phase: "brief",
         advanceTimer: null,
@@ -786,7 +817,7 @@ export function createMockStudio(options?: {
             : "Namaste. Main Chotu hoon, aapki chhoti production team. Hindi, Hinglish, ya English — pehle brief, phir video.",
         );
         emit(chat, { type: "stage", videoId, stage: "brief" });
-        const first = INTAKE[0];
+        const first = INTAKE[chat.qIndex];
         if (first) emitQuestion(chat, first);
       })().catch((error: unknown) => emitError(chat, error));
       return { chatId, videoId, stage: "brief" };
@@ -797,6 +828,7 @@ export function createMockStudio(options?: {
     },
 
     async getChat(chatId) {
+      await wait();
       const chat = mustChat(chatId);
       const bundle = mustVideo(chat.videoId);
       return {
@@ -825,19 +857,6 @@ export function createMockStudio(options?: {
           throw new StudioMockError("stale_question", "Yeh sawal ab active nahi hai.");
         }
         let echo = body.text?.trim() || "";
-        const optionIds = body.answer.optionIds?.map((id) => id.trim()).filter(Boolean);
-        if (optionIds && optionIds.length > 0) {
-          if (optionIds.length > 2) {
-            throw new StudioMockError("cast", "Cast mein zyada se zyada 2 members.");
-          }
-          if (question.field !== "cast") {
-            throw new StudioMockError("answer", "optionIds sirf cast ke liye hain; single choice pe optionId use karo.");
-          }
-        }
-        let raw =
-          optionIds && optionIds.length > 0
-            ? optionIds.join(",")
-            : (body.answer.optionId ?? body.answer.freeText);
         if (body.answer.useDefaults) {
           echo = echo || "Use defaults";
           void continueBrief(chat, { field: question.field, usedDefaults: true, echo }).catch((error: unknown) =>
@@ -854,6 +873,19 @@ export function createMockStudio(options?: {
           const message = chat.messages[chat.messages.length - 1];
           return { accepted: true, message: message?.role === "user" ? message : undefined };
         }
+        let raw: string | undefined;
+        if (body.answer.optionIds !== undefined) {
+          if (question.field !== "cast") {
+            throw new StudioMockError("answer", "optionIds sirf cast ke liye hain; single choice pe optionId use karo.");
+          }
+          const optionIds = body.answer.optionIds.map((id) => id.trim()).filter(Boolean);
+          if (optionIds.length < 1 || optionIds.length > 2) {
+            throw new StudioMockError("cast", "Cast mein 1 ya 2 members chuno.");
+          }
+          raw = optionIds.join(",");
+        } else {
+          raw = body.answer.optionId ?? body.answer.freeText;
+        }
         if (!raw && body.text?.trim() && question.allowFreeText) raw = body.text.trim();
         echo = echo || (raw ? answerLabel(question, raw) : "…");
         void continueBrief(chat, { field: question.field, raw, echo }).catch((error: unknown) => emitError(chat, error));
@@ -868,7 +900,29 @@ export function createMockStudio(options?: {
         const message = chat.messages[chat.messages.length - 1];
         return { accepted: true, message: message?.role === "user" ? message : undefined };
       }
-      const message = emitText(chat, "user", text || "…");
+      if (text && isChipQuestion(question)) {
+        const picked = fuzzyOptionIds(question, text);
+        if (picked.length > 0) {
+          const raw = picked.join(",");
+          void continueBrief(chat, { field: question.field, raw, echo: answerLabel(question, raw) }).catch(
+            (error: unknown) => emitError(chat, error),
+          );
+        } else if (question.allowDefaults) {
+          void continueBrief(chat, { field: question.field, usedDefaults: true, echo: "Use defaults" }).catch(
+            (error: unknown) => emitError(chat, error),
+          );
+        } else {
+          emitText(chat, "assistant", "Neeche option chuno, ya Use defaults dabao.");
+          return { accepted: true, message: undefined };
+        }
+        const message = chat.messages[chat.messages.length - 1];
+        return { accepted: true, message: message?.role === "user" ? message : undefined };
+      }
+      if (!text) {
+        emitText(chat, "assistant", "Neeche option chuno, ya Use defaults dabao.");
+        return { accepted: true, message: undefined };
+      }
+      const message = emitText(chat, "user", text);
       emitText(chat, "assistant", "Neeche option chuno, ya Use defaults dabao.");
       return { accepted: true, message };
     },
@@ -907,7 +961,8 @@ export function createMockStudio(options?: {
         throw new StudioMockError("bad_state", "Yeh card reject nahi ho sakta.");
       }
       artefact.state = "rejected";
-      artefact.payload = { ...artefact.payload, rejectionNote: note };
+      artefact.payload = { ...artefact.payload, rejectNote: note };
+      delete artefact.payload.rejectionNote;
       artefact.updatedAt = now();
       patchApproval(chat, artefact);
       const snapshot = { ...artefact, payload: { ...artefact.payload } };
@@ -955,6 +1010,7 @@ export function createMockStudio(options?: {
         artefact.version += 1;
         artefact.state = "awaiting_approval";
         artefact.payload = bumpPayload(artefact.kind, artefact.payload, artefact.version);
+        if (artefact.kind === "script") syncScriptScenes(artefact);
         artefact.updatedAt = now();
         patchApproval(chat, artefact);
         emit(chat, { type: "artefact", artefact: { ...artefact, payload: { ...artefact.payload } } });
@@ -1011,23 +1067,70 @@ export function createMockStudio(options?: {
     },
 
     async listPacks() {
+      await wait();
       return { packs: PACKS.map((pack) => ({ ...pack })) };
     },
 
     async checkout(body) {
+      await wait();
       const current = mustUser();
       const pack = PACKS.find((item) => item.id === body.packId);
       if (!pack) throw new StudioMockError("pack", "Yeh pack nahi mila.");
       current.creditBalance += pack.credits;
+      const paymentId = nid("pay");
       return {
-        paymentId: nid("pay"),
-        status: "mocked",
+        paymentId,
+        status: "mocked" as const,
+        checkoutUrl: `mock://pine-labs/${paymentId}`,
         creditsGranted: pack.credits,
       };
     },
   };
 
   return api;
+}
+
+const CHIP_FIELDS = new Set(["genre", "aspect_ratio", "resolution", "language", "cast"]);
+
+function normalizeChoice(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9:+]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function mentionsChoice(hay: string, needle: string): boolean {
+  if (!needle) return false;
+  return ` ${hay} `.includes(` ${needle} `);
+}
+
+function isChipQuestion(question: IntakeQuestion): boolean {
+  return CHIP_FIELDS.has(question.field) && Boolean(question.options?.length) && !question.allowFreeText;
+}
+
+/** Match typed composer text to chip ids. Cast may return two ids. */
+function fuzzyOptionIds(question: IntakeQuestion, text: string): string[] {
+  const hay = normalizeChoice(text);
+  if (!hay || !question.options?.length) return [];
+  const tokens = hay.split(" ").filter(Boolean);
+  const hits: string[] = [];
+  for (const option of question.options) {
+    const idNorm = normalizeChoice(option.id);
+    const labelNorm = normalizeChoice(option.label);
+    const idStem = idNorm.replace(/p$/, "");
+    const labelTokens = labelNorm.split(" ").filter((token) => token.length > 2);
+    const matched =
+      hay === idNorm ||
+      hay === labelNorm ||
+      mentionsChoice(hay, idNorm) ||
+      mentionsChoice(hay, labelNorm) ||
+      tokens.some((token) => token === idNorm || (idStem.length >= 3 && token === idStem) || token === labelNorm) ||
+      labelTokens.some((token) => mentionsChoice(hay, token));
+    if (matched) hits.push(option.id);
+  }
+  return question.field === "cast" ? hits.slice(0, 2) : hits.slice(0, 1);
 }
 
 function asGenre(value: string | undefined): Genre | undefined {
@@ -1061,6 +1164,8 @@ function defaultValue(
   preset: ReturnType<typeof defaultsFor>,
 ): string {
   switch (field) {
+    case "topic":
+      return "aaj ka topic";
     case "genre":
       return "kids";
     case "aspect_ratio":

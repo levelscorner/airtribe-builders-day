@@ -1,6 +1,25 @@
 # Airtribe AI Builders Day — product portfolio
 
-Documentation for the ideas Abhinav is keeping in play for **Airtribe AI Builders Day** (Saturday 24 October 2026, Bengaluru) and for the weeks after. This repository holds product and architecture notes only. There is no application source here.
+Documentation for the ideas Abhinav is keeping in play for **Airtribe AI Builders Day** (Saturday 24 October 2026, Bengaluru) and for the weeks after. The repo now also holds the Track 04 **Chotu Studio** app (`apps/mobile` + `server`).
+
+## Chotu Studio (supported client)
+
+**Supported UI:** [`apps/mobile`](apps/mobile) (Expo web + Expo Go). It talks to Saturn `/v1` (REST + SSE).
+
+```bash
+npm run install:all
+npm run mobile:export          # Expo web → apps/mobile/dist
+MOCK=1 npm start               # /v1 API + static Expo web (default PORT 8787)
+```
+
+Legacy Chotu mini (`app/` → `/api/jobs`) is still available via a separate process:
+
+```bash
+npm run start:legacy           # old Express /api/jobs server (server/src/index.ts)
+npm run app                    # Expo app against that API
+```
+
+See [`docs/14-architecture.md`](docs/14-architecture.md) and [`docs/16-checklist.md`](docs/16-checklist.md).
 
 Four ideas stay first-class in the portfolio. A short backlog records earlier demo shapes that are still available if a booth challenge or the team’s skills pull that way.
 

@@ -27,4 +27,5 @@ export const PROMPT_TASK = [
   "Do not embed an element for a narrator. Keep narrators off screen.",
   "The image has no text, letters, logos, or watermarks.",
   "The video prompt names one camera move, the pace, and the duration in milliseconds.",
+  "If feedback is set on the request, apply that change in both prompts.",
 ].join("\n");

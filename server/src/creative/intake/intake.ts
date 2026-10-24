@@ -197,7 +197,7 @@ export function nextQuestion(brief: Brief): IntakeQuestion | null {
 }
 
 function parseSeconds(raw: string): number | undefined {
-  const match = /(\d{1,2})/.exec(raw);
+  const match = /^\s*(\d{1,3})(?:\s*(?:s|sec|secs|second|seconds))?\s*$/i.exec(raw);
   if (!match?.[1]) return undefined;
   const value = Number(match[1]);
   return Number.isInteger(value) ? value : undefined;

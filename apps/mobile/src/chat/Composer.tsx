@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { colors, layout } from "../theme";
+import { scrollFocusedField } from "./useKeyboardInset";
+import { colors, hitSlop, layout } from "../theme";
 
 export function Composer({
   placeholder,
@@ -21,11 +22,14 @@ export function Composer({
         style={styles.input}
         multiline
         accessibilityLabel="Message"
+        onFocus={scrollFocusedField}
       />
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Bhejo"
+        accessibilityState={{ disabled: !trimmed }}
         disabled={!trimmed}
+        hitSlop={hitSlop}
         onPress={() => {
           if (!trimmed) return;
           onSend(trimmed);

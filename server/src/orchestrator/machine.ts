@@ -145,7 +145,12 @@ async function approvalCard(
     title,
     preview: { ...artefact.payload },
     regenerateCreditCost: artefact.creditCost,
-    state: artefact.state === "approved" || artefact.state === "rejected" ? artefact.state : "awaiting_approval",
+    state:
+      artefact.state === "approved" ||
+      artefact.state === "rejected" ||
+      artefact.state === "failed"
+        ? artefact.state
+        : "awaiting_approval",
     createdAt: now(),
   };
   return publishMessage(ctx, message);
@@ -164,12 +169,52 @@ async function patchApprovalCard(
   if (!card) return;
   const next: ApprovalCardMessage = {
     ...card,
-    state: artefact.state === "approved" || artefact.state === "rejected" ? artefact.state : "awaiting_approval",
+    state:
+      artefact.state === "approved" ||
+      artefact.state === "rejected" ||
+      artefact.state === "failed"
+        ? artefact.state
+        : "awaiting_approval",
     preview: { ...artefact.payload },
     regenerateCreditCost: artefact.creditCost,
   };
   await store.updateMessageBody(ctx.db, card.id, next);
   chatBus.publish(chatId, { type: "message", message: next });
+}
+
+function assertVideoOwner(video: { userId: string }, userId: string): void {
+  if (video.userId !== userId) throw new Error("forbidden");
+}
+
+function primaryKind(stage: Stage): ArtefactKind | null {
+  const kinds = stageKinds(stage);
+  return kinds[0] ?? null;
+}
+
+async function markStageFailed(
+  ctx: OrchestratorContext,
+  chatId: string,
+  videoId: string,
+  stage: Stage,
+  error: unknown,
+): Promise<void> {
+  const kind = primaryKind(stage);
+  if (!kind) return;
+  const message = error instanceof Error ? error.message : "stage_failed";
+  const artefact = await store.insertArtefact(ctx.db, {
+    videoId,
+    kind,
+    state: "failed",
+    creditCost: artefactCreditCost(kind),
+    payload: { generationFailed: true, error: message },
+  });
+  await approvalCard(ctx, chatId, stage, artefact, `Failed · ${stage}`);
+  await progress(ctx, chatId, stage, `Generation fail: ${message}. Regenerate dabao.`, "Error");
+  await store.logEvent(ctx.db, {
+    videoId,
+    kind: "agent_activity",
+    payload: { stage, error: message, artefactId: artefact.id },
+  });
 }
 
 function stageKinds(stage: Stage): ArtefactKind[] {
@@ -431,8 +476,12 @@ async function beginFinal(ctx: OrchestratorContext, chatId: string, videoId: str
   await approvalCard(ctx, chatId, "final", artefact, "Final cut");
 }
 
-async function enterStage(ctx: OrchestratorContext, chatId: string, videoId: string, stage: Stage): Promise<void> {
-  await store.updateVideo(ctx.db, videoId, { stage, status: stage === "done" ? "done" : "active" });
+async function runStageWork(
+  ctx: OrchestratorContext,
+  chatId: string,
+  videoId: string,
+  stage: Stage,
+): Promise<void> {
   chatBus.publish(chatId, { type: "stage", videoId, stage });
   await store.logEvent(ctx.db, {
     videoId,
@@ -459,35 +508,53 @@ async function enterStage(ctx: OrchestratorContext, chatId: string, videoId: str
     return;
   }
 
-  const video = (await store.getVideoRow(ctx.db, videoId))!;
-  const castIds = video.brief.castIds ?? getGenre(video.genre).defaultCastIds;
-  const cast = await attachCast(ctx, videoId, castIds);
+  try {
+    const video = (await store.getVideoRow(ctx.db, videoId))!;
+    const castIds = video.brief.castIds ?? getGenre(video.genre).defaultCastIds;
+    const cast = await attachCast(ctx, videoId, castIds);
 
-  switch (stage) {
-    case "cast":
-      await beginCast(ctx, chatId, videoId, cast);
-      break;
-    case "script":
-      await beginScript(ctx, chatId, videoId);
-      break;
-    case "prompts":
-      await beginPrompts(ctx, chatId, videoId);
-      break;
-    case "images":
-      await beginImages(ctx, chatId, videoId);
-      break;
-    case "clips":
-      await beginClips(ctx, chatId, videoId);
-      break;
-    case "audio":
-      await beginAudio(ctx, chatId, videoId);
-      break;
-    case "final":
-      await beginFinal(ctx, chatId, videoId);
-      break;
-    default:
-      break;
+    switch (stage) {
+      case "cast":
+        await beginCast(ctx, chatId, videoId, cast);
+        break;
+      case "script":
+        await beginScript(ctx, chatId, videoId);
+        break;
+      case "prompts":
+        await beginPrompts(ctx, chatId, videoId);
+        break;
+      case "images":
+        await beginImages(ctx, chatId, videoId);
+        break;
+      case "clips":
+        await beginClips(ctx, chatId, videoId);
+        break;
+      case "audio":
+        await beginAudio(ctx, chatId, videoId);
+        break;
+      case "final":
+        await beginFinal(ctx, chatId, videoId);
+        break;
+      default:
+        break;
+    }
+  } catch (error) {
+    await markStageFailed(ctx, chatId, videoId, stage, error);
   }
+}
+
+/** Enter `stage` only if CAS from `from` succeeds (prevents double-advance). */
+async function enterStageFrom(
+  ctx: OrchestratorContext,
+  chatId: string,
+  videoId: string,
+  from: Stage,
+  stage: Stage,
+): Promise<boolean> {
+  const moved = await store.tryTransitionStage(ctx.db, videoId, from, stage);
+  if (!moved) return false;
+  await runStageWork(ctx, chatId, videoId, stage);
+  return true;
 }
 
 async function advanceIfSettled(ctx: OrchestratorContext, chatId: string, videoId: string): Promise<void> {
@@ -497,7 +564,7 @@ async function advanceIfSettled(ctx: OrchestratorContext, chatId: string, videoI
   const idx = STAGE_ORDER.indexOf(video.stage);
   const next = STAGE_ORDER[idx + 1];
   if (!next) return;
-  await enterStage(ctx, chatId, videoId, next);
+  await enterStageFrom(ctx, chatId, videoId, video.stage, next);
 }
 
 function lockBrief(brief: Brief): Brief {
@@ -551,6 +618,14 @@ export async function handleAnswer(
 ): Promise<ChatMessage | undefined> {
   const meta = await store.getChatMeta(ctx.db, chatId);
   if (!meta) throw new Error("chat not found");
+  const videoRow = await store.getVideoRow(ctx.db, meta.videoId);
+  if (!videoRow) throw new Error("video not found");
+
+  // Intake already finished — never re-enter cast on a retry.
+  if (videoRow.stage !== "brief") {
+    return text(ctx, chatId, "assistant", "Brief already locked — cast stage chalu hai.");
+  }
+
   const brief = ctx.briefs.get(chatId) ?? {};
   const result = applyAnswer(brief, answer);
   if (result.error) {
@@ -588,7 +663,8 @@ export async function handleAnswer(
     "assistant",
     `Brief lock · ${locked.genre} · ${locked.language} · ${locked.targetSeconds}s · cast ${(locked.castIds ?? []).join(", ")}`,
   );
-  await enterStage(ctx, chatId, meta.videoId, "cast");
+  // CAS brief→cast so a duplicated final answer cannot spawn cast twice.
+  await enterStageFrom(ctx, chatId, meta.videoId, "brief", "cast");
   return userMsg;
 }
 
@@ -600,6 +676,7 @@ export async function approveArtefact(
   if (!artefact) throw new Error("artefact not found");
   if (artefact.state !== "awaiting_approval") throw new Error("bad_state");
   const video = (await store.getVideoRow(ctx.db, artefact.videoId))!;
+  assertVideoOwner(video, input.userId);
   const updated = await store.updateArtefact(ctx.db, artefact.id, { state: "approved" });
   await store.recordApproval(ctx.db, {
     artefactId: artefact.id,
@@ -625,6 +702,7 @@ export async function rejectArtefact(
   const artefact = await store.getArtefact(ctx.db, input.artefactId);
   if (!artefact) throw new Error("artefact not found");
   const video = (await store.getVideoRow(ctx.db, artefact.videoId))!;
+  assertVideoOwner(video, input.userId);
   const updated = await store.updateArtefact(ctx.db, artefact.id, {
     state: "rejected",
     payload: { ...artefact.payload, rejectionNote: input.rejectNote },
@@ -653,6 +731,8 @@ export async function regenerateArtefact(
 ): Promise<RegeneratePreviewResponse | RegenerateConfirmResponse> {
   const artefact = await store.getArtefact(ctx.db, input.artefactId);
   if (!artefact) throw new Error("artefact not found");
+  const video = (await store.getVideoRow(ctx.db, artefact.videoId))!;
+  assertVideoOwner(video, input.userId);
   const user = await store.getUser(ctx.db, input.userId);
   if (!user) throw new Error("user not found");
   const cost = artefact.creditCost;
@@ -664,20 +744,29 @@ export async function regenerateArtefact(
       canAfford: user.creditBalance >= cost,
     };
   }
-  const video = (await store.getVideoRow(ctx.db, artefact.videoId))!;
+  if (
+    artefact.state !== "rejected" &&
+    artefact.state !== "failed" &&
+    artefact.state !== "awaiting_approval"
+  ) {
+    throw new Error("bad_state");
+  }
+  const nextVersion = artefact.version + 1;
   const balance = await debitRegenerate(ctx.db, {
     userId: input.userId,
     videoId: artefact.videoId,
     amount: cost,
-    ref: `regen:${artefact.id}:v${artefact.version + 1}`,
+    ref: `regen:${artefact.id}:v${nextVersion}`,
   });
   let updated = await store.updateArtefact(ctx.db, artefact.id, {
     state: "generating",
-    version: artefact.version + 1,
+    version: nextVersion,
     payload: {
       ...artefact.payload,
       feedback: input.feedback,
-      version: artefact.version + 1,
+      version: nextVersion,
+      generationFailed: false,
+      error: undefined,
     },
   });
   await store.recordApproval(ctx.db, {
@@ -696,21 +785,31 @@ export async function regenerateArtefact(
   await publishArtefact(video.chatId, updated);
   await progress(ctx, video.chatId, video.stage, `Dobara bana rahe hain · ${cost} credits.`, "Regen");
 
-  // Finish regeneration with a refreshed mock payload.
-  updated = await store.updateArtefact(ctx.db, artefact.id, {
-    state: "awaiting_approval",
-    payload: {
-      ...updated.payload,
-      regenerated: true,
-      url: typeof artefact.payload.url === "string" ? artefact.payload.url : mockAssets.keyframe,
-    },
-  });
+  try {
+    updated = await store.updateArtefact(ctx.db, artefact.id, {
+      state: "awaiting_approval",
+      payload: {
+        ...updated.payload,
+        regenerated: true,
+        url: typeof artefact.payload.url === "string" ? artefact.payload.url : mockAssets.keyframe,
+      },
+    });
+  } catch (error) {
+    updated = await store.updateArtefact(ctx.db, artefact.id, {
+      state: "failed",
+      payload: {
+        ...updated.payload,
+        generationFailed: true,
+        error: error instanceof Error ? error.message : "regen_failed",
+      },
+    });
+  }
   await patchApprovalCard(ctx, video.chatId, updated);
   await publishArtefact(video.chatId, updated);
 
   return {
     artefactId: artefact.id,
-    state: "awaiting_approval",
+    state: updated.state,
     charged: cost,
     balance,
     artefact: updated,
@@ -723,6 +822,7 @@ export async function approveAllRemaining(
 ): Promise<{ videoId: string; stage: Stage; approvedIds: string[] }> {
   const video = await store.getVideoRow(ctx.db, input.videoId);
   if (!video) throw new Error("video not found");
+  assertVideoOwner(video, input.userId);
   const kinds = new Set(stageKinds(video.stage));
   const approvedIds: string[] = [];
   for (const artefact of await store.listArtefacts(ctx.db, input.videoId)) {
@@ -740,6 +840,27 @@ export async function approveAllRemaining(
   await advanceIfSettled(ctx, video.chatId, input.videoId);
   const after = (await store.getVideoRow(ctx.db, input.videoId))!;
   return { videoId: input.videoId, stage: after.stage, approvedIds };
+}
+
+/** Test hook: force a stage begin failure path. */
+export async function __testEnterStageFrom(
+  ctx: OrchestratorContext,
+  chatId: string,
+  videoId: string,
+  from: Stage,
+  stage: Stage,
+): Promise<boolean> {
+  return enterStageFrom(ctx, chatId, videoId, from, stage);
+}
+
+export async function __testMarkStageFailed(
+  ctx: OrchestratorContext,
+  chatId: string,
+  videoId: string,
+  stage: Stage,
+  error: unknown,
+): Promise<void> {
+  return markStageFailed(ctx, chatId, videoId, stage, error);
 }
 
 export type { Scene };

@@ -25,6 +25,10 @@ export function artefactCreditCost(kind: ArtefactKind): number {
   return COST[kind] ?? COST.regenerate ?? 4;
 }
 
+async function runTxn<T>(db: SqlClient, fn: (tx: SqlClient) => Promise<T>): Promise<T> {
+  return db.withTransaction(fn);
+}
+
 export function createCreditsStub(db: SqlClient): Credits {
   return {
     quote(input): CreditQuote {
@@ -36,52 +40,46 @@ export function createCreditsStub(db: SqlClient): Credits {
     },
 
     async reserve(input) {
-      const useTxn = !db.memory;
-      if (useTxn) await db.query("BEGIN");
-      try {
-        const user = await db.query<{ credit_balance: number }>(
-          useTxn
-            ? "SELECT credit_balance FROM users WHERE id = $1 FOR UPDATE"
-            : "SELECT credit_balance FROM users WHERE id = $1",
+      return runTxn(db, async (tx) => {
+        const user = await tx.query<{ credit_balance: number }>(
+          db.memory
+            ? "SELECT credit_balance FROM users WHERE id = $1"
+            : "SELECT credit_balance FROM users WHERE id = $1 FOR UPDATE",
           [input.userId],
         );
         const balance = Number(user.rows[0]?.credit_balance ?? 0);
+        const claimed = await tx.query(
+          `INSERT INTO credit_ledger (user_id, ref, delta, reason, video_id, meta)
+           VALUES ($1, $2, $3, 'reserve', $4, $5)
+           ON CONFLICT (ref) DO NOTHING
+           RETURNING id`,
+          [input.userId, input.ref, -input.amount, input.videoId ?? null, JSON.stringify({})],
+        );
+        if (!claimed.rowCount) {
+          return { reserved: input.amount };
+        }
         if (balance < input.amount) {
+          if (db.memory) {
+            await tx.query("DELETE FROM credit_ledger WHERE ref = $1", [input.ref]);
+          }
           throw new Error(`Insufficient credits: have ${balance}, need ${input.amount}`);
         }
-        await db.query("UPDATE users SET credit_balance = $1 WHERE id = $2", [
+        await tx.query("UPDATE users SET credit_balance = $1 WHERE id = $2", [
           balance - input.amount,
           input.userId,
         ]);
         if (input.videoId) {
-          await db.query(
+          await tx.query(
             "UPDATE videos SET reserved_credits = reserved_credits + $1, updated_at = now() WHERE id = $2",
             [input.amount, input.videoId],
           );
         }
-        await db.query(
-          `INSERT INTO credit_ledger (user_id, ref, delta, reason, video_id, meta)
-           VALUES ($1, $2, $3, 'reserve', $4, $5)
-           ON CONFLICT (ref) DO NOTHING`,
-          [input.userId, input.ref, -input.amount, input.videoId ?? null, JSON.stringify({})],
-        );
-        if (useTxn) await db.query("COMMIT");
         return { reserved: input.amount };
-      } catch (error) {
-        if (useTxn) {
-          try {
-            await db.query("ROLLBACK");
-          } catch {
-            /* ignore */
-          }
-        }
-        throw error;
-      }
+      });
     },
 
     async settle(input) {
       const refunded = Math.max(0, input.actual >= 0 ? 0 : 0);
-      // Reserve already debited; settle records the actual spend ref.
       await db.query(
         `INSERT INTO credit_ledger (user_id, ref, delta, reason, video_id, meta)
          VALUES ($1, $2, $3, 'settle', $4, $5)
@@ -98,22 +96,12 @@ export function createCreditsStub(db: SqlClient): Credits {
     },
 
     async refund(input) {
-      const useTxn = !db.memory;
-      if (useTxn) await db.query("BEGIN");
-      try {
-        const user = await db.query<{ credit_balance: number }>(
-          "SELECT credit_balance FROM users WHERE id = $1",
-          [input.userId],
-        );
-        const balance = Number(user.rows[0]?.credit_balance ?? 0);
-        await db.query("UPDATE users SET credit_balance = $1 WHERE id = $2", [
-          balance + input.amount,
-          input.userId,
-        ]);
-        await db.query(
+      return runTxn(db, async (tx) => {
+        const claimed = await tx.query(
           `INSERT INTO credit_ledger (user_id, ref, delta, reason, video_id, meta)
            VALUES ($1, $2, $3, 'refund', $4, $5)
-           ON CONFLICT (ref) DO NOTHING`,
+           ON CONFLICT (ref) DO NOTHING
+           RETURNING id`,
           [
             input.userId,
             input.ref,
@@ -122,17 +110,17 @@ export function createCreditsStub(db: SqlClient): Credits {
             JSON.stringify({ reason: input.reason }),
           ],
         );
-        if (useTxn) await db.query("COMMIT");
-      } catch (error) {
-        if (useTxn) {
-          try {
-            await db.query("ROLLBACK");
-          } catch {
-            /* ignore */
-          }
-        }
-        throw error;
-      }
+        if (!claimed.rowCount) return;
+        const user = await tx.query<{ credit_balance: number }>(
+          "SELECT credit_balance FROM users WHERE id = $1",
+          [input.userId],
+        );
+        const balance = Number(user.rows[0]?.credit_balance ?? 0);
+        await tx.query("UPDATE users SET credit_balance = $1 WHERE id = $2", [
+          balance + input.amount,
+          input.userId,
+        ]);
+      });
     },
 
     async balance(userId) {
@@ -145,47 +133,52 @@ export function createCreditsStub(db: SqlClient): Credits {
   };
 }
 
-/** Debit for regenerate (idempotent by ref). */
+/**
+ * Debit for regenerate (idempotent by ref).
+ * Claims the unique ledger ref BEFORE mutating the balance so retries are safe.
+ */
 export async function debitRegenerate(
   db: SqlClient,
   input: { userId: string; videoId: string; amount: number; ref: string },
 ): Promise<number> {
-  // pg-mem mishandles BEGIN/FOR UPDATE + CHECK on balance; skip txn in memory mode.
-  const useTxn = !db.memory;
-  if (useTxn) await db.query("BEGIN");
-  try {
-    const user = await db.query<{ credit_balance: number }>(
-      useTxn
-        ? "SELECT credit_balance FROM users WHERE id = $1 FOR UPDATE"
-        : "SELECT credit_balance FROM users WHERE id = $1",
+  return runTxn(db, async (tx) => {
+    const user = await tx.query<{ credit_balance: number }>(
+      db.memory
+        ? "SELECT credit_balance FROM users WHERE id = $1"
+        : "SELECT credit_balance FROM users WHERE id = $1 FOR UPDATE",
       [input.userId],
     );
     const balance = Number(user.rows[0]?.credit_balance ?? 0);
-    if (balance < input.amount) {
-      throw new Error(`Insufficient credits: have ${balance}, need ${input.amount}`);
+
+    // Idempotency: existing ref means we already charged — never debit again.
+    const existing = await tx.query("SELECT 1 FROM credit_ledger WHERE ref = $1", [input.ref]);
+    if (existing.rowCount && existing.rowCount > 0) {
+      return balance;
     }
-    await db.query("UPDATE users SET credit_balance = $1 WHERE id = $2", [
-      balance - input.amount,
-      input.userId,
-    ]);
-    await db.query(
+
+    // Claim ref before debit (unique). Conflict ⇒ race loser, no debit.
+    const claimed = await tx.query<{ id: string }>(
       `INSERT INTO credit_ledger (user_id, ref, delta, reason, video_id, meta)
        VALUES ($1, $2, $3, 'regenerate', $4, '{}'::jsonb)
-       ON CONFLICT (ref) DO NOTHING`,
+       ON CONFLICT (ref) DO NOTHING
+       RETURNING id`,
       [input.userId, input.ref, -input.amount, input.videoId],
     );
-    if (useTxn) await db.query("COMMIT");
-    return balance - input.amount;
-  } catch (error) {
-    if (useTxn) {
-      try {
-        await db.query("ROLLBACK");
-      } catch {
-        /* ignore */
-      }
+    if (!claimed.rowCount) {
+      return balance;
     }
-    throw error;
-  }
+
+    if (balance < input.amount) {
+      // Real Postgres rolls back the claim with the txn; memory must undo.
+      if (db.memory) {
+        await tx.query("DELETE FROM credit_ledger WHERE ref = $1", [input.ref]);
+      }
+      throw new Error(`Insufficient credits: have ${balance}, need ${input.amount}`);
+    }
+    const next = balance - input.amount;
+    await tx.query("UPDATE users SET credit_balance = $1 WHERE id = $2", [next, input.userId]);
+    return next;
+  });
 }
 
 export async function grantSignupCredits(
