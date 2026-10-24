@@ -13,6 +13,13 @@ import { readDeployConfig, deployLogLine } from "../deploy/config.js";
 import { renderEventsCsv } from "./format.js";
 import { createPostgresEventLog } from "./log.js";
 
+const ADMIN_TOKEN = "test-admin-token";
+process.env.ADMIN_TOKEN = ADMIN_TOKEN;
+
+function adminHeaders(extra?: Record<string, string>): Record<string, string> {
+  return { cookie: `chotu_admin=${encodeURIComponent(ADMIN_TOKEN)}`, ...extra };
+}
+
 test("deploy config reads env names and the log line hides secrets", () => {
   const config = readDeployConfig({
     MOCK: "1",
@@ -110,7 +117,7 @@ test("checkout stays on the fake Pine Labs link until PINE_LABS_MOCK is off", as
     });
     const replayBody = (await replay.json()) as { creditsGranted: number };
     assert.equal(replayBody.creditsGranted, 0);
-    const html = await (await fetch(`${base}/admin`)).text();
+    const html = await (await fetch(`${base}/admin`, { headers: adminHeaders() })).text();
     assert.match(html, /payment/);
   } finally {
     await close(base);
@@ -175,7 +182,7 @@ test("admin HTML and CSV come from the events table", async () => {
       const paidBody = (await paid.json()) as { creditsGranted: number };
       assert.equal(paidBody.creditsGranted, 500);
 
-      const page = await fetch(`${base}/admin`);
+      const page = await fetch(`${base}/admin`, { headers: adminHeaders() });
       const html = await page.text();
       assert.equal(page.status, 200);
       assert.match(html, /width=device-width, initial-scale=1/);
@@ -184,7 +191,7 @@ test("admin HTML and CSV come from the events table", async () => {
       assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
       assert.equal(html.includes("<script>alert(1)</script>"), false);
 
-      const csvRes = await fetch(`${base}/admin/export.csv`);
+      const csvRes = await fetch(`${base}/admin/export.csv`, { headers: adminHeaders() });
       const csv = await csvRes.text();
       assert.match(csv.split("\n")[0] ?? "", /id,created_at,kind,user_id,video_id,payload/);
       assert.match(csv, /render_done/);
@@ -194,7 +201,7 @@ test("admin HTML and CSV come from the events table", async () => {
       const download = await fetch(`${base}/v1/videos/${videoId}/download`);
       assert.equal(download.status, 200);
       assert.equal(await download.text(), "fake-mp4");
-      const after = await (await fetch(`${base}/admin`)).text();
+      const after = await (await fetch(`${base}/admin`, { headers: adminHeaders() })).text();
       assert.match(after, /download/);
 
       const missing = await fetch(`${base}/v1/videos/missing-file/download`);
@@ -234,7 +241,7 @@ test("a database error on /admin returns 500", async () => {
   const server = app.listen(0);
   try {
     const port = (server.address() as AddressInfo).port;
-    const page = await fetch(`http://127.0.0.1:${port}/admin`);
+    const page = await fetch(`http://127.0.0.1:${port}/admin`, { headers: adminHeaders() });
     assert.equal(page.status, 500);
     const body = (await page.json()) as { error: string };
     assert.equal(body.error, "request_failed");
