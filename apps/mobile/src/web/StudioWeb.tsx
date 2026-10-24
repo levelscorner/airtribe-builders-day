@@ -48,6 +48,7 @@ import {
   GenerationProgress,
 } from "./GenerationUI";
 import { getStudioClient } from "../api";
+import { ProfileControl } from "./ProfileControl";
 import { rememberBrowserSession } from "./session-notice";
 import { openQuestion } from "../chat/open-question";
 import { useWebChat } from "./useWebChat";
@@ -203,6 +204,7 @@ function Shell({
             <span className="studio-name">Studio</span>
           </div>
           <div className="topbar-actions">
+            <ProfileControl />
             <span className="demo-badge">
               {runtime?.mock === true
                 ? "Sample mode"

@@ -13,6 +13,7 @@ import { useChatStream } from "../chat/useChatStream";
 import { useKeyboardInset } from "../chat/useKeyboardInset";
 import { VOICES } from "../mock-fixtures";
 import { useWideLayout } from "../shell";
+import { OwnProfileButton } from "../profile/OwnProfileButton";
 import { colors, hitSlop, layout } from "../theme";
 
 export function ChatScreen({ chatId }: { chatId: string }) {
@@ -104,7 +105,7 @@ export function ChatScreen({ chatId }: { chatId: string }) {
         <View style={styles.header}>
           <View style={styles.titles}>
             <Text style={styles.brand}>Chotu Studio</Text>
-            <Text style={styles.sub}>Orchestrator chat</Text>
+            <OwnProfileButton />
           </View>
           {stream.creditsEnabled ? (
             <Pressable

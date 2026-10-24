@@ -1,6 +1,6 @@
 import { VIEWPORT_META } from "../html.js";
 import type { EventRow } from "./log.js";
-import type { AdminUser } from "./users.js";
+import type { AdminUser, AdminUserVideo } from "./users.js";
 
 export function escapeHtml(value: string): string {
   return value
@@ -64,14 +64,56 @@ export function renderAdminHtml(input: {
 function renderUserRows(users: AdminUser[]): string {
   if (users.length === 0) return `<tr><td colspan="3">No users yet.</td></tr>`;
   return users
-    .map(
-      (user) => `<tr>
-<td>${escapeHtml(user.displayName)}</td>
-<td>${escapeHtml(user.phoneOrEmail)}</td>
-<td>${escapeHtml(user.createdAt)}</td>
-</tr>`,
-    )
+    .map((user) => {
+      const href = `/admin/users/${encodeURIComponent(user.id)}`;
+      return `<tr>
+<td><a href="${escapeHtml(href)}">${escapeHtml(user.displayName)}</a></td>
+<td><a href="${escapeHtml(href)}">${escapeHtml(user.phoneOrEmail) || "—"}</a></td>
+<td><a href="${escapeHtml(href)}">${escapeHtml(user.createdAt)}</a></td>
+</tr>`;
+    })
     .join("");
+}
+
+export function renderUserPage(user: AdminUser, videos: AdminUserVideo[]): string {
+  const rows = videos.length
+    ? videos
+        .map(
+          (video) => `<tr>
+<td><code>${escapeHtml(video.id)}</code></td>
+<td>${escapeHtml(video.title || "Untitled")}</td>
+<td>${escapeHtml(video.status)}</td>
+<td>${escapeHtml(video.stage)}</td>
+</tr>`,
+        )
+        .join("")
+    : `<tr><td colspan="4">No videos yet.</td></tr>`;
+  return `<!doctype html>
+<html><head><meta charset="utf-8"/>${VIEWPORT_META}<title>${escapeHtml(user.displayName)}</title>
+<style>
+  body{font-family:system-ui,sans-serif;margin:1rem;line-height:1.4;color:#1a1a1a}
+  table{border-collapse:collapse;width:100%}
+  th,td{border-bottom:1px solid #ddd;text-align:left;padding:0.4rem;vertical-align:top}
+  a,button{min-height:44px}
+  @media (min-width:800px){body{margin:2rem}}
+</style></head>
+<body>
+<p><a href="/admin">Traction</a></p>
+<h1>${escapeHtml(user.displayName)}</h1>
+<p>phone_or_email: ${escapeHtml(user.phoneOrEmail) || "—"}</p>
+<p>created_at: ${escapeHtml(user.createdAt)}</p>
+<h2>Videos</h2>
+<table>
+<thead><tr><th>Video</th><th>Title</th><th>Status</th><th>Stage</th></tr></thead>
+<tbody>${rows}</tbody>
+</table>
+</body></html>`;
+}
+
+export function renderMissingUser(): string {
+  return `<!doctype html>
+<html><head><meta charset="utf-8"/>${VIEWPORT_META}<title>No such user</title></head>
+<body><p><a href="/admin">Traction</a></p><h1>No such user</h1></body></html>`;
 }
 
 function csvCell(value: string): string {

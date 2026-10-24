@@ -1037,6 +1037,22 @@ export function createMockStudio(options?: {
       return mustUser();
     },
 
+    async listMyVideos() {
+      const current = mustUser();
+      const videosForUser = [...videos.values()]
+        .map((entry) => entry.video)
+        .filter((video) => video.userId === current.id);
+      return {
+        videos: videosForUser.map((video) => ({
+          id: video.id,
+          title: [...chats.values()].find((chat) => chat.videoId === video.id)?.topic,
+          status: video.status,
+          stage: video.stage,
+          createdAt: video.createdAt,
+        })),
+      };
+    },
+
     async createChat(body) {
       const current = mustUser();
       const chatId = nid("chat");

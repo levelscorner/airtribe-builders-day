@@ -10,6 +10,7 @@ const ADMIN_TOKEN = "test-admin-token";
 test("user csv quotes commas, quotes, and newlines", () => {
   const csv = renderUsersCsv([
     {
+      id: "00000000-0000-4000-8000-000000000001",
       displayName: 'Ada "Bee", Jr.',
       phoneOrEmail: "ada@example.com\n<script>",
       createdAt: "2026-01-02T03:04:05.000Z",

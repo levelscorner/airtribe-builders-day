@@ -210,6 +210,15 @@ export interface VideoSummary {
   updatedAt: string;
 }
 
+/** A video belonging to the signed-in user. No other account's contact details. */
+export interface OwnVideoSummary {
+  id: string;
+  title?: string;
+  status: VideoSummary['status'];
+  stage: Stage;
+  createdAt: string;
+}
+
 export interface Scene {
   id: string;
   videoId: string;
@@ -691,6 +700,7 @@ export type MockableFactory<T> = (env: {
 export const ApiPaths = {
   users: '/v1/users',
   me: '/v1/me',
+  myVideos: '/v1/me/videos',
   chats: '/v1/chats',
   chat: (chatId: string) => `/v1/chats/${chatId}`,
   chatMessages: (chatId: string) => `/v1/chats/${chatId}/messages`,

@@ -147,6 +147,13 @@ export function createV1Router(deps: V1Deps): Router {
     res.json(presentUser(user));
   });
 
+  router.get("/me/videos", async (req, res) => {
+    const userId = requireSessionUser(req, res);
+    if (!userId) return;
+    const videos = await store.listUserVideos(deps.db, userId);
+    res.json({ videos });
+  });
+
   router.post("/chats", async (req, res) => {
     const userId = requireSessionUser(req, res);
     if (!userId) return;
