@@ -196,7 +196,7 @@ export function createHttpStudio(baseUrl = ""): StudioClient {
       return api<ListPacksResponse>(ApiPaths.packs);
     },
     async checkout(_body: CheckoutRequest): Promise<CheckoutResponse> {
-      throw new StudioHttpError("not_implemented", "Packs checkout abhi Mars pe pending hai.");
+      throw new StudioHttpError("not_implemented", "Packs screen calls createCheckout in src/checkout.ts.");
     },
   };
 }

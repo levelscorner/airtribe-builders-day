@@ -1,21 +1,32 @@
 import { useCallback, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { openURL } from "expo-linking";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { CreditPack } from "@chotu/shared";
 import { getStudioClient } from "../api";
-import { createCheckout } from "../checkout";
+import { createCheckout, finishCheckout, listServerPacks } from "../checkout";
 import { packPriceLabel, STARTER_CREDITS } from "../mock-fixtures";
 import { colors, hitSlop, layout } from "../theme";
 
 type PayState =
   | { status: "idle" }
   | { status: "pending"; packId: string }
+  | { status: "waiting"; packId: string; orderId: string; checkoutUrl?: string; credits: number }
   | { status: "success"; packId: string; orderId: string }
   | { status: "failure"; packId: string; message: string };
 
 function one(value: string | string[] | undefined): string {
   return typeof value === "string" ? value : "";
+}
+
+function openPackPage(url: string): void {
+  const host = globalThis as { open?: (next: string, target?: string, features?: string) => unknown };
+  if (typeof host.open === "function") {
+    host.open(url, "_blank", "noopener,noreferrer");
+    return;
+  }
+  void openURL(url);
 }
 
 function safeChatPath(path: string): string | null {
@@ -45,9 +56,9 @@ export function PacksScreen() {
     setMissing(false);
     try {
       const client = getStudioClient();
-      const [me, catalogue] = await Promise.all([client.getMe(), client.listPacks()]);
+      const me = await client.getMe();
       setBalance(me.creditBalance);
-      setPacks(catalogue.packs);
+      setPacks(await listServerPacks());
     } catch (err) {
       const message = err instanceof Error ? err.message : "Packs nahi khule.";
       setMissing(message.toLowerCase().includes("shuru") || message.toLowerCase().includes("naam"));
@@ -63,15 +74,34 @@ export function PacksScreen() {
     }, [load]),
   );
 
+  async function settle(
+    packId: string,
+    session: { orderId: string; checkoutUrl?: string },
+    credits: number,
+    reopen: boolean,
+  ) {
+    const outcome = await finishCheckout({ session, credits, reopen, openUrl: openPackPage });
+    if (outcome === "failed") {
+      setPay({ status: "failure", packId, message: "Payment fail ho gaya." });
+      return;
+    }
+    if (outcome === "waiting") {
+      setPay({ status: "waiting", packId, orderId: session.orderId, checkoutUrl: session.checkoutUrl, credits });
+      return;
+    }
+    const me = await getStudioClient().getMe();
+    setBalance(me.creditBalance);
+    setPay({ status: "success", packId, orderId: session.orderId });
+  }
+
   async function payFor(packId: string) {
     if (pay.status === "pending") return;
     setPay({ status: "pending", packId });
     setError(null);
     try {
       const session = await createCheckout(packId);
-      const me = await getStudioClient().getMe();
-      setBalance(me.creditBalance);
-      setPay({ status: "success", packId, orderId: session.orderId });
+      const credits = packs.find((pack) => pack.id === packId)?.credits ?? 0;
+      await settle(packId, session, credits, true);
     } catch (err) {
       setPay({
         status: "failure",
@@ -110,8 +140,8 @@ export function PacksScreen() {
         </Pressable>
         <Text style={styles.brand}>Credit packs</Text>
         <Text style={styles.lead}>
-          1, 3 ya 10 videos. Starter grant {STARTER_CREDITS} credits hai. Keemat abhi TBD — Mars asli price aur Pine
-          Labs checkout set karega.
+          Pine Labs test page khulegi. Payment confirm hone ke baad credits update honge. Signup pe {STARTER_CREDITS}{" "}
+          credits milte hain.
         </Text>
         <Text accessibilityLabel={balance === null ? "Credits loading" : `${balance} credits`} style={styles.balance}>
           {balance === null ? "— credits" : `${balance} credits`}
@@ -143,9 +173,38 @@ export function PacksScreen() {
           </Text>
         ) : null}
         {pay.status === "pending" ? (
-          <Text accessibilityLiveRegion="polite" accessibilityLabel="Pine Labs order ban raha hai" style={styles.status}>
-            Pine Labs order ban raha hai…
+          <Text accessibilityLiveRegion="polite" accessibilityLabel="Pine Labs checkout khul raha hai" style={styles.status}>
+            Checkout page khul rahi hai…
           </Text>
+        ) : null}
+        {pay.status === "waiting" ? (
+          <View style={styles.stack}>
+            <Text accessibilityLiveRegion="polite" style={styles.status}>
+              Payment page khuli hai. Confirm ke baad yahan check karo. Order {pay.orderId}.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Payment confirm karo"
+              accessibilityState={{ disabled: busy }}
+              disabled={busy}
+              hitSlop={hitSlop}
+              onPress={() => {
+                setPay({ status: "pending", packId: pay.packId });
+                void settle(pay.packId, { orderId: pay.orderId, checkoutUrl: pay.checkoutUrl }, pay.credits, false).catch(
+                  (err: unknown) => {
+                    setPay({
+                      status: "failure",
+                      packId: pay.packId,
+                      message: err instanceof Error ? err.message : "Payment nahi hua.",
+                    });
+                  },
+                );
+              }}
+              style={styles.secondary}
+            >
+              <Text style={styles.secondaryText}>Payment check karo</Text>
+            </Pressable>
+          </View>
         ) : null}
         {pay.status === "success" ? (
           <Text accessibilityLiveRegion="polite" style={styles.ok}>
