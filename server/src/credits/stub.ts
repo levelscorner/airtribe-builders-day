@@ -4,13 +4,15 @@
  */
 import type { ArtefactKind, Credits, CreditQuote } from "@chotu/shared";
 import type { SqlClient } from "../db/client.js";
+import { creditsEnabled } from "./flag.js";
 
 const COST: Record<string, number> = {
   video_max: 60,
   regenerate: 4,
   cast_create: 12,
   image: 8,
-  clip: 40,
+  // 22 keeps one default 2-scene video inside the 80 starter credits.
+  clip: 22,
   audio: 5,
   voice: 5,
   final: 5,
@@ -24,6 +26,18 @@ const COST: Record<string, number> = {
 
 export function artefactCreditCost(kind: ArtefactKind): number {
   return COST[kind] ?? COST.regenerate ?? 4;
+}
+
+/** Script, per-scene prompt/image/clip/voice, and the final cut. Cast sheets are extra. */
+export function quotedVideoCredits(scenes: number): number {
+  const perScene =
+    (COST.prompt ?? 0) + (COST.image ?? 0) + (COST.clip ?? 0) + (COST.voice ?? 0);
+  return (COST.script ?? 0) + (COST.final ?? 0) + scenes * perScene;
+}
+
+/** A failed clip is free. Charge this only after the provider returns a clip. */
+export function clipChargeAfterAttempt(succeeded: boolean): number {
+  return succeeded ? artefactCreditCost("clip") : 0;
 }
 
 async function runTxn<T>(db: SqlClient, fn: (tx: SqlClient) => Promise<T>): Promise<T> {
@@ -41,6 +55,7 @@ export function createCreditsStub(db: SqlClient): Credits {
     },
 
     async reserve(input) {
+      if (!creditsEnabled()) return { reserved: input.amount };
       return runTxn(db, async (tx) => {
         const user = await tx.query<{ credit_balance: number }>(
           db.memory
@@ -142,6 +157,13 @@ export async function debitRegenerate(
   db: SqlClient,
   input: { userId: string; videoId: string; amount: number; ref: string },
 ): Promise<number> {
+  if (!creditsEnabled()) {
+    const user = await db.query<{ credit_balance: number }>(
+      "SELECT credit_balance FROM users WHERE id = $1",
+      [input.userId],
+    );
+    return Number(user.rows[0]?.credit_balance ?? 0);
+  }
   return runTxn(db, async (tx) => {
     const user = await tx.query<{ credit_balance: number }>(
       db.memory

@@ -109,11 +109,23 @@ export function createHttpStudio(baseUrl = ""): StudioClient {
     getRuntime() {
       return api<StudioRuntime>("/api/health");
     },
-    createUser(body: CreateUserRequest) {
-      return api<CreateUserResponse>(ApiPaths.users, {
+    async createUser(body: CreateUserRequest) {
+      const response = await fetch(joinUrl(baseUrl, ApiPaths.users), {
         method: "POST",
+        credentials: "include",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(body),
       });
+      const user = await readJson<CreateUserResponse>(response);
+      // 201 is a new demo profile. 200 signs in an email that already exists.
+      // The Set-Cookie on either response is the session the browser keeps.
+      if (response.status !== 200 && response.status !== 201) {
+        throw new StudioHttpError("unexpected_status", `HTTP ${response.status}`, response.status);
+      }
+      return user;
     },
     getMe() {
       return api<GetMeResponse>(ApiPaths.me);
@@ -137,46 +149,66 @@ export function createHttpStudio(baseUrl = ""): StudioClient {
       });
     },
     subscribe(chatId: string, onEvent: (event: StudioEvent) => void) {
-      if (typeof EventSource === "undefined") {
-        throw new StudioHttpError(
-          "sse",
-          "EventSource unavailable in this runtime",
-        );
-      }
-      const source = new EventSource(
-        joinUrl(baseUrl, ApiPaths.chatEvents(chatId)),
-        {
-          withCredentials: true,
-        },
-      );
-      let openedOnce = false;
-      source.onopen = () => {
-        // First open + every reconnect: pull authoritative chat state.
+      let stopped = false;
+      let source: EventSource | null = null;
+      let poll: ReturnType<typeof setInterval> | null = null;
+      let retry: ReturnType<typeof setTimeout> | null = null;
+      let attempt = 0;
+
+      const stopPoll = () => {
+        if (!poll) return;
+        clearInterval(poll);
+        poll = null;
+      };
+      const startPoll = () => {
+        if (poll || stopped) return;
         void hydrateChat(chatId, onEvent);
-        openedOnce = true;
+        poll = setInterval(() => {
+          void hydrateChat(chatId, onEvent);
+        }, 3000);
       };
-      // Some browsers fire the first open late; also hydrate immediately.
-      if (!openedOnce) void hydrateChat(chatId, onEvent);
-      source.onmessage = (message) => {
-        try {
-          const parsed: unknown = JSON.parse(message.data);
-          const progress = parseMediaProgress(parsed);
-          onEvent(progress ?? (parsed as StudioEvent));
-        } catch {
-          /* ignore malformed frames */
+      const connect = () => {
+        if (stopped) return;
+        if (typeof EventSource === "undefined") {
+          startPoll();
+          return;
         }
+        source = new EventSource(joinUrl(baseUrl, ApiPaths.chatEvents(chatId)), {
+          withCredentials: true,
+        });
+        source.onopen = () => {
+          attempt = 0;
+          stopPoll();
+          void hydrateChat(chatId, onEvent);
+        };
+        source.onmessage = (message) => {
+          try {
+            const parsed: unknown = JSON.parse(message.data);
+            const progress = parseMediaProgress(parsed);
+            onEvent(progress ?? (parsed as StudioEvent));
+          } catch {
+            /* ignore malformed frames */
+          }
+        };
+        source.onerror = () => {
+          source?.close();
+          source = null;
+          if (stopped) return;
+          startPoll();
+          const delay = Math.min(1000 * 2 ** attempt, 8000);
+          attempt += 1;
+          retry = setTimeout(connect, delay);
+        };
       };
-      source.onerror = () => {
-        if (source.readyState === EventSource.CLOSED) {
-          onEvent({
-            type: "error",
-            code: "sse_closed",
-            message: "Live updates ruk gayi.",
-          });
-        }
-        // CONNECTING: browser will reopen → onopen hydrates again.
+
+      void hydrateChat(chatId, onEvent);
+      connect();
+      return () => {
+        stopped = true;
+        stopPoll();
+        if (retry) clearTimeout(retry);
+        source?.close();
       };
-      return () => source.close();
     },
     approveArtefact(artefactId: string) {
       return api<ApproveArtefactResponse>(

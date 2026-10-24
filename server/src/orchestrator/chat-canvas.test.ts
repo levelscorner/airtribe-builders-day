@@ -95,7 +95,7 @@ test("detailed web prompt goes directly to script; visuals wait for approval", a
   arts = await store.listArtefacts(db, chat.videoId);
   assert.equal((await store.getVideoRow(db, chat.videoId))!.stage, "cast");
   assert.ok(arts.some((a) => a.kind === "identity"));
-  assert.equal(arts.filter((a) => a.kind === "image").length, 5);
+  assert.equal(arts.filter((a) => a.kind === "image").length, 2);
   assert.equal(
     arts.some((a) => a.kind === "clip"),
     false,

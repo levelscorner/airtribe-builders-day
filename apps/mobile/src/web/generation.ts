@@ -6,6 +6,7 @@ export interface StudioRuntime {
   mock: boolean;
   memory?: boolean;
   llm?: string;
+  creditsEnabled?: boolean;
 }
 export function useStudioRuntime() {
   const [runtime, setRuntime] = useState<StudioRuntime | null>(null);

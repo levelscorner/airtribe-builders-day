@@ -8,6 +8,12 @@ import type {
 import { parseMediaProgress, type MediaProgressEvent } from "../media-contract";
 import { useStudioRuntime } from "./generation";
 import { getStudioClient } from "../api";
+import {
+  isMissingSession,
+  rememberBrowserSession,
+  dismissSessionNotice as storeDismissSessionNotice,
+  shouldShowSessionNotice,
+} from "./session-notice";
 
 /** Keep artefacts a live event already delivered when a chat snapshot raced the insert. */
 function mergeArtefacts(
@@ -39,10 +45,19 @@ export function useWebChat(chatId: string) {
   const [artefacts, setArtefacts] = useState<ArtefactSummary[]>([]);
   const [stage, setStage] = useState<Stage>("brief");
   const [credits, setCredits] = useState<number | null>(null);
+  const [creditsEnabled, setCreditsEnabled] = useState(false);
   const [error, setError] = useState("");
+  const [sessionNotice, setSessionNotice] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const lock = useRef(false);
+  const showSessionNotice = () => {
+    // Record it immediately. Switching chats remounts this hook, and SSE
+    // hydrate runs again on every reconnect, so a later mount must stay quiet.
+    if (!shouldShowSessionNotice()) return;
+    storeDismissSessionNotice();
+    setSessionNotice(true);
+  };
   const hydrate = useCallback((chat: GetChatResponse) => {
     setVideoId(chat.videoId);
     setMessages((prev) => {
@@ -89,21 +104,51 @@ export function useWebChat(chatId: string) {
           );
         });
       if (event.type === "stage") setStage(event.stage);
-      if (event.type === "error") setError(event.message);
+      if (event.type === "error") {
+        // Hydrate runs on every SSE open, including reconnects. A missing
+        // session must not refill the banner after dismiss or signup.
+        if (isMissingSession(event) || isMissingSession(event.message)) {
+          showSessionNotice();
+          return;
+        }
+        if (/live updates ruk gayi/i.test(event.message)) return;
+        setError(event.message);
+      }
     });
-    void Promise.all([client.getChat(chatId), client.getMe()])
-      .then(([chat, me]) => {
-        if (alive) {
-          hydrate(chat);
-          setCredits(me.creditBalance);
+    void (async () => {
+      const [chatOutcome, meOutcome] = await Promise.all([
+        client.getChat(chatId).then(
+          (chat) => ({ ok: true as const, chat }),
+          (error: unknown) => ({ ok: false as const, error }),
+        ),
+        client.getMe().then(
+          (me) => ({ ok: true as const, me }),
+          (error: unknown) => ({ ok: false as const, error }),
+        ),
+      ]);
+      if (!alive) return;
+      if (chatOutcome.ok) hydrate(chatOutcome.chat);
+      else {
+        setLoaded(true);
+        if (isMissingSession(chatOutcome.error)) {
+          showSessionNotice();
+        } else {
+          setError(
+            chatOutcome.error instanceof Error
+              ? chatOutcome.error.message
+              : "Could not open this chat.",
+          );
         }
-      })
-      .catch((e) => {
-        if (alive) {
-          setError(e.message);
-          setLoaded(true);
-        }
-      });
+      }
+      if (meOutcome.ok) {
+        rememberBrowserSession();
+        setSessionNotice(false);
+        setCredits(meOutcome.me.creditBalance);
+        setCreditsEnabled(meOutcome.me.creditsEnabled === true);
+      } else if (isMissingSession(meOutcome.error)) {
+        showSessionNotice();
+      }
+    })();
     // Re-attach on return: generation runs server-side, so poll the chat while
     // it is open in case SSE frames were missed while the user was elsewhere.
     const poll = setInterval(() => {
@@ -129,19 +174,29 @@ export function useWebChat(chatId: string) {
     setError("");
     try {
       await work();
-      const [chat, me] = await Promise.all([
-        client.getChat(chatId),
-        client.getMe(),
-      ]);
+      const chat = await client.getChat(chatId);
       hydrate(chat);
-      setCredits(me.creditBalance);
+      try {
+        const me = await client.getMe();
+        rememberBrowserSession();
+        setSessionNotice(false);
+        setCredits(me.creditBalance);
+        setCreditsEnabled(me.creditsEnabled === true);
+      } catch (error) {
+        if (!isMissingSession(error)) throw error;
+        showSessionNotice();
+      }
       return true;
     } catch (e) {
-      setError(
-        e instanceof Error
-          ? e.message
-          : "Something went wrong. Please try again.",
-      );
+      if (isMissingSession(e)) {
+        showSessionNotice();
+      } else {
+        setError(
+          e instanceof Error
+            ? e.message
+            : "Something went wrong. Please try again.",
+        );
+      }
       return false;
     } finally {
       lock.current = false;
@@ -157,8 +212,14 @@ export function useWebChat(chatId: string) {
     artefacts,
     stage,
     credits,
+    creditsEnabled,
     error,
     setError,
+    sessionNotice,
+    dismissSessionNotice() {
+      storeDismissSessionNotice();
+      setSessionNotice(false);
+    },
     busy,
     loaded,
     run,

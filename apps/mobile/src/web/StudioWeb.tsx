@@ -48,6 +48,7 @@ import {
   GenerationProgress,
 } from "./GenerationUI";
 import { getStudioClient } from "../api";
+import { rememberBrowserSession } from "./session-notice";
 import { openQuestion } from "../chat/open-question";
 import { useWebChat } from "./useWebChat";
 import {
@@ -500,6 +501,7 @@ export function WebHome() {
         }
         throw e;
       }
+      rememberBrowserSession();
       await create();
     } catch (e) {
       setError(
@@ -519,6 +521,7 @@ export function WebHome() {
           displayName: name.trim(),
           phoneOrEmail: email.trim(),
         });
+        rememberBrowserSession();
         profileCreated.current = true;
       }
       await create();
@@ -1548,7 +1551,7 @@ export function WebConversation({
             ...previews[0]!,
             creditCost,
             balance,
-            canAfford: balance >= creditCost,
+            canAfford: chat.creditsEnabled ? balance >= creditCost : true,
           },
         });
       } catch (e) {
@@ -1634,7 +1637,7 @@ export function WebConversation({
   return (
     <Shell
       chatId={chatId}
-      credits={chat.credits}
+      credits={chat.creditsEnabled ? chat.credits : undefined}
       canvasOpen={canvasOpen}
       hasCanvas={hasCanvas}
       onCanvas={() => toggleCanvas(!canvasOpen)}
@@ -1995,20 +1998,26 @@ export function WebConversation({
                   </h3>
                   <p>“{revision.note}”</p>
                   <p className="muted">
-                    {revision.quote.creditCost} sample credits ·{" "}
-                    {revision.quote.balance} available.{" "}
+                    {chat.creditsEnabled ? (
+                      <>
+                        {revision.quote.creditCost} sample credits ·{" "}
+                        {revision.quote.balance} available.{" "}
+                      </>
+                    ) : null}
                     {revision.targets[0]?.kind === "script"
                       ? "You’ll review the new script before any visuals are created."
                       : "You’ll review this item again before continuing."}
                   </p>
-                  {revision.quote.canAfford ? (
+                  {!chat.creditsEnabled || revision.quote.canAfford ? (
                     <button
                       className="primary-button"
                       disabled={chat.busy}
                       onClick={() => void confirmRevision()}
                     >
                       <RotateCcw size={15} />
-                      Regenerate · {revision.quote.creditCost} credits
+                      {chat.creditsEnabled
+                        ? `Regenerate · ${revision.quote.creditCost} credits`
+                        : "Regenerate"}
                     </button>
                   ) : (
                     <p role="alert">
@@ -2049,12 +2058,22 @@ export function WebConversation({
             </div>
           </div>
           <div className="conversation-bottom">
+            {chat.sessionNotice && (
+              <div role="alert" className="error-note">
+                Sign up required
+                <button type="button" onClick={() => chat.dismissSessionNotice()}>
+                  Dismiss
+                </button>
+              </div>
+            )}
             {chat.error && (
               <div role="alert" className="error-note">
                 {chat.error === "not_found" || chat.error === "unauthorized"
                   ? "This session has expired. Start a new video to continue."
                   : chat.error}
-                <button onClick={() => chat.setError("")}>Dismiss</button>
+                <button type="button" onClick={() => chat.setError("")}>
+                  Dismiss
+                </button>
               </div>
             )}
             {feedbackTarget && (
