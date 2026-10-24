@@ -94,7 +94,8 @@ test("a scene image edits with every cast sheet and the next scene reuses them",
   const form = edit?.init?.body as FormData;
   assert.equal(form.get("model"), "gpt-image-2");
   assert.equal(form.get("size"), "1024x1536");
-  assert.equal(form.getAll("image").length, 2);
+  assert.equal(form.getAll("image[]").length, 2);
+  assert.equal(form.getAll("image").length, 0);
   assert.match(String(form.get("prompt")), /Asha wears a red cap/);
   assert.match(String(form.get("prompt")), /Bala wears a blue scarf/);
   assert.equal(calls.some((call) => call.url.includes("studio.test")), false);
