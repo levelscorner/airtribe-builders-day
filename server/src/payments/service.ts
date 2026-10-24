@@ -178,7 +178,21 @@ export function createPinePayments(input: {
     throw new PaymentError("payment not found", 404, "payment_not_found");
   }
 
+  async function markFailedIfPending(paymentId: string): Promise<PaymentRow["status"]> {
+    const updated = await input.db.query(
+      "UPDATE payments SET status = 'failed', updated_at = now() WHERE id = $1 AND status = 'pending' RETURNING status",
+      [paymentId],
+    );
+    if (updated.rows[0]) return "failed";
+    const fresh = await input.db.query("SELECT status FROM payments WHERE id = $1", [paymentId]);
+    const status = fresh.rows[0] ? asPayment(fresh.rows[0]).status : "pending";
+    return status;
+  }
+
   async function creditIfPaid(payment: PaymentRow, amountPaise: number | undefined): Promise<number> {
+    if (amountPaise === undefined) {
+      throw new PaymentError("paid notice has no amount", 400, "amount_missing");
+    }
     const creditsGranted = await settlePackPurchase(input.ledger, payment, amountPaise);
     if (payment.status !== "paid" && payment.status !== "mocked") {
       await input.db.query("UPDATE payments SET status = 'paid', updated_at = now() WHERE id = $1", [payment.id]);
@@ -237,12 +251,12 @@ export function createPinePayments(input: {
         return { paymentId: payment.id, status: "paid" as const, creditsGranted };
       }
       if (outcome === "failed") {
-        if (payment.status === "pending") {
-          await input.db.query("UPDATE payments SET status = 'failed', updated_at = now() WHERE id = $1", [
-            payment.id,
-          ]);
-        }
-        return { paymentId: payment.id, status: "failed" as const, creditsGranted: 0 };
+        const status = await markFailedIfPending(payment.id);
+        return {
+          paymentId: payment.id,
+          status: status === "paid" || status === "mocked" ? status : "failed",
+          creditsGranted: 0,
+        };
       }
       throw new PaymentError(`webhook status ${notice.status} is not final`, 400, "ignored_status");
     },
@@ -268,8 +282,8 @@ export function createPinePayments(input: {
         return { paymentId: payment.id, status: "paid", creditsGranted };
       }
       if (outcome === "failed") {
-        await input.db.query("UPDATE payments SET status = 'failed', updated_at = now() WHERE id = $1", [payment.id]);
-        return { paymentId: payment.id, status: "failed", creditsGranted: 0 };
+        const status = await markFailedIfPending(payment.id);
+        return { paymentId: payment.id, status, creditsGranted: 0 };
       }
       return { paymentId: payment.id, status: "pending", creditsGranted: 0 };
     },
