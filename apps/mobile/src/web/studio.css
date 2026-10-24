@@ -1343,6 +1343,13 @@
 .later-review .script-actions {
   margin-top: 12px;
 }
+.canvas-mobile-approve,
+.canvas-mobile-ready {
+  display: none;
+}
+.canvas-mobile-approve {
+  margin-top: 16px;
+}
 .idea-arriving {
   animation: idea-rise 0.55s var(--ease);
 }
@@ -1560,6 +1567,10 @@
   }
   .canvas-open .conversation {
     visibility: hidden;
+  }
+  .canvas-mobile-approve,
+  .canvas-mobile-ready {
+    display: block;
   }
   .canvas-heading {
     height: 62px;

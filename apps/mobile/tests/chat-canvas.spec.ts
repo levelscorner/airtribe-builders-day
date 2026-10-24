@@ -92,7 +92,7 @@ test("detailed prompt, script revision loop, frame review and targeted regenerat
     await page
       .getByRole("button", { name: "Send message", exact: true })
       .click();
-    await page.getByRole("button", { name: /Regenerate · 3 credits/ }).click();
+    await page.getByRole("button", { name: "Regenerate", exact: true }).click();
     await expect(page.getByLabel("Script version")).toHaveValue(String(i + 2));
     chat = await state(page);
     expect(chat.stage).toBe("script");
@@ -114,7 +114,7 @@ test("detailed prompt, script revision loop, frame review and targeted regenerat
     .click();
   const canvas = page.getByRole("complementary", { name: "Visual canvas" });
   await expect(canvas).toHaveAttribute("aria-hidden", "false");
-  await expect(canvas.locator(".frame-card")).toHaveCount(3);
+  await expect(canvas.locator(".frame-card")).toHaveCount(2);
   await screenshot(page, "desktop.png");
   await page.setViewportSize({ width: 390, height: 844 });
   await screenshot(page, "mobile.png");
@@ -143,7 +143,7 @@ test("detailed prompt, script revision loop, frame review and targeted regenerat
     .getByRole("textbox", { name: "Message SLB2" })
     .fill("Make this scene warmer");
   await page.getByRole("button", { name: "Send message", exact: true }).click();
-  await page.getByRole("button", { name: /Regenerate · 8 credits/ }).click();
+  await page.getByRole("button", { name: "Regenerate", exact: true }).click();
   await expect(canvas.locator(".frame-title").first()).toContainText("v2");
   chat = await state(page);
   const frames = chat.artefacts.filter(
@@ -161,9 +161,9 @@ test("detailed prompt, script revision loop, frame review and targeted regenerat
     .fill("Use softer light for every scene");
   await page.getByRole("button", { name: "Send message", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Update all 5 scenes?" }),
+    page.getByRole("heading", { name: "Update all 2 scenes?" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: /Regenerate · 40 credits/ }).click();
+  await page.getByRole("button", { name: "Regenerate", exact: true }).click();
   await expect(page.locator(".revision-confirm")).toHaveCount(0);
   chat = await state(page);
   expect(
@@ -171,7 +171,7 @@ test("detailed prompt, script revision loop, frame review and targeted regenerat
       (a: { kind: string; version: number }) =>
         a.kind === "image" && a.version >= 2,
     ),
-  ).toHaveLength(5);
+  ).toHaveLength(2);
   await page.reload();
   await expect(canvas).toHaveAttribute("aria-hidden", "false");
   await page
@@ -268,9 +268,10 @@ test("server errors and insufficient revision credits keep work reviewable", asy
     .getByRole("textbox", { name: "Message SLB2" })
     .fill("Simpler opening");
   await page.getByRole("button", { name: "Send message", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Regenerate", exact: true })).toBeVisible();
   await expect(
     page.getByText("Not enough sample credits for this revision."),
-  ).toBeVisible();
+  ).toHaveCount(0);
   expect((await state(page)).stage).toBe("script");
   await page.getByRole("button", { name: "Keep editing", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Message SLB2" })).toHaveValue(
@@ -409,7 +410,7 @@ test("SLB2 branding, generated script review and live media contract render with
     .getByRole("button", { name: "Approve script & explore visuals" })
     .click();
   const canvas = page.getByRole("complementary", { name: "Visual canvas" });
-  await expect(canvas.locator(".frame-card .real-frame")).toHaveCount(3);
+  await expect(canvas.locator(".frame-card .real-frame")).toHaveCount(2);
   await expect(canvas.locator(".frame-card .story-art")).toHaveCount(0);
   await expect(canvas.locator(".character-reference .real-frame")).toHaveCount(
     2,
@@ -431,10 +432,7 @@ test("SLB2 branding, generated script review and live media contract render with
   ).toBe(true);
 });
 
-test("a mock web run accepts remaining defaults and reaches Your video is ready", async ({
-  page,
-}) => {
-  test.setTimeout(120_000);
+async function reachReady(page: Page) {
   await start(page, "bees");
   await page.getByRole("button", { name: "Kids edu-fun", exact: true }).click();
   await page
@@ -450,6 +448,7 @@ test("a mock web run accepts remaining defaults and reaches Your video is ready"
   await expect(canvas.locator(".frame-card").first()).toBeVisible();
   await page.getByRole("button", { name: "Approve visuals & continue" }).click();
   await expect(canvas.getByRole("button", { name: "Approve clip 1" })).toBeVisible();
+  await expect(canvas.getByRole("button", { name: "Request a change" }).first()).toBeVisible();
   for (let guard = 0; guard < 20; guard += 1) {
     const stage = (await state(page)).stage as string;
     if (stage === "final" || stage === "done") break;
@@ -473,7 +472,20 @@ test("a mock web run accepts remaining defaults and reaches Your video is ready"
     page.getByRole("heading", { name: "Your video is ready." }),
   ).toBeVisible();
   expect((await state(page)).stage).toBe("done");
-});
+}
+
+for (const viewport of [
+  { width: 1280, height: 800 },
+  { width: 390, height: 844 },
+] as const) {
+  test(`a mock web run accepts remaining defaults and reaches Your video is ready at ${viewport.width}`, async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await reachReady(page);
+  });
+}
 
 test("provider progress events update in place and missing media never becomes a sample frame", async ({
   page,

@@ -984,6 +984,7 @@ function Canvas({
   onClose,
   onFeedback,
   onApprove,
+  onApproveVisuals,
   busy,
   stage,
 }: {
@@ -993,6 +994,7 @@ function Canvas({
   onClose: () => void;
   onFeedback: (item: ArtefactSummary) => void;
   onApprove: (id: string) => void;
+  onApproveVisuals: () => void;
   busy: boolean;
   stage: string;
 }) {
@@ -1197,6 +1199,23 @@ function Canvas({
                 ? "Sample frames use a honey storyboard to demonstrate this review."
                 : "Review the actual generated frames before continuing."}
             </p>
+            {stage === "cast" &&
+              artefacts.some(
+                (item) =>
+                  visualKinds.has(item.kind) &&
+                  item.state === "awaiting_approval",
+              ) && (
+                <div className="canvas-mobile-approve">
+                  <button
+                    className="primary-button"
+                    disabled={busy}
+                    onClick={onApproveVisuals}
+                  >
+                    Approve visuals & continue
+                    <ArrowUpRight size={16} />
+                  </button>
+                </div>
+              )}
           </section>
           <section>
             <div className="section-heading">
@@ -1343,6 +1362,9 @@ function Canvas({
           {["clips", "audio", "final", "done"].includes(stage) && (
             <section className="later-media">
               <h3>{label[stage]}</h3>
+              {stage === "done" && (
+                <h2 className="canvas-mobile-ready">Your video is ready.</h2>
+              )}
               <MediaReviews
                 artefacts={artefacts}
                 busy={busy}
@@ -2125,6 +2147,9 @@ export function WebConversation({
           onClose={() => toggleCanvas(false)}
           onFeedback={requestFeedback}
           onApprove={approve}
+          onApproveVisuals={() =>
+            void chat.run(() => chat.client.approveAllRemaining(videoId))
+          }
           busy={chat.busy || quoting || Boolean(revision)}
         />
       </main>
