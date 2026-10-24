@@ -19,6 +19,7 @@
     "preview:build": "npm run mobile:export",
     "typecheck": "npm --prefix server run typecheck && npm --prefix app run typecheck && npm --prefix apps/mobile run typecheck",
     "lint": "npm --prefix server run lint && npm --prefix app run lint",
+    "test": "npm --prefix server test",
     "test:mock": "npm --prefix server run test:mock && npm --prefix apps/mobile run check:mock",
     "test:creative": "npm --prefix server run test:creative",
     "sample:creative": "npm --prefix server run sample:creative",

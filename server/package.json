@@ -7,8 +7,9 @@
     "dev": "tsx watch src/deploy/start.ts",
     "start": "tsx src/deploy/start.ts",
     "start:legacy": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit",
-    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.contract.json",
+    "lint": "tsc --noEmit && tsc --noEmit -p tsconfig.contract.json",
+    "test": "tsx --test src/credits/*.test.ts src/payments/*.test.ts",
     "test:mock": "tsx src/scripts/smoke-mock.ts",
     "test:creative": "tsx --test src/creative/*.test.ts src/creative/**/*.test.ts",
     "sample:creative": "tsx src/creative/sample.ts",
@@ -33,6 +34,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.3.16",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^22.15.3",
