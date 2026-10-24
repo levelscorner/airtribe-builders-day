@@ -9,6 +9,25 @@ import { parseMediaProgress, type MediaProgressEvent } from "../media-contract";
 import { useStudioRuntime } from "./generation";
 import { getStudioClient } from "../api";
 
+/** Keep artefacts a live event already delivered when a chat snapshot raced the insert. */
+function mergeArtefacts(
+  prev: ArtefactSummary[],
+  incoming: ArtefactSummary[],
+): ArtefactSummary[] {
+  const prevById = new Map(prev.map((item) => [item.id, item]));
+  const seen = new Set<string>();
+  const merged = incoming.map((item) => {
+    seen.add(item.id);
+    const local = prevById.get(item.id);
+    if (local && local.updatedAt > item.updatedAt) return local;
+    return item;
+  });
+  for (const item of prev) {
+    if (!seen.has(item.id)) merged.push(item);
+  }
+  return merged;
+}
+
 export function useWebChat(chatId: string) {
   const client = getStudioClient();
   const runtime = useStudioRuntime();
@@ -26,8 +45,13 @@ export function useWebChat(chatId: string) {
   const lock = useRef(false);
   const hydrate = useCallback((chat: GetChatResponse) => {
     setVideoId(chat.videoId);
-    setMessages(chat.messages);
-    setArtefacts(chat.artefacts);
+    setMessages((prev) => {
+      const ids = new Set(chat.messages.map((item) => item.id));
+      return [...chat.messages, ...prev.filter((item) => !ids.has(item.id))].sort(
+        (a, b) => a.createdAt.localeCompare(b.createdAt),
+      );
+    });
+    setArtefacts((prev) => mergeArtefacts(prev, chat.artefacts));
     setStage(chat.stage);
     setLoaded(true);
   }, []);
@@ -55,13 +79,15 @@ export function useWebChat(chatId: string) {
           );
         });
       if (event.type === "artefact")
-        setArtefacts((prev) =>
-          prev.some((item) => item.id === event.artefact.id)
-            ? prev.map((item) =>
-                item.id === event.artefact.id ? event.artefact : item,
-              )
-            : [...prev, event.artefact],
-        );
+        setArtefacts((prev) => {
+          const existing = prev.find((item) => item.id === event.artefact.id);
+          if (!existing) return [...prev, event.artefact];
+          // A chat snapshot can be newer than this frame. Don't rewind it.
+          if (existing.updatedAt >= event.artefact.updatedAt) return prev;
+          return prev.map((item) =>
+            item.id === event.artefact.id ? event.artefact : item,
+          );
+        });
       if (event.type === "stage") setStage(event.stage);
       if (event.type === "error") setError(event.message);
     });

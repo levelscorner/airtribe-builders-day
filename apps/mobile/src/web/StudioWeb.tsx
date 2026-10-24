@@ -871,6 +871,74 @@ const visualKinds = new Set([
   "anchor",
   "voice_sample",
 ]);
+const reviewKinds = new Set(["clip", "voice", "audio", "final"]);
+function reviewNoun(kind: string): "clip" | "voice" | "final" {
+  if (kind === "clip") return "clip";
+  if (kind === "final") return "final";
+  return "voice";
+}
+function MediaReviews({
+  artefacts,
+  busy,
+  onApprove,
+  onFeedback,
+}: {
+  artefacts: ArtefactSummary[];
+  busy: boolean;
+  onApprove: (id: string) => void;
+  onFeedback: (item: ArtefactSummary) => void;
+}) {
+  const rows = artefacts.filter((item) => reviewKinds.has(item.kind));
+  const seen: Record<string, number> = {};
+  if (!rows.length) return null;
+  return (
+    <div className="media-reviews">
+      {rows.map((item) => {
+        const noun = reviewNoun(item.kind);
+        seen[noun] = (seen[noun] ?? 0) + 1;
+        const label = noun === "final" ? "final cut" : `${noun} ${seen[noun]}`;
+        const title = noun === "final" ? "Final cut" : `${noun === "clip" ? "Clip" : "Voice"} ${seen[noun]}`;
+        const canAct = item.state === "awaiting_approval" || item.state === "failed";
+        return (
+          <article className="later-review" key={item.id}>
+            <h3>{title}</h3>
+            <ProviderLine source={item} />
+            <MediaPlayer
+              kind={noun === "voice" ? "audio" : "video"}
+              name={title}
+              url={str(item.payload.url)}
+            />
+            {item.state === "approved" ? (
+              <span className="approved-line">
+                <Check size={15} />
+                Approved
+              </span>
+            ) : canAct ? (
+              <div className="script-actions">
+                <button
+                  className="primary-button"
+                  disabled={busy}
+                  onClick={() => onApprove(item.id)}
+                >
+                  Approve {label}
+                </button>
+                <button
+                  className="text-button"
+                  disabled={busy}
+                  onClick={() => onFeedback(item)}
+                >
+                  Request a change
+                </button>
+              </div>
+            ) : (
+              <p className="muted">Preparing this {noun === "final" ? "cut" : noun}…</p>
+            )}
+          </article>
+        );
+      })}
+    </div>
+  );
+}
 function SceneImage({
   index,
   alt,
@@ -1272,6 +1340,12 @@ function Canvas({
           {["clips", "audio", "final", "done"].includes(stage) && (
             <section className="later-media">
               <h3>{label[stage]}</h3>
+              <MediaReviews
+                artefacts={artefacts}
+                busy={busy}
+                onApprove={onApprove}
+                onFeedback={onFeedback}
+              />
               {messages
                 .filter((m) => m.kind === "video")
                 .map(
@@ -1795,7 +1869,14 @@ export function WebConversation({
                             disabled={chat.busy}
                             onClick={() => approve(message.artefactId)}
                           >
-                            Approve
+                            {message.artefactKind === "clip"
+                              ? "Approve clip"
+                              : message.artefactKind === "voice" ||
+                                  message.artefactKind === "audio"
+                                ? "Approve voice"
+                                : message.artefactKind === "final"
+                                  ? "Approve final cut"
+                                  : "Approve"}
                           </button>
                           {art && (
                             <button
@@ -1839,6 +1920,19 @@ export function WebConversation({
                   );
                 return null;
               })}
+              <MediaReviews
+                artefacts={chat.artefacts.filter(
+                  (item) =>
+                    !chat.messages.some(
+                      (message) =>
+                        message.kind === "approval" &&
+                        message.artefactId === item.id,
+                    ),
+                )}
+                busy={chat.busy || quoting || Boolean(revision)}
+                onApprove={approve}
+                onFeedback={requestFeedback}
+              />
               {hasCanvas &&
                 chat.stage === "cast" &&
                 awaiting.some((a) => visualKinds.has(a.kind)) && (

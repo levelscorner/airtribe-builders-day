@@ -367,6 +367,10 @@ test("SLB2 branding, generated script review and live media contract render with
         item.payload.url = `/test-media/${item.kind}-${item.id}.jpg`;
         item.payload.provider = "higgsfield";
         item.payload.model = "alibaba/qwen-image-3/text-to-image";
+        delete item.payload.providerLabel;
+        item.provider = "higgsfield";
+        item.model = "alibaba/qwen-image-3/text-to-image";
+        delete item.providerLabel;
       }
     }
     await route.fulfill({ response, json: data });
@@ -413,7 +417,7 @@ test("SLB2 branding, generated script review and live media contract render with
   await expect(canvas.locator(".character-art")).toHaveCount(0);
   await expect(
     canvas.locator(".frame-card .provider-label").first(),
-  ).toHaveText("Qwen Image");
+  ).toHaveText("AI-generated");
   await expect(canvas.locator(".canvas-intro .sample-label")).toHaveText(
     "AI-generated visuals",
   );
@@ -425,6 +429,50 @@ test("SLB2 branding, generated script review and live media contract render with
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
+});
+
+test("a mock web run accepts remaining defaults and reaches Your video is ready", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await start(page, "bees");
+  await page.getByRole("button", { name: "Kids edu-fun", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Choose the remaining details for me" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Your script", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Approve script & explore visuals" })
+    .click();
+  const canvas = page.getByRole("complementary", { name: "Visual canvas" });
+  await expect(canvas.locator(".frame-card").first()).toBeVisible();
+  await page.getByRole("button", { name: "Approve visuals & continue" }).click();
+  await expect(canvas.getByRole("button", { name: "Approve clip 1" })).toBeVisible();
+  for (let guard = 0; guard < 20; guard += 1) {
+    const stage = (await state(page)).stage as string;
+    if (stage === "final" || stage === "done") break;
+    const button = canvas
+      .getByRole("button", { name: /^Approve (clip|voice) \d+$/ })
+      .first();
+    if ((await button.count()) === 0) {
+      await page.waitForTimeout(400);
+      continue;
+    }
+    const text = (await button.innerText()).trim();
+    await button.click();
+    await expect(
+      canvas.getByRole("button", { name: text, exact: true }),
+    ).toHaveCount(0);
+  }
+  const finalCut = canvas.getByRole("button", { name: "Approve final cut" });
+  await expect(finalCut).toBeVisible({ timeout: 15_000 });
+  await finalCut.click();
+  await expect(
+    page.getByRole("heading", { name: "Your video is ready." }),
+  ).toBeVisible();
+  expect((await state(page)).stage).toBe("done");
 });
 
 test("provider progress events update in place and missing media never becomes a sample frame", async ({

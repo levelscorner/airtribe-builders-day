@@ -1123,6 +1123,25 @@ export function createMockStudio(options?: {
         return { accepted: true, message };
       }
       if (body.answer) {
+        if (body.answer.field === "__defaults") {
+          const echo = body.text?.trim() || "Choose the remaining details for me";
+          emitText(chat, "user", echo);
+          const genre = asGenre(chat.answers.genre) ?? "kids";
+          const preset = defaultsFor(genre);
+          // "__defaults" answers the open question and every later one that
+          // accepts defaults. It is not a mismatched question id.
+          while (INTAKE[chat.qIndex]?.allowDefaults) {
+            const current = INTAKE[chat.qIndex]!;
+            const value = defaultValue(current.field, preset);
+            chat.answers[current.field] = value;
+            if (current.field === "topic") chat.topic = value;
+            chat.assumed.push(answerLabel(current, value));
+            chat.qIndex += 1;
+          }
+          void askNext(chat).catch((error: unknown) => emitError(chat, error));
+          const message = [...chat.messages].reverse().find((item) => item.role === "user");
+          return { accepted: true, message };
+        }
         if (body.answer.field !== question.field) {
           throw new StudioMockError("stale_question", "Yeh sawal ab active nahi hai.");
         }
