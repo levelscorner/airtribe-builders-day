@@ -2,7 +2,13 @@
 
 Documentation for the ideas Abhinav is keeping in play for **Airtribe AI Builders Day** (Saturday 24 October 2026, Bengaluru) and for the weeks after. This repository holds product and architecture notes only. There is no application source here.
 
-Nothing in this repo locks a single Saturday bet. Four ideas stay first-class. A short backlog records earlier demo shapes that are still available if a booth challenge or the team’s skills pull that way.
+Four ideas stay first-class in the portfolio. A short backlog records earlier demo shapes that are still available if a booth challenge or the team’s skills pull that way.
+
+## Saturday primary build
+
+Today’s room demo is specified in **[docs/core](docs/core/CHECKLIST.md)**: a vernacular Learning coach. Five drills, tap-to-play voice, typing that always works, a scorecard in Replit DB. Public mobile URL by about 16:00 IST. About 20 users before 19:30. The Chotu kids version in [docs/04](docs/04-chotuchotu-studio.md) opens only if that main path is live by 14:00 IST.
+
+[Shared orchestration](docs/09-shared-orchestration.md), [tomorrow’s approach](docs/10-tomorrow-problem-approach.md), and [D8](docs/06-unified-ideas.md) name Shopping AI as the earlier default demo. Use `docs/core` for the coach the room is building.
 
 ## Event
 
@@ -23,6 +29,7 @@ Official track briefs and the partner roster are **CONFIRM**. Numbered booth cha
 
 | Doc | Idea | Track | Status in this repo |
 |---|---|---|---|
+| [Saturday core pack](docs/core/CHECKLIST.md) | Vernacular Learning coach. Five drills, ElevenLabs tap-to-play, typing always, scorecard as the user counter. Chotu kids slice only after the 14:00 gate. | Learning / Saturday build | Saturday spec, docs only |
 | [Shopping AI](docs/01-shopping-ai.md) | Broad buy / shortlist / agentic checkout. Any category. Pine Labs closes the loop. | Commerce | Architecture draft |
 | [Saturday Shopping components](docs/08-shopping-ai-saturday-components.md) | Named component list and 2-coder ownership for the Saturday Shopping AI build. Host is Replit-only (D1). Does not retire Grocery, visual learning, or Chotuchotu. | Commerce / Saturday build | Day-of stub |
 | [Grocery AI](docs/02-grocery-ai-cadences.md) | Household replenishment on **daily / weekly / monthly** cadences, vendors, and payment. | Commerce (vertical) | Architecture draft |
@@ -36,18 +43,27 @@ Shopping AI and Grocery AI are both Commerce. They are different products. Groce
 
 ## How to read these docs
 
-1. **Ten minutes.** This page, then [the single-pane matrix](docs/06-unified-ideas.md).
-2. **Portfolio thesis and non-goals.** [Overview](docs/00-overview.md). TableTalk is named there once and stays out of this repo.
-3. **One product.** Its idea doc (`docs/01`–`docs/04`), then the partner sections it cites in [partner architecture](docs/05-partner-stack-architecture.md). Saturday Shopping build: [component stub](docs/08-shopping-ai-saturday-components.md) and [shared orchestration](docs/09-shared-orchestration.md). Chotu on Saturday: the [Saturday walkthrough](docs/04-chotuchotu-studio.md#saturday-walkthrough) inside the studio doc.
-4. **Day-of method.** [How to approach any problem tomorrow](docs/10-tomorrow-problem-approach.md), then the [orchestration decision memo](docs/research/agent-orchestration-memo.md) if you need the framework comparison.
-5. **Architecture review (Saturn / Gaia).** Start at [partner architecture](docs/05-partner-stack-architecture.md), work the open questions at the bottom of each idea doc, and write decisions into the stubs in [unified ideas](docs/06-unified-ideas.md).
-6. **Citations.** [docs/research/](docs/research/) is the archive (VC demand, partners and market, CONFIRM vs INFER problem cards, and the Neptune orchestration memo). Idea docs cite those files instead of restating every source URL.
+1. **Building today.** [docs/core checklist](docs/core/CHECKLIST.md), then the seven specs in `docs/core/` in order.
+2. **Ten minutes on the portfolio.** This page, then [the single-pane matrix](docs/06-unified-ideas.md).
+3. **Portfolio thesis and non-goals.** [Overview](docs/00-overview.md). TableTalk is named there once and stays out of this repo.
+4. **One product.** Its idea doc (`docs/01`–`docs/04`), then the partner sections it cites in [partner architecture](docs/05-partner-stack-architecture.md). Saturday Shopping build: [component stub](docs/08-shopping-ai-saturday-components.md) and [shared orchestration](docs/09-shared-orchestration.md). Chotu on Saturday: the [Saturday walkthrough](docs/04-chotuchotu-studio.md#saturday-walkthrough) inside the studio doc.
+5. **Day-of method.** [How to approach any problem tomorrow](docs/10-tomorrow-problem-approach.md), then the [orchestration decision memo](docs/research/agent-orchestration-memo.md) if you need the framework comparison.
+6. **Architecture review (Saturn / Gaia).** Start at [partner architecture](docs/05-partner-stack-architecture.md), work the open questions at the bottom of each idea doc, and write decisions into the stubs in [unified ideas](docs/06-unified-ideas.md).
+7. **Citations.** [docs/research/](docs/research/) is the archive (VC demand, partners and market, CONFIRM vs INFER problem cards, and the Neptune orchestration memo). Idea docs cite those files instead of restating every source URL.
 
 ## Map
 
 ```
 README.md
 docs/README.md
+docs/core/CHECKLIST.md
+docs/core/01-product-requirements.md
+docs/core/02-technical-requirements.md
+docs/core/03-app-flow.md
+docs/core/04-design-brief.md
+docs/core/05-backend-schema.md
+docs/core/06-implementation-plan.md
+docs/core/07-tools-provided.md
 docs/00-overview.md
 docs/01-shopping-ai.md
 docs/02-grocery-ai-cadences.md

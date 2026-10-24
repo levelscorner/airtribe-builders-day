@@ -2,6 +2,23 @@
 
 Portfolio notes for Airtribe AI Builders Day. The full index, event facts, and labels live in the [root README](../README.md). Thesis and non-goals: [overview](00-overview.md).
 
+## Saturday primary build (`docs/core`)
+
+The room’s build spec for 24 Oct 2026 is the vernacular Learning coach. Start at the [checklist](core/CHECKLIST.md).
+
+| Doc | What it is |
+|---|---|
+| [Checklist](core/CHECKLIST.md) | Tracker, change-control rule, open UNKNOWNs |
+| [01 Product requirements](core/01-product-requirements.md) | Problem, users, 20-user goal, scope, stories |
+| [02 Technical requirements](core/02-technical-requirements.md) | Stack, latency, mobile autoplay, credits, fallbacks |
+| [03 App flow](core/03-app-flow.md) | Screens and the lite DAG |
+| [04 Design brief](core/04-design-brief.md) | Mobile UI, Hinglish copy, tap-to-play, access |
+| [05 Backend schema](core/05-backend-schema.md) | Replit DB records and Zod node I/O |
+| [06 Implementation plan](core/06-implementation-plan.md) | Clock to 16:00 IST, cut lines, Higgsfield demo video |
+| [07 Tools provided](core/07-tools-provided.md) | Partner tools, credential placeholders, no secrets |
+
+[docs/09](09-shared-orchestration.md), [docs/10](10-tomorrow-problem-approach.md), and [D8](06-unified-ideas.md) name Shopping AI as the earlier default. The core pack is the coach build.
+
 ## Idea docs
 
 | Doc | What it is |
