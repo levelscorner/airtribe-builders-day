@@ -65,15 +65,25 @@ export function createV1Router(deps: V1Deps): Router {
   });
 
   router.post("/users", async (req, res) => {
+    const body = req.body as CreateUserRequest;
+    const phoneOrEmail = body?.phoneOrEmail?.trim();
     try {
-      const body = req.body as CreateUserRequest;
       if (!body?.displayName?.trim()) {
         res.status(400).json({ error: "displayName required" });
         return;
       }
+      // Demo only: there is no password or OTP, so anyone with the email gets in.
+      if (phoneOrEmail) {
+        const existing = await store.findUserByContact(deps.db, phoneOrEmail);
+        if (existing) {
+          bindSessionUser(req, existing.id);
+          res.status(200).json(existing);
+          return;
+        }
+      }
       const user = await store.insertUser(deps.db, {
         displayName: body.displayName.trim(),
-        phoneOrEmail: body.phoneOrEmail?.trim(),
+        phoneOrEmail,
       });
       await grantSignupCredits(deps.db, {
         userId: user.id,
@@ -86,11 +96,16 @@ export function createV1Router(deps: V1Deps): Router {
       res.status(201).json(refreshed);
     } catch (error) {
       const message = error instanceof Error ? error.message : "";
-      if ((error as { code?: string })?.code === "23505" || /duplicate key/i.test(message)) {
-        res.status(409).json({ error: "This email is already used in the demo. Try a different email." });
-      } else {
-        res.status(500).json({ error: "Could not create your demo profile. Please try again." });
+      const duplicate = (error as { code?: string })?.code === "23505" || /duplicate key/i.test(message);
+      if (duplicate && phoneOrEmail) {
+        const existing = await store.findUserByContact(deps.db, phoneOrEmail);
+        if (existing) {
+          bindSessionUser(req, existing.id);
+          res.status(200).json(existing);
+          return;
+        }
       }
+      res.status(500).json({ error: "Could not create your demo profile. Please try again." });
     }
   });
 

@@ -109,11 +109,23 @@ export function createHttpStudio(baseUrl = ""): StudioClient {
     getRuntime() {
       return api<StudioRuntime>("/api/health");
     },
-    createUser(body: CreateUserRequest) {
-      return api<CreateUserResponse>(ApiPaths.users, {
+    async createUser(body: CreateUserRequest) {
+      const response = await fetch(joinUrl(baseUrl, ApiPaths.users), {
         method: "POST",
+        credentials: "include",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(body),
       });
+      const user = await readJson<CreateUserResponse>(response);
+      // 201 is a new demo profile. 200 signs in an email that already exists.
+      // The Set-Cookie on either response is the session the browser keeps.
+      if (response.status !== 200 && response.status !== 201) {
+        throw new StudioHttpError("unexpected_status", `HTTP ${response.status}`, response.status);
+      }
+      return user;
     },
     getMe() {
       return api<GetMeResponse>(ApiPaths.me);
