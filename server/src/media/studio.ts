@@ -1,18 +1,18 @@
 import { randomUUID } from "node:crypto";
 import type { ClipGenInput, ClipGenOutput, ImageGenInput, ImageGenOutput } from "../../../packages/shared/types.ts";
-import type { CastReferenceAdapter } from "./cast/reference.js";
-import { createCastAdapter } from "./cast/reference.js";
+import { createCastAdapter, type CastReferenceAdapter, type ResolvedCastPrompt } from "./cast/reference.js";
 import { PROVISIONAL_CREDITS } from "./credits.js";
 import { MediaInputError } from "./errors.js";
 import type { EnvLike } from "./flags.js";
 import { moduleMock } from "./flags.js";
+import { savePng } from "./files.js";
 import { failedJob, JobStore, newJobId, type MediaJob } from "./job.js";
 import type { ClipGenPort, ImageGenPort, SubmitOpts } from "./ports.js";
 import { createClipGen } from "./higgsfield/clip-gen.js";
 import { createImageGen } from "./higgsfield/image-gen.js";
-import { ArkClient, createArkClient, type ArkDeps } from "./ark/client.js";
-import { buildSeedanceBody, buildSeedreamBody, requirePrompt, seedanceFirstFrame, seedanceModel, seedreamModel } from "./ark/request.js";
-import { generateOpenAiImage, openaiImageModel } from "./openai/images.js";
+import { ArkClient, createArkClient, type ArkDeps, type FetchLike } from "./ark/client.js";
+import { buildSeedanceBody, buildSeedreamBody, requirePrompt, seedanceFirstFrame, seedanceModel, seedreamModel, SEEDREAM_PORTRAIT_SIZE } from "./ark/request.js";
+import { cropToNineSixteen, generateOpenAiImage, openaiImageModel } from "./openai/images.js";
 
 const OPENAI_LABEL = "GPT Image 2 · OpenAI";
 const SEEDREAM_LABEL = "Seedream 5.0 · BytePlus";
@@ -47,35 +47,39 @@ class StudioImageGen implements ImageGenPort {
       const resolved = this.cast.resolvePrompt(input.prompt, input.elementIds ?? []);
       requirePrompt(resolved);
       const choice = imageProvider(this.env);
-      if (choice === "ark") {
-        if (!this.env.ARK_API_KEY?.trim()) throw new Error("ARK_API_KEY is not set");
-        const client = createArkClient(this.env, this.deps);
-        const url = await client.image(buildSeedreamBody(input, resolved, this.env));
-        return this.store.insert({
-          jobId: newJobId(),
-          provider: "ark",
-          status: "completed",
-          result: {
-            url,
-            provider: "ark",
-            model: seedreamModel(this.env),
-            providerLabel: SEEDREAM_LABEL,
-          },
-          costCredits: PROVISIONAL_CREDITS.image,
-          idempotencyKey,
-        });
+      if (choice !== "ark" && this.env.OPENAI_API_KEY?.trim()) {
+        try {
+          const url = await this.openAiFrame(input, resolved);
+          return this.store.insert({
+            jobId: newJobId(),
+            provider: "openai",
+            status: "completed",
+            result: {
+              url,
+              provider: "openai",
+              model: openaiImageModel(this.env),
+              providerLabel: OPENAI_LABEL,
+            },
+            costCredits: PROVISIONAL_CREDITS.image,
+            idempotencyKey,
+          });
+        } catch (error) {
+          if (error instanceof MediaInputError || !this.env.ARK_API_KEY?.trim()) throw error;
+        }
       }
-      if (!this.env.OPENAI_API_KEY?.trim()) throw new Error("OPENAI_API_KEY is not set");
-      const url = await generateOpenAiImage(this.env, input, resolved, this.deps.fetch ?? fetch);
+      if (!this.env.ARK_API_KEY?.trim()) {
+        throw new Error(choice === "ark" ? "ARK_API_KEY is not set" : "OPENAI_API_KEY is not set");
+      }
+      const url = await this.seedreamFrame(input, resolved);
       return this.store.insert({
         jobId: newJobId(),
-        provider: "openai",
+        provider: "ark",
         status: "completed",
         result: {
           url,
-          provider: "openai",
-          model: openaiImageModel(this.env),
-          providerLabel: OPENAI_LABEL,
+          provider: "ark",
+          model: seedreamModel(this.env),
+          providerLabel: SEEDREAM_LABEL,
         },
         costCredits: PROVISIONAL_CREDITS.image,
         idempotencyKey,
@@ -84,6 +88,37 @@ class StudioImageGen implements ImageGenPort {
       const provider = imageProvider(this.env) === "ark" ? "ark" : "openai";
       return this.store.insert(failedJob(idempotencyKey, error, provider));
     }
+  }
+
+  /** One attempt, then one retry. A second failure falls through to Seedream. */
+  private async openAiFrame(input: ImageGenInput, resolved: ResolvedCastPrompt): Promise<string> {
+    const fetchImpl = this.fetchImpl();
+    let last: unknown;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        return await generateOpenAiImage(this.env, input, resolved, fetchImpl);
+      } catch (error) {
+        if (error instanceof MediaInputError) throw error;
+        last = error;
+      }
+    }
+    throw last instanceof Error ? last : new Error("openai image failed");
+  }
+
+  /** Request the large 9:16 frame, then store the 720x1280 still the pipeline uses. */
+  private async seedreamFrame(input: ImageGenInput, resolved: ResolvedCastPrompt): Promise<string> {
+    const client = createArkClient(this.env, this.deps);
+    const body = buildSeedreamBody(input, resolved, this.env);
+    const remote = await client.image(body);
+    if (body.size !== SEEDREAM_PORTRAIT_SIZE) return remote;
+    const response = await this.fetchImpl()(remote);
+    if (!response.ok) throw new Error(`seedream image fetch failed (${response.status})`);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    return savePng(this.env, randomUUID(), await cropToNineSixteen(bytes));
+  }
+
+  private fetchImpl(): FetchLike {
+    return this.deps.fetch ?? fetch;
   }
 
   async getJob(jobId: string): Promise<MediaJob<ImageGenOutput>> {
@@ -164,7 +199,7 @@ function mockClips(env: EnvLike, cast: CastReferenceAdapter): ClipGenPort {
   return createClipGen({ ...env, CLIP_MOCK: "1" }, { cast });
 }
 
-/** Blank IMAGE_PROVIDER is gpt-image-2. Seedream runs only when IMAGE_PROVIDER=ark. A failed OpenAI call stays failed. */
+/** Blank IMAGE_PROVIDER is gpt-image-2. A failed frame is retried once, then Seedream when ARK_API_KEY is set. */
 export function createStudioImageGen(env: EnvLike = process.env, deps: StudioDeps = {}): ImageGenPort {
   const cast = deps.cast ?? createCastAdapter(env);
   if (moduleMock(env, "IMAGE_MOCK")) return mockImages(env, cast);
