@@ -14,6 +14,18 @@ MOCK=1 npm start        # migrate (pg-mem) + /v1 + static web on PORT (default 8
 
 Replit: import this GitHub repo → set Secrets (`MOCK=1` until keys exist; optional `DATABASE_URL`) → start command `MOCK=1 npm start`.
 
+Live Claude (brief, script, prompts, regenerate) without forcing samples:
+
+```bash
+# server/.env — names only in git; put the real key in the file or in Replit Secrets
+# ANTHROPIC_API_KEY=...
+# CLAUDE_MODEL=claude-sonnet-4-5
+# LLM_PROVIDER=claude
+MOCK=0 npm --prefix server start
+```
+
+`npm start` at the repo root sets `MOCK=1` and stays on samples. Web and mobile both read the same SSE chat.
+
 ---
 
 ## Pending user items (not code)
@@ -23,7 +35,7 @@ Replit: import this GitHub repo → set Secrets (`MOCK=1` until keys exist; opti
 | Higgsfield API key + live prices | Abhinav / Neptune | 🔒 | Needed for N3 live images/clips; MOCK path ships without it |
 | ElevenLabs API key + 4 confirmed library voice IDs | Abhinav / Neptune | 🔒 | Seed uses mock voice ids today |
 | chotu-craft repo access (private skills) | Abhinav / Venus | 🔒 | V2 blocked; ScriptGen/PromptGen mocks work |
-| LLM API key / base URL for live ScriptGen | Abhinav / Venus | 🔒 | Optional until V3 |
+| `ANTHROPIC_API_KEY` + optional `CLAUDE_MODEL` for live brief, script, prompts | Abhinav / Saturn | 🔒 | Names only in `.env.example`. `MOCK=1` stays on samples |
 | Pine Labs merchant + webhook secret | Abhinav / Mars | 🔒 | Packs checkout stubbed |
 | AgenticOrg API key + agent id | Abhinav / Saturn | 🔒 | `AGENTICORG_API_KEY` and `AGENTICORG_AGENT_ID` only. Blank or `MOCK=1` uses the mock review |
 | Product name + starter credit amount | Sol / product | 🔒 | `STARTER_CREDITS` defaults to 80 |
@@ -50,6 +62,7 @@ Replit: import this GitHub repo → set Secrets (`MOCK=1` until keys exist; opti
 | S9 | Per-browser signed cookie sessions + isolation test | ✅ | Fixes #25 on PR #24 |
 | S10 | SSE reconnect hydrate + Last-Event-ID replay | ✅ | Fixes #25 on PR #24 |
 | S11 | AgenticOrg script critic on the script stage | 🟡 | `server/src/integrations/agenticorg`; `AgentReview` in `packages/shared/types.ts`. `POST /api/v1/agents/{AGENTICORG_AGENT_ID}/run`. `failed` / `budget_exceeded` / HTTP 200 `status: failed` → mock review + warning. `hitl_triggered` stays `awaiting_approval` |
+| S12 | Claude for brief, ScriptGen, PromptGen, regenerate | 🟡 | `LLM_PROVIDER=claude\|mock`. `MOCK=1` samples. SSE unchanged |
 
 ---
 

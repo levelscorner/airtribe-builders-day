@@ -24,6 +24,7 @@ function userPrompt(input: PromptGenInput): string {
       name: member.name,
       role: member.role,
       identityText: member.identityText,
+      dnaChips: member.dnaChips,
       higgsfieldElementId: member.higgsfieldElementId,
     })),
     feedback: input.feedback?.trim() ?? "",
