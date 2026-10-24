@@ -16,7 +16,8 @@ async function pump(times = 8): Promise<void> {
 async function composerDuringChipQuestions(): Promise<void> {
   const api = createMockStudio({ delayMs: 0 });
   await api.createUser({ displayName: "Asha", phoneOrEmail: "asha@example.com" });
-  const opened = await api.createChat({});
+  // The topic question is first when signup has no opening line. This walk supplies one so the chips still start on genre.
+  const opened = await api.createChat({ initialMessage: "barish kaise banti hai" });
   await pump();
 
   let history = await api.listMessages(opened.chatId);
