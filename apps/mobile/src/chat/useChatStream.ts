@@ -116,7 +116,7 @@ export function useChatStream(chatId: string, videoId: string) {
 
   const reject = useCallback(
     (artefactId: string, note: string) =>
-      run(artefactId, () => client.rejectArtefact(artefactId, { note })),
+      run(artefactId, () => client.rejectArtefact(artefactId, { rejectNote: note })),
     [client, run],
   );
 

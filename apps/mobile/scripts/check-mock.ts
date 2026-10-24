@@ -45,7 +45,7 @@ async function main(): Promise<void> {
 
     if (!rejectedOnce && snap.video.stage === "cast" && awaiting[0]) {
       const target = awaiting[0];
-      await api.rejectArtefact(target.id, { note: "Sheet ka pose badlo" });
+      await api.rejectArtefact(target.id, { rejectNote: "Sheet ka pose badlo" });
       const history = await api.listMessages(opened.chatId);
       const card = history.messages.find((item) => item.kind === "approval" && item.artefactId === target.id);
       assert(card && card.kind === "approval" && card.state === "rejected", "reject should update the card");

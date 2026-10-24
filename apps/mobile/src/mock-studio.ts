@@ -856,7 +856,7 @@ export function createMockStudio(options?: {
     },
 
     async rejectArtefact(artefactId, body) {
-      const note = body.note.trim();
+      const note = body.rejectNote.trim();
       if (!note) throw new StudioMockError("note", "Reject ke saath note chahiye.");
       const { artefact, chat } = mustArtefact(artefactId);
       if (artefact.state !== "awaiting_approval" && artefact.state !== "rejected") {
