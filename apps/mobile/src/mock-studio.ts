@@ -91,9 +91,9 @@ interface ChatRuntime {
 
 type Listener = (event: StudioEvent) => void;
 
-const MEDIA_MODEL: Partial<Record<ArtefactKind, string>> = {
-  image: "alibaba/qwen-image-3/text-to-image",
-  clip: "bytedance/seedance-2.0/image-to-video",
+const MEDIA_DEFAULTS: Partial<Record<ArtefactKind, { provider: KnownMediaProvider; model: string }>> = {
+  image: { provider: "openai", model: "gpt-image-2" },
+  clip: { provider: "ark", model: "dreamina-seedance-2-5-260628" },
 };
 
 const MEDIA_KIND: Partial<Record<ArtefactKind, MediaProgressEvent["kind"]>> = {
@@ -287,10 +287,10 @@ export function createMockStudio(options?: {
       state?: ArtefactState;
     },
   ): ArtefactSummary {
-    const model = MEDIA_MODEL[input.kind];
+    const media = MEDIA_DEFAULTS[input.kind];
     const payload: Record<string, unknown> = {
-      provider: "mock" satisfies KnownMediaProvider,
-      ...(model ? { model } : {}),
+      provider: media?.provider ?? ("mock" satisfies KnownMediaProvider),
+      ...(media ? { model: media.model } : {}),
       ...input.payload,
       version: 1,
     };

@@ -107,7 +107,39 @@ function providerCases(): void {
   assert(
     providerChipLabel({ payload: { provider: "mock", model: "bytedance/seedance-2.0/image-to-video" } }) ===
       "Seedance 2.0",
-    "clip model chip uses the Seedance endpoint",
+    "clip model chip uses the Seedance 2.0 endpoint",
+  );
+  assert(
+    providerChipLabel({ payload: { provider: "openai", model: "gpt-image-2" } }) === "GPT Image 2",
+    "openai gpt-image-2 chip",
+  );
+  assert(
+    providerChipLabel({ provider: "ark", model: "dreamina-seedance-2-5-260628" }) === "Seedance 2.5",
+    "ark seedance 2.5 chip reads artefact fields",
+  );
+  assert(
+    providerChipLabel({
+      providerLabel: "Seedance 2.5 · BytePlus",
+      payload: { provider: "openai", model: "gpt-image-2" },
+    }) === "Seedance 2.5 · BytePlus",
+    "artefact providerLabel wins over payload",
+  );
+  assert(
+    providerChipLabel({
+      provider: "openai",
+      model: "gpt-image-2",
+      payload: { provider: "mock", model: "other" },
+    }) === "GPT Image 2",
+    "artefact provider and model win over payload",
+  );
+  assert(
+    providerChipLabel({ payload: { provider: "openai", model: "custom-model", providerLabel: "Studio label" } }) ===
+      "Studio label",
+    "unknown model falls back to providerLabel",
+  );
+  assert(
+    providerChipLabel({ payload: { provider: "openai", model: "custom-model" } }) === "custom-model",
+    "unknown model without a label shows the raw model",
   );
   assert(providerChipLabel({ payload: { provider: "elevenlabs" } }) === "ElevenLabs", "voice provider chip");
   assert(providerChipLabel({ payload: { provider: "mock" } }) === "Mock", "mock provider chip");
@@ -217,7 +249,8 @@ async function mediaTicks(): Promise<void> {
   }
   const image = (await api.getVideo(opened.videoId)).artefacts.find((item) => item.kind === "image");
   assert(image, "image card missing");
-  assert(providerChipLabel(image) === "Qwen Image", "mock image chip follows the Qwen model id");
+  assert(image.payload.provider === "openai" && image.payload.model === "gpt-image-2", "mock image uses gpt-image-2");
+  assert(providerChipLabel(image) === "GPT Image 2", "mock image chip follows gpt-image-2");
   assert(typeof image.payload.url === "string" && image.payload.url.startsWith("mock://"), "image uses a mock url");
   const clipReady = seen.some((event) => event.kind === "image" && event.status === "done");
   assert(clipReady, "image generation emits a done tick");
