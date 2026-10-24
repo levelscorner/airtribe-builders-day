@@ -3,6 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import cors from "cors";
 import express, { type Express } from "express";
+import { asyncRoute } from "../admin/async-route.js";
 import { adminRouter } from "../admin/routes.js";
 import { createMemoryEventLog, createPostgresEventLog, type EventLog } from "../admin/log.js";
 import { createPgDb, createPgPool, migrate, type Db } from "../credits/db.js";
@@ -63,7 +64,7 @@ export async function createApp(options: AppOptions = {}): Promise<Express> {
   );
   app.use(adminRouter(events, { mock: config.mock, database }));
 
-  app.get("/v1/videos/:id/download", async (req, res) => {
+  app.get("/v1/videos/:id/download", asyncRoute(async (req, res) => {
     const videoId = req.params.id;
     if (!/^[A-Za-z0-9_-]+$/.test(videoId)) {
       res.status(400).json({ error: "bad_video_id" });
@@ -85,7 +86,7 @@ export async function createApp(options: AppOptions = {}): Promise<Express> {
       payload: { videoId },
     });
     res.download(file, `${videoId}.mp4`);
-  });
+  }));
 
   app.use("/media", express.static(workDir, { fallthrough: true, maxAge: "1h" }));
 
@@ -110,6 +111,15 @@ export async function createApp(options: AppOptions = {}): Promise<Express> {
 <li><a href="/health">Health</a></li>
 </ul>
 </body></html>`);
+  });
+
+  app.use((error: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (res.headersSent) {
+      next(error);
+      return;
+    }
+    const message = error instanceof Error ? error.message : "request failed";
+    res.status(500).json({ error: "request_failed", message });
   });
 
   return app;

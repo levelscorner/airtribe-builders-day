@@ -4,6 +4,8 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import express from "express";
+import { adminRouter } from "./routes.js";
 import { createPostgresLedger } from "../credits/ledger.js";
 import { seedUser, seedVideo, withPg } from "../credits/testing.js";
 import { createApp } from "../deploy/app.js";
@@ -196,6 +198,41 @@ test("admin HTML and CSV come from the events table", async () => {
   } finally {
     await pg.close();
     await rm(workDir, { recursive: true, force: true });
+  }
+});
+
+test("a database error on /admin returns 500", async () => {
+  const app = express();
+  app.use(
+    adminRouter(
+      {
+        async list() {
+          throw new Error("db down");
+        },
+        async counts() {
+          throw new Error("db down");
+        },
+        async record() {},
+      },
+      { mock: true, database: true },
+    ),
+  );
+  app.use((error: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (res.headersSent) {
+      next(error);
+      return;
+    }
+    res.status(500).json({ error: "request_failed" });
+  });
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const page = await fetch(`http://127.0.0.1:${port}/admin`);
+    assert.equal(page.status, 500);
+    const body = (await page.json()) as { error: string };
+    assert.equal(body.error, "request_failed");
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
 });
 
