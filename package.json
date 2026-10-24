@@ -18,6 +18,8 @@
     "test:creative": "npm --prefix server run test:creative",
     "sample:creative": "npm --prefix server run sample:creative",
     "test:media": "npm --prefix server run test:media",
+    "db:migrate": "npm --prefix server run db:migrate",
+    "test:db": "npm --prefix server run test:db",
     "install:all": "npm --prefix server install && npm --prefix app install && npm --prefix apps/mobile install"
   }
 }
