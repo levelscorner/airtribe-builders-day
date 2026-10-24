@@ -8,21 +8,27 @@ function one(value: string | string[] | undefined): string {
 }
 
 export default function ChatRoute() {
-  const params = useLocalSearchParams<{ id?: string; videoId?: string }>();
+  const params = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
   const chatId = one(params.id);
-  const videoId = one(params.videoId);
-  if (!chatId || !videoId) {
+  if (!chatId) {
     return (
       <View style={styles.screen}>
-        <Text style={styles.text}>Chat link adhoora hai. Signup se shuru karo.</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="Signup pe jao" onPress={() => router.replace("/")} style={styles.button}>
+        <Text accessibilityRole="alert" style={styles.text}>
+          Chat link adhoora hai. Signup se shuru karo.
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Signup pe jao"
+          onPress={() => router.replace("/")}
+          style={styles.button}
+        >
           <Text style={styles.buttonText}>Signup pe jao</Text>
         </Pressable>
       </View>
     );
   }
-  return <ChatScreen chatId={chatId} videoId={videoId} />;
+  return <ChatScreen chatId={chatId} />;
 }
 
 const styles = StyleSheet.create({

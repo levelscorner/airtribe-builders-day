@@ -223,7 +223,7 @@ export const INTAKE: IntakeQuestion[] = [
   },
   {
     field: "cast",
-    prompt: "Cast kaun? 1 ya 2 members chuno (optionIds).",
+    prompt: "Cast kaun? 1 ya 2 members chuno.",
     options: [
       { id: "cast_chintu", label: "Chintu" },
       { id: "cast_mini", label: "Mini" },

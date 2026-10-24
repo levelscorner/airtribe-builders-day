@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { QuestionMessage } from "@chotu/shared";
-import { colors, layout } from "../theme";
+import { colors, hitSlop, layout } from "../theme";
 
 export function QuestionCard({
   message,
@@ -44,10 +44,13 @@ export function QuestionCard({
             return (
               <Pressable
                 key={option.id}
-                accessibilityRole="button"
-                accessibilityLabel={option.label}
-                accessibilityState={{ selected }}
+                accessibilityRole={multi ? "checkbox" : "button"}
+                accessibilityLabel={
+                  multi ? `${option.label}, ${selected ? "selected" : "not selected"}` : option.label
+                }
+                accessibilityState={{ selected, disabled: !open, checked: multi ? selected : undefined }}
                 disabled={!open}
+                hitSlop={hitSlop}
                 onPress={() => {
                   if (!open) return;
                   if (multi) toggle(option.id);
@@ -66,8 +69,12 @@ export function QuestionCard({
           {multi ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Confirm cast"
+              accessibilityLabel={
+                picked.length < 1 ? "Confirm cast, choose 1 or 2" : `Confirm cast, ${picked.length} selected`
+              }
+              accessibilityState={{ disabled: picked.length < 1 }}
               disabled={picked.length < 1}
+              hitSlop={hitSlop}
               onPress={() => {
                 if (picked.length < 1 || !onOptions) return;
                 onOptions(picked);
@@ -80,12 +87,24 @@ export function QuestionCard({
             </Pressable>
           ) : null}
           {message.allowDefaults ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Use defaults" onPress={onDefaults} style={styles.secondary}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Use defaults for ${message.field}`}
+              hitSlop={hitSlop}
+              onPress={onDefaults}
+              style={styles.secondary}
+            >
               <Text style={styles.secondaryText}>Use defaults</Text>
             </Pressable>
           ) : null}
           {message.allowSkip ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Skip" onPress={onSkip} style={styles.secondary}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Skip ${message.field}`}
+              hitSlop={hitSlop}
+              onPress={onSkip}
+              style={styles.secondary}
+            >
               <Text style={styles.secondaryText}>Skip</Text>
             </Pressable>
           ) : null}

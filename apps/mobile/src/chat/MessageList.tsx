@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import type { ArtefactState, ChatMessage, RegeneratePreviewResponse } from "@chotu/shared";
+import type { ArtefactState, ArtefactSummary, ChatMessage, RegeneratePreviewResponse } from "@chotu/shared";
 import { PlayerCard } from "../screens/PlayerCard";
 import { colors } from "../theme";
 import { ApprovalCard } from "./ApprovalCard";
@@ -84,16 +84,20 @@ export function MessageList({
   messages,
   artefacts,
   thinking,
+  empty,
+  pin,
   actions,
 }: {
   messages: ChatMessage[];
-  artefacts: Record<string, ArtefactState>;
+  artefacts: Record<string, ArtefactSummary>;
   thinking: boolean;
+  empty: boolean;
+  pin: number;
   actions: Actions;
 }) {
   const active = openQuestion(messages)?.id;
   const listRef = useRef<ScrollView>(null);
-  const count = messages.length + (thinking ? 1 : 0);
+  const count = messages.length + (thinking || empty ? 1 : 0);
 
   useEffect(() => {
     const node = listRef.current as unknown as {
@@ -109,7 +113,7 @@ export function MessageList({
     snap();
     const frame = requestAnimationFrame(snap);
     return () => cancelAnimationFrame(frame);
-  }, [messages, artefacts, thinking]);
+  }, [messages, artefacts, thinking, empty, pin]);
 
   return (
     <ScrollView
@@ -118,17 +122,25 @@ export function MessageList({
       contentContainerStyle={styles.list}
       onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
     >
-      {messages.length === 0 ? <Text style={styles.empty}>Chotu soch raha hai…</Text> : null}
+      {empty ? (
+        <Text accessibilityRole="text" accessibilityLiveRegion="polite" style={styles.empty}>
+          Abhi khaali hai. Neeche message likho.
+        </Text>
+      ) : null}
       {messages.map((message) => (
         <Row
           key={message.id}
           message={message}
           open={message.kind === "question" && message.id === active}
-          liveState={message.kind === "approval" ? artefacts[message.artefactId] : undefined}
+          liveState={message.kind === "approval" ? artefacts[message.artefactId]?.state : undefined}
           actions={actions}
         />
       ))}
-      {thinking && messages.length > 0 ? <Text style={styles.empty}>Chotu soch raha hai…</Text> : null}
+      {thinking && messages.length > 0 ? (
+        <Text accessibilityRole="text" accessibilityLiveRegion="polite" style={styles.empty}>
+          Chotu soch raha hai…
+        </Text>
+      ) : null}
       <View
         onLayout={() => {
           if (count > 0) listRef.current?.scrollToEnd({ animated: false });

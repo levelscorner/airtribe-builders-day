@@ -797,6 +797,7 @@ export function createMockStudio(options?: {
     },
 
     async getChat(chatId) {
+      await wait();
       const chat = mustChat(chatId);
       const bundle = mustVideo(chat.videoId);
       return {
@@ -825,19 +826,6 @@ export function createMockStudio(options?: {
           throw new StudioMockError("stale_question", "Yeh sawal ab active nahi hai.");
         }
         let echo = body.text?.trim() || "";
-        const optionIds = body.answer.optionIds?.map((id) => id.trim()).filter(Boolean);
-        if (optionIds && optionIds.length > 0) {
-          if (optionIds.length > 2) {
-            throw new StudioMockError("cast", "Cast mein zyada se zyada 2 members.");
-          }
-          if (question.field !== "cast") {
-            throw new StudioMockError("answer", "optionIds sirf cast ke liye hain; single choice pe optionId use karo.");
-          }
-        }
-        let raw =
-          optionIds && optionIds.length > 0
-            ? optionIds.join(",")
-            : (body.answer.optionId ?? body.answer.freeText);
         if (body.answer.useDefaults) {
           echo = echo || "Use defaults";
           void continueBrief(chat, { field: question.field, usedDefaults: true, echo }).catch((error: unknown) =>
@@ -853,6 +841,19 @@ export function createMockStudio(options?: {
           );
           const message = chat.messages[chat.messages.length - 1];
           return { accepted: true, message: message?.role === "user" ? message : undefined };
+        }
+        let raw: string | undefined;
+        if (body.answer.optionIds !== undefined) {
+          if (question.field !== "cast") {
+            throw new StudioMockError("answer", "optionIds sirf cast ke liye hain; single choice pe optionId use karo.");
+          }
+          const optionIds = body.answer.optionIds.map((id) => id.trim()).filter(Boolean);
+          if (optionIds.length < 1 || optionIds.length > 2) {
+            throw new StudioMockError("cast", "Cast mein 1 ya 2 members chuno.");
+          }
+          raw = optionIds.join(",");
+        } else {
+          raw = body.answer.optionId ?? body.answer.freeText;
         }
         if (!raw && body.text?.trim() && question.allowFreeText) raw = body.text.trim();
         echo = echo || (raw ? answerLabel(question, raw) : "…");

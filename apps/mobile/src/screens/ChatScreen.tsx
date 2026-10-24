@@ -7,14 +7,19 @@ import { MessageList } from "../chat/MessageList";
 import { openQuestion } from "../chat/open-question";
 import { ProgressStrip } from "../chat/ProgressStrip";
 import { useChatStream } from "../chat/useChatStream";
-import { colors, layout } from "../theme";
+import { useKeyboardInset } from "../chat/useKeyboardInset";
+import { colors, hitSlop, layout } from "../theme";
 
-export function ChatScreen({ chatId, videoId }: { chatId: string; videoId: string }) {
+export function ChatScreen({ chatId }: { chatId: string }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const stream = useChatStream(chatId, videoId);
+  const keyboard = useKeyboardInset();
+  const stream = useChatStream(chatId);
   const question = openQuestion(stream.messages);
-  const showApproveAll = stream.stage !== "brief" && stream.stage !== "done" && stream.awaitingCount > 0;
+  const showApproveAll =
+    stream.status === "ready" && stream.stage !== "brief" && stream.stage !== "done" && stream.awaitingCount > 0;
+  const showList = !stream.missing && (stream.messages.length > 0 || stream.status === "ready");
+  const showComposer = stream.status === "ready" && !stream.missing;
 
   const actions = useMemo(
     () => ({
@@ -55,7 +60,10 @@ export function ChatScreen({ chatId, videoId }: { chatId: string; videoId: strin
   return (
     <View style={styles.screen}>
       <KeyboardAvoidingView
-        style={[styles.column, { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom, 8) }]}
+        style={[
+          styles.column,
+          { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom, 8) + keyboard },
+        ]}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <View style={styles.stripe} />
@@ -64,7 +72,10 @@ export function ChatScreen({ chatId, videoId }: { chatId: string; videoId: strin
             <Text style={styles.brand}>Chotu Studio</Text>
             <Text style={styles.sub}>Orchestrator chat</Text>
           </View>
-          <Text accessibilityLabel={stream.credits === null ? "Credits" : `${stream.credits} credits`} style={styles.credits}>
+          <Text
+            accessibilityLabel={stream.credits === null ? "Credits loading" : `${stream.credits} credits`}
+            style={styles.credits}
+          >
             {stream.credits === null ? "— credits" : `${stream.credits} credits`}
           </Text>
         </View>
@@ -72,7 +83,8 @@ export function ChatScreen({ chatId, videoId }: { chatId: string; videoId: strin
         {showApproveAll ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Approve all remaining"
+            accessibilityLabel="Approve all remaining cards in this stage"
+            hitSlop={hitSlop}
             onPress={() => {
               void stream.approveAll();
             }}
@@ -81,32 +93,58 @@ export function ChatScreen({ chatId, videoId }: { chatId: string; videoId: strin
             <Text style={styles.allText}>Approve all remaining</Text>
           </Pressable>
         ) : null}
+        {stream.status === "loading" ? (
+          <Text
+            accessibilityRole="text"
+            accessibilityLiveRegion="polite"
+            accessibilityLabel="Chat khul rahi hai"
+            style={styles.status}
+          >
+            Chat khul rahi hai…
+          </Text>
+        ) : null}
         {stream.error ? (
           <Text accessibilityRole="alert" style={styles.error}>
             {stream.error}
           </Text>
         ) : null}
+        {stream.status === "error" && !stream.missing ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Phir se kholo"
+            hitSlop={hitSlop}
+            onPress={stream.reload}
+            style={styles.all}
+          >
+            <Text style={styles.allText}>Phir se</Text>
+          </Pressable>
+        ) : null}
         {stream.missing ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Signup pe jao"
+            hitSlop={hitSlop}
             onPress={() => router.replace("/")}
             style={styles.all}
           >
             <Text style={styles.allText}>Signup pe jao</Text>
           </Pressable>
-        ) : (
+        ) : showList ? (
           <MessageList
             messages={stream.messages}
             artefacts={stream.artefacts}
-            thinking={stream.thinking}
+            thinking={stream.status === "ready" && stream.thinking}
+            empty={stream.status === "ready" && stream.messages.length === 0}
+            pin={keyboard}
             actions={actions}
           />
-        )}
-        <Composer
-          placeholder={question?.allowFreeText ? "Jawab yahan likho…" : "Message likho…"}
-          onSend={onSend}
-        />
+        ) : null}
+        {showComposer ? (
+          <Composer
+            placeholder={question?.allowFreeText ? "Jawab yahan likho…" : "Message likho…"}
+            onSend={onSend}
+          />
+        ) : null}
       </KeyboardAvoidingView>
     </View>
   );
@@ -168,8 +206,15 @@ const styles = StyleSheet.create({
     color: colors.ink,
     textAlign: "center",
   },
+  status: {
+    fontSize: 18,
+    lineHeight: 26,
+    color: colors.inkSoft,
+    marginTop: 12,
+  },
   error: {
     fontSize: 16,
+    lineHeight: 22,
     color: colors.danger,
     marginBottom: 8,
   },

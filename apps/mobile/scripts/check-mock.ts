@@ -29,6 +29,14 @@ async function main(): Promise<void> {
   assert(hydrated.messages.length > 0, "GET chat returns messages");
   assert(Array.isArray(hydrated.artefacts), "GET chat returns artefacts");
 
+  let singleChoiceRejected = false;
+  try {
+    await api.postMessage(opened.chatId, { answer: { field: "genre", optionIds: ["kids"] } });
+  } catch (error) {
+    singleChoiceRejected = error instanceof Error && error.message.includes("optionIds");
+  }
+  assert(singleChoiceRejected, "optionIds is only valid on cast");
+
   let rejectedOnce = false;
   let regenerated = false;
   let charged = 0;
@@ -44,6 +52,23 @@ async function main(): Promise<void> {
       const question = openQuestion(history.messages);
       if (!question || !isQuestion(question)) continue;
       if (question.field === "cast" && !castPicked) {
+        assert(!question.prompt.toLowerCase().includes("optionids"), "cast prompt stays user-facing");
+        let emptyCast = false;
+        try {
+          await api.postMessage(opened.chatId, { answer: { field: "cast", optionIds: [] } });
+        } catch {
+          emptyCast = true;
+        }
+        assert(emptyCast, "cast rejects an empty optionIds list");
+        let tooMany = false;
+        try {
+          await api.postMessage(opened.chatId, {
+            answer: { field: "cast", optionIds: ["cast_chintu", "cast_mini", "cast_riya"] },
+          });
+        } catch {
+          tooMany = true;
+        }
+        assert(tooMany, "cast rejects a third member");
         await api.postMessage(opened.chatId, {
           answer: { field: "cast", optionIds: ["cast_chintu", "cast_mini"] },
         });
