@@ -92,3 +92,10 @@ export function scriptReview(source: unknown): ScriptReview | undefined {
     warning: text(r.warning) || undefined,
   };
 }
+
+export function generationError(value: unknown) {
+  const error = text(value);
+  if (/not_enough_credits|insufficient.{0,20}credits/i.test(error)) return "Higgsfield needs API credits to create visuals. Add credits to the provider account, then retry this step. This is separate from the sample credits shown in SLB2.";
+  if (/higgsfield.*(?:401|unauthoriz)|credentials missing/i.test(error)) return "Higgsfield could not authenticate this request. Check the server connection, then retry.";
+  return error || "Please try this step again.";
+}

@@ -35,6 +35,7 @@ import type {
 import {
   useStudioRuntime,
   generationLabel,
+  generationError,
   isSample,
   isSampleUrl,
   mediaUrl,
@@ -953,6 +954,7 @@ function Canvas({
   const selected = artefacts.find((a) => a.id === focus);
   const sampleFrames = frames.some(isSample);
   const preparationFailed = artefacts.some((a) => a.state === "failed");
+  const providerCreditsNeeded = artefacts.some(a => a.state === "failed" && /not_enough_credits/.test(str(a.payload.error)));
   const scenery =
     frames.find((a) => mediaUrl(a.payload.url) && !isSample(a)) ?? frames[0];
   useEffect(() => {
@@ -1037,7 +1039,7 @@ function Canvas({
                 : frames.length
                   ? "AI-generated visuals"
                   : preparationFailed
-                    ? "Visual preparation needs attention"
+                    ? providerCreditsNeeded ? "Higgsfield API credits needed" : "Visual preparation needs attention"
                     : "Preparing your visuals"}
             </span>
           </div>
@@ -1869,7 +1871,7 @@ export function WebConversation({
                   <div className="error-note" key={a.id} role="alert">
                     <p>This generation didn’t finish.</p>
                     <p>
-                      {str(a.payload.error) || "Please try this step again."}
+                      {generationError(a.payload.error)}
                     </p>
                     {a.payload.failedStage && a.kind !== "script" ? (
                       <button

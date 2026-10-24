@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ChevronDown, LoaderCircle, RotateCcw } from "lucide-react";
-import { generationLabel, mediaUrl, scriptReview } from "./generation";
+import { generationError, generationLabel, mediaUrl, scriptReview } from "./generation";
 import { progressCopy, type MediaProgressEvent } from "../media-contract";
 
 export function ProviderLine({
@@ -191,7 +191,7 @@ export function GenerationProgress({
               : event.kind === "clip"
                 ? "Clip"
                 : "Frame"}{" "}
-            · {progressCopy(event)}
+            · {event.status === "failed" ? generationError(event.error) : progressCopy(event)}
           </span>
           <ProviderLine source={event} />
         </div>
