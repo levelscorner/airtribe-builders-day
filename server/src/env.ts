@@ -78,4 +78,12 @@ export const env = {
   dataDir: resolve(__dirname, "../data"),
   mcpPollTimeoutMs: Number(process.env.MCP_POLL_TIMEOUT_MS || 180_000),
   mcpPollIntervalMs: Number(process.env.MCP_POLL_INTERVAL_MS || 3_000),
+
+  // --- Credits / Pine Labs packs ---
+  starterCredits: Number(process.env.STARTER_CREDITS || 1),
+  videoPackCredits: Number(process.env.VIDEO_PACK_CREDITS || 5),
+  videoPackPriceInr: Number(process.env.VIDEO_PACK_PRICE_INR || 99),
+  pineLabsMock: process.env.PINE_LABS_MOCK !== undefined ? truthy(process.env.PINE_LABS_MOCK) : true,
+  pineLabsPaymentLinkBase: process.env.PINE_LABS_PAYMENT_LINK_BASE?.trim() || "",
+  pineLabsMerchantId: process.env.PINE_LABS_MERCHANT_ID?.trim() || "",
 };

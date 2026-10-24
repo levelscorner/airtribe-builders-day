@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { v4 as uuidv4 } from "uuid";
 import { env } from "../env.js";
 import {
+  type ActivityEntry,
   type CreateJobBody,
   type Job,
   type StageName,
@@ -20,6 +21,7 @@ export function jobDir(jobId: string): string {
   const dir = join(env.dataDir, "jobs", jobId);
   mkdirSync(dir, { recursive: true });
   mkdirSync(join(dir, "images"), { recursive: true });
+  mkdirSync(join(dir, "videos"), { recursive: true });
   mkdirSync(join(dir, "audio"), { recursive: true });
   mkdirSync(join(dir, "captions"), { recursive: true });
   mkdirSync(join(dir, "clips"), { recursive: true });
@@ -31,6 +33,7 @@ export function createJob(body: CreateJobBody): Job {
   const now = new Date().toISOString();
   const job: Job = {
     id,
+    userId: body.userId,
     topic: body.topic.trim(),
     language: body.language,
     style: body.style,
@@ -41,6 +44,9 @@ export function createJob(body: CreateJobBody): Job {
     createdAt: now,
     updatedAt: now,
     retryCount: 0,
+    approvals: [],
+    activity: [],
+    publishUnlocked: false,
   };
   jobs.set(id, job);
   jobDir(id);
@@ -83,12 +89,31 @@ export function setStage(
   return job;
 }
 
+export function appendActivity(
+  id: string,
+  entry: Omit<ActivityEntry, "id" | "at"> & { at?: string },
+): ActivityEntry {
+  const job = getJob(id);
+  if (!job) throw new Error(`Job ${id} not found`);
+  const full: ActivityEntry = {
+    id: uuidv4(),
+    at: entry.at ?? new Date().toISOString(),
+    node: entry.node,
+    tool: entry.tool,
+    provider: entry.provider,
+    status: entry.status,
+    message: entry.message,
+  };
+  job.activity.push(full);
+  job.updatedAt = new Date().toISOString();
+  return full;
+}
+
 export function publicUrl(relativePath: string): string {
   const cleaned = relativePath.replace(/^\/+/, "");
   return `${env.publicBaseUrl}/${cleaned}`;
 }
 
-/** Map absolute file under dataDir to /assets/... URL path. */
 export function assetUrlFromPath(absPath: string): string {
   const marker = env.dataDir;
   const rel = absPath.startsWith(marker) ? absPath.slice(marker.length).replace(/^\/+/, "") : absPath;

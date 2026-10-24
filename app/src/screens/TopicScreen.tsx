@@ -5,20 +5,30 @@ import {
   TextInput,
   Pressable,
   StyleSheet,
-  ActivityIndicator,
   ScrollView,
 } from "react-native";
 import { colors } from "../theme";
-import { createJob, healthCheck, type Language, type Style } from "../api";
-import { API_BASE_URL } from "../config";
+import {
+  createJob,
+  healthCheck,
+  type Language,
+  type Style,
+  type UserPublic,
+  API_BASE_URL,
+} from "../api";
+import { CtaButton } from "../ui/CtaButton";
 
 type Props = {
+  user: UserPublic;
+  onCredits: (u: UserPublic) => void;
   onCreated: (jobId: string) => void;
+  onBuyPack: () => void;
+  onAdmin: () => void;
 };
 
-export function TopicScreen({ onCreated }: Props) {
-  const [topic, setTopic] = useState("Why the sky is blue");
-  const [language, setLanguage] = useState<Language>("en");
+export function TopicScreen({ user, onCredits, onCreated, onBuyPack, onAdmin }: Props) {
+  const [topic, setTopic] = useState("Why bees make honey");
+  const [language, setLanguage] = useState<Language>("hi");
   const [style, setStyle] = useState<Style>("watercolor-storybook");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,10 +50,20 @@ export function TopicScreen({ onCreated }: Props) {
       setError("Enter a short topic.");
       return;
     }
+    if (user.credits < 1) {
+      setError("No credits left — buy a video pack.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      const job = await createJob({ topic: trimmed, language, style });
+      const { job, user: next } = await createJob({
+        userId: user.id,
+        topic: trimmed,
+        language,
+        style,
+      });
+      onCredits(next);
       onCreated(job.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -54,17 +74,17 @@ export function TopicScreen({ onCreated }: Props) {
 
   return (
     <ScrollView contentContainerStyle={styles.wrap} keyboardShouldPersistTaps="handled">
-      <Text style={styles.brand}>Chotu mini</Text>
-      <Text style={styles.headline}>Tiny explainer videos for curious kids</Text>
-      <Text style={styles.sub}>
-        Type a topic. We write a 30–45s story, paint scenes, speak them, and stitch a vertical short.
+      <Text style={styles.brand}>Chotu Studio</Text>
+      <Text style={styles.hello}>
+        Namaste, {user.name} · {user.credits} credit{user.credits === 1 ? "" : "s"}
       </Text>
+      <Text style={styles.headline}>What should we explain today?</Text>
 
       <Text style={styles.label}>Topic</Text>
       <TextInput
         value={topic}
         onChangeText={setTopic}
-        placeholder="e.g. How bees make honey"
+        placeholder="e.g. How UPI works"
         placeholderTextColor={colors.inkSoft}
         style={styles.input}
         editable={!busy}
@@ -74,8 +94,8 @@ export function TopicScreen({ onCreated }: Props) {
       <View style={styles.row}>
         {(
           [
-            ["en", "English"],
             ["hi", "Hindi"],
+            ["en", "English"],
           ] as const
         ).map(([id, label]) => (
           <Pressable
@@ -108,22 +128,27 @@ export function TopicScreen({ onCreated }: Props) {
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Pressable
-        onPress={onMake}
-        disabled={busy || apiOk === false}
-        style={[styles.cta, (busy || apiOk === false) && styles.ctaDisabled]}
-      >
-        {busy ? (
-          <ActivityIndicator color={colors.cream} />
-        ) : (
-          <Text style={styles.ctaText}>Make my short</Text>
-        )}
+      <View style={{ marginTop: 32 }}>
+        <CtaButton
+          label="Draft script (1 credit)"
+          onPress={onMake}
+          busy={busy}
+          disabled={busy || apiOk === false || user.credits < 1}
+          testID="draft-script"
+        />
+      </View>
+
+      <View style={{ marginTop: 12 }}>
+        <CtaButton label="Buy video pack" onPress={onBuyPack} variant="secondary" testID="buy-pack" />
+      </View>
+      <Pressable onPress={onAdmin}>
+        <Text style={styles.metaLink}>Traction admin</Text>
       </Pressable>
 
       <Text style={styles.meta}>
         API: {API_BASE_URL}
         {" · "}
-        {apiOk === null ? "checking…" : apiOk ? (mockMode ? "mock mode" : "live keys") : "unreachable"}
+        {apiOk === null ? "checking…" : apiOk ? (mockMode ? "mock mode" : "live") : "unreachable"}
       </Text>
     </ScrollView>
   );
@@ -133,36 +158,17 @@ const styles = StyleSheet.create({
   wrap: {
     flexGrow: 1,
     paddingHorizontal: 24,
-    paddingTop: 56,
+    paddingTop: 48,
     paddingBottom: 48,
     backgroundColor: colors.paper,
   },
-  brand: {
-    fontFamily: "serif",
-    fontSize: 42,
-    fontWeight: "700",
-    color: colors.tealDeep,
-    letterSpacing: -0.5,
-  },
-  headline: {
-    marginTop: 12,
-    fontFamily: "serif",
-    fontSize: 26,
-    lineHeight: 32,
-    color: colors.ink,
-    maxWidth: 340,
-  },
-  sub: {
-    marginTop: 10,
-    fontSize: 16,
-    lineHeight: 24,
-    color: colors.inkSoft,
-    maxWidth: 380,
-  },
+  brand: { fontFamily: "serif", fontSize: 36, fontWeight: "700", color: colors.tealDeep },
+  hello: { marginTop: 8, fontSize: 14, color: colors.inkSoft },
+  headline: { marginTop: 14, fontFamily: "serif", fontSize: 24, color: colors.ink },
   label: {
-    marginTop: 28,
+    marginTop: 24,
     marginBottom: 8,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
     letterSpacing: 0.6,
     textTransform: "uppercase",
@@ -178,11 +184,7 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: colors.ink,
   },
-  row: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
+  row: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   chip: {
     borderWidth: 1.5,
     borderColor: colors.line,
@@ -191,41 +193,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
-  chipOn: {
-    backgroundColor: colors.teal,
-    borderColor: colors.teal,
-  },
-  chipText: {
-    color: colors.ink,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  chipTextOn: {
-    color: colors.cream,
-  },
+  chipOn: { backgroundColor: colors.teal, borderColor: colors.teal },
+  chipText: { color: colors.ink, fontSize: 15, fontWeight: "600" },
+  chipTextOn: { color: colors.cream },
   cta: {
-    marginTop: 36,
+    marginTop: 32,
     backgroundColor: colors.coral,
     borderRadius: 16,
     paddingVertical: 16,
     alignItems: "center",
   },
-  ctaDisabled: {
-    opacity: 0.55,
+  ctaDisabled: { opacity: 0.55 },
+  ctaText: { color: colors.cream, fontSize: 17, fontWeight: "700" },
+  secondary: {
+    marginTop: 12,
+    borderWidth: 1.5,
+    borderColor: colors.teal,
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+    backgroundColor: colors.cream,
   },
-  ctaText: {
-    color: colors.cream,
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  error: {
-    marginTop: 16,
-    color: colors.bad,
-    fontSize: 14,
-  },
-  meta: {
-    marginTop: 18,
-    fontSize: 12,
-    color: colors.inkSoft,
-  },
+  secondaryText: { color: colors.tealDeep, fontWeight: "700" },
+  error: { marginTop: 14, color: colors.bad, fontSize: 14 },
+  meta: { marginTop: 16, fontSize: 12, color: colors.inkSoft },
+  metaLink: { marginTop: 14, color: colors.teal, fontWeight: "600" },
 });
