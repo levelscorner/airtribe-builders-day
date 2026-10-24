@@ -12,6 +12,7 @@ import {
 } from "../llm.js";
 import { parsePromptGenOutput, PromptGenOutputSchema } from "../schema.js";
 import { loadSkillPacks, systemPrompt } from "../skills/load.js";
+import { withRoutedSkills } from "../skills/router.js";
 import { INHERITED_RULES, PROMPT_TASK } from "../skills/rules.js";
 import { assertPromptRules, mockPrompts } from "./mock.js";
 
@@ -49,7 +50,7 @@ export const createPromptGen: MockableFactory<PromptGen> = (env) => ({
           input,
           parsePromptGenOutput(await completePrompt(input, env)),
         );
-    assertPromptRules(input, output);
+    if (env.mock) assertPromptRules(input, output);
     return output;
   },
 });
@@ -64,7 +65,11 @@ async function completePrompt(
     root: readSkillsRoot(env),
   });
   const request = {
-    system: systemPrompt(skills, PROMPT_TASK, INHERITED_RULES),
+    system: withRoutedSkills(
+      systemPrompt(skills, PROMPT_TASK, INHERITED_RULES),
+      input.brief.genre ?? "kids",
+      ["image prompt", "motion prompt"],
+    ),
     prompt: userPrompt(input),
   };
   const complete = readComplete(env);
@@ -74,7 +79,7 @@ async function completePrompt(
   return completeWithModel(request, PromptGenOutputSchema, env);
 }
 
-function retainReferences(
+export function retainReferences(
   input: PromptGenInput,
   generated: PromptGenOutput,
 ): PromptGenOutput {

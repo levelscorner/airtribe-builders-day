@@ -316,7 +316,8 @@ CREATE TABLE payments (
   provider        text NOT NULL DEFAULT 'pine_labs',
   provider_ref    text,
   status          text NOT NULL DEFAULT 'pending' CHECK (status IN (
-                    'pending', 'paid', 'failed', 'mocked'
+                    'pending', 'paid', 'failed', 'mocked',
+                    'pending_verification', 'rejected'
                   )),
   created_at      timestamptz NOT NULL DEFAULT now(),
   updated_at      timestamptz NOT NULL DEFAULT now()
@@ -396,7 +397,9 @@ Source of truth: [`packages/shared/types.ts`](../packages/shared/types.ts). Summ
 
 Factories: `createX(env) → X`. When `process.env.MOCK === '1'`, return the mock implementation (deterministic, offline, no network).
 
-Claude (`server/src/llm/claude.ts`) is the live model for brief questions, free-text brief parsing, ScriptGen, PromptGen, and regenerate feedback. Chat still emits the same SSE `question`, `progress`, and `approval` messages, so Expo web and mobile stay on the existing stream. The script artefact payload remains `{ scenes, sceneIds }` so a script critic can attach `agentReview` beside those fields. `MOCK=1` keeps the sample generators and never calls Anthropic.
+Claude (`server/src/llm/claude.ts`) is the live model for brief questions, free-text brief parsing, ScriptGen, PromptGen, and regenerate feedback. Chat still emits the same SSE `question`, `progress`, and `approval` messages, so Expo web and mobile stay on the existing stream. The script artefact payload remains `{ scenes, sceneIds, scenePlan }` so a script critic can attach `agentReview` beside those fields. `scenePlan.scenes[]` uses `imagePrompt`, `motionPrompt`, `durationSec` (5 or 10), `vo`, and `voiceId`. Neptune executes images, clips, and stitching. `MOCK=1` keeps the sample generators and never calls Anthropic.
+
+A skill router (`server/src/creative/skills/router.ts`) picks vendored chotu-craft files by genre (kids edu-fun, ads, faceless) and stage (script, image prompt, motion prompt, voiceover) and injects them into the ScriptGen and PromptGen system prompts. JSON fences are stripped before the plan is parsed. The real `levelscorner/chotu-craft` repo was not readable here; `server/src/creative/skills/vendor/README.md` says so and holds placeholders.
 
 ---
 
@@ -415,7 +418,8 @@ Claude (`server/src/llm/claude.ts`) is the live model for brief questions, free-
 | `ANTHROPIC_API_KEY` | live Claude | Saturn | Messages API key for brief intake, ScriptGen, PromptGen, regenerate. Never log or commit the value |
 | `CLAUDE_MODEL` | no | Saturn | Default `claude-sonnet-4-5` |
 | `LLM_PROVIDER` | no | Saturn | `claude` or `mock`. Default is `claude` when `ANTHROPIC_API_KEY` is set and `MOCK` is not `1`; otherwise the existing mock samples |
-| `PINE_LABS_MERCHANT_ID` | live pay | Mars | Checkout |
+| `PAYMENTS_MODE` | no | Mars | `qr` (default, PhonePe UPI QR plus admin approval), `pinelabs`, or `mock`. Pine Labs stays dormant unless this is `pinelabs`. |
+| `PINE_LABS_MERCHANT_ID` | live pay | Mars | Checkout when `PAYMENTS_MODE=pinelabs` |
 | `PINE_LABS_API_KEY` | live pay | Mars | Checkout |
 | `PINE_LABS_WEBHOOK_SECRET` | live pay | Mars | Verify webhook |
 | `RENDER_API_KEY` | stretch | Mars | Trigger Render Workflow ffmpeg; if unset, local/Replit ffmpeg |

@@ -28,12 +28,14 @@ export {
   LanguageSchema,
   PromptGenOutputSchema,
   ResolutionSchema,
+  ScenePlanSchema,
   ScriptGenOutputSchema,
   ScriptSceneSchema,
   parseBrief,
   parseCastMember,
   parseGenre,
   parsePromptGenOutput,
+  parseScenePlan,
   parseScriptGenOutput,
 } from "./schema.js";
 export type { ArtStylePreset, GenreConfig, IntakeQuestion } from "./schema.js";
@@ -66,6 +68,7 @@ export {
 } from "./intake/notes.js";
 export { createScriptGen } from "./script/create.js";
 export { createPromptGen } from "./prompts/create.js";
+export { createScenePlan } from "./plan/create.js";
 export { buildGenreSample, writeGenreSamples } from "./sample.js";
 export type { GenreSample } from "./sample.js";
 export { loadSkillPacks } from "./skills/load.js";

@@ -15,6 +15,7 @@
     "app/**/*.tsx",
     "src/**/*.ts",
     "src/**/*.tsx",
+    "src/**/*.d.ts",
     "scripts/**/*.ts",
     "expo-env.d.ts"
   ]

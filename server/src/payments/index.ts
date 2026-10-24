@@ -6,6 +6,7 @@ export {
   createMockPayments,
   createPayments,
   createPinePayments,
+  paymentsModeFrom,
   pineLabsMockEnabled,
   settlePackPurchase,
   type CallbackResult,

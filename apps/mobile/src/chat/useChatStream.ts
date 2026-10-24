@@ -8,7 +8,7 @@ import type {
   Stage,
 } from "@chotu/shared";
 import { getStudioClient, StudioHttpError, StudioMockError } from "../api";
-import type { MediaProgressEvent } from "../media-contract";
+import type { MediaProgressEvent, RegenerateSceneRequest } from "../media-contract";
 import { parseMediaProgress } from "../media-contract";
 import { applyRejectNote } from "../reject-note";
 
@@ -321,8 +321,8 @@ export function useChatStream(chatId: string) {
   );
 
   const previewRegenerate = useCallback(
-    async (artefactId: string): Promise<RegeneratePreviewResponse> => {
-      const result = await client.regenerateArtefact(artefactId, 0);
+    async (artefactId: string, scope?: RegenerateSceneRequest): Promise<RegeneratePreviewResponse> => {
+      const result = await client.regenerateArtefact(artefactId, 0, scope?.feedback, scope);
       if (!("canAfford" in result)) {
         throw new StudioHttpError("preview", "Cost abhi nahi mili.");
       }
@@ -332,8 +332,8 @@ export function useChatStream(chatId: string) {
   );
 
   const confirmRegenerate = useCallback(
-    (artefactId: string, feedback?: string) =>
-      run(artefactId, async () => {
+    (artefactId: string, feedback?: string, scope?: RegenerateSceneRequest) =>
+      run(scope ? `${artefactId}:${scope.target}` : artefactId, async () => {
         const previous = artefactsRef.current[artefactId];
         const cost = previous?.creditCost ?? 0;
         const drafted = previous ? { ...previous, state: "generating" as const } : null;
@@ -342,7 +342,7 @@ export function useChatStream(chatId: string) {
         const debit = balanceNow !== null && cost > 0 ? cost : 0;
         if (debit > 0 && balanceNow !== null) writeCredits(balanceNow - debit);
         try {
-          const result = await client.regenerateArtefact(artefactId, 1, feedback);
+          const result = await client.regenerateArtefact(artefactId, 1, feedback ?? scope?.feedback, scope);
           if ("artefact" in result) {
             writeArtefact(result.artefact, false);
             writeCredits(result.balance);

@@ -8,8 +8,13 @@ import express from "express";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createPostgresEventLog } from "../admin/log.js";
+import { adminRouter, type PaymentReview } from "../admin/routes.js";
+import { dbFromSql } from "../admin/sql-db.js";
+import { createCredits } from "../credits/index.js";
 import { getDb, migrate } from "../db/client.js";
 import { resolveLlmProvider } from "../llm/provider.js";
+import { createPayments, paymentsModeFrom, paymentsRouter } from "../payments/index.js";
 import { createV1Router } from "../routes/v1.js";
 import { createSessionMiddleware, createSessionStore } from "../sessions.js";
 
@@ -43,8 +48,35 @@ export async function startServer(options?: { port?: number; listen?: boolean })
   app.use(express.json({ limit: "2mb" }));
   app.use(createSessionMiddleware(sessions));
 
+  const marsDb = dbFromSql(db);
+  const payMode = paymentsModeFrom({ PAYMENTS_MODE: process.env.PAYMENTS_MODE });
+  const payments = createPayments({
+    PAYMENTS_MODE: process.env.PAYMENTS_MODE,
+    mock: payMode === "pinelabs" && mock,
+    ledger: createCredits({ mock: false, db: marsDb }),
+    db: marsDb,
+    publicBaseUrl: (process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 8787}`).replace(/\/$/, ""),
+    PINE_LABS_MOCK: process.env.PINE_LABS_MOCK,
+    merchantId: process.env.PINE_LABS_MERCHANT_ID,
+    apiKey: process.env.PINE_LABS_API_KEY,
+    webhookSecret: process.env.PINE_LABS_WEBHOOK_SECRET,
+  });
+  const events = createPostgresEventLog(marsDb);
+  const review: PaymentReview | undefined =
+    payments.listPending && payments.approvePayment && payments.rejectPayment
+      ? {
+          listPending: () => payments.listPending!(),
+          approve: async (paymentId) => ({ creditsGranted: (await payments.approvePayment!(paymentId)).creditsGranted }),
+          reject: async (paymentId) => {
+            await payments.rejectPayment!(paymentId);
+          },
+        }
+      : undefined;
+  app.use(paymentsRouter(payments));
+  app.use(adminRouter(events, { mock, database: !db.memory }, review));
+
   app.get("/api/health", (_req, res) => {
-    res.json({ ok: true, mock, memory: db.memory, llm: resolveLlmProvider() });
+    res.json({ ok: true, mock, memory: db.memory, llm: resolveLlmProvider(), payments: payMode });
   });
 
   app.use("/v1", createV1Router({ db, mock }));
@@ -60,7 +92,13 @@ export async function startServer(options?: { port?: number; listen?: boolean })
   if (existsSync(expoWeb)) {
     app.use(express.static(expoWeb, { fallthrough: true }));
     app.get("*", (req, res, next) => {
-      if (req.path.startsWith("/v1") || req.path.startsWith("/api") || req.path.startsWith("/mock")) {
+      if (
+        req.path.startsWith("/v1") ||
+        req.path.startsWith("/api") ||
+        req.path.startsWith("/mock") ||
+        req.path.startsWith("/admin") ||
+        req.path.startsWith("/payments")
+      ) {
         next();
         return;
       }

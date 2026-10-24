@@ -1364,12 +1364,13 @@ function Canvas({
 }
 export function WebConversation({
   chatId,
-  videoId,
+  videoId: initialVideoId,
 }: {
   chatId: string;
-  videoId: string;
+  videoId?: string;
 }) {
   const chat = useWebChat(chatId);
+  const videoId = chat.videoId || initialVideoId || "";
   const [draft, setDraft] = useState(() => readLocal(`composer.${chatId}`, ""));
   const [files, setFiles] = useState<ReferenceFile[]>([]);
   const [references, setReferences] = useState<ReferenceFile[]>([]);

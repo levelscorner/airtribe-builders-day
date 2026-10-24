@@ -4,7 +4,7 @@ export function ChatScreen({
   videoId,
 }: {
   chatId: string;
-  videoId: string;
+  videoId?: string;
 }) {
   return <WebConversation key={chatId} chatId={chatId} videoId={videoId} />;
 }

@@ -15,6 +15,7 @@ export function useWebChat(chatId: string) {
   const [mediaProgress, setMediaProgress] = useState<
     Record<string, MediaProgressEvent>
   >({});
+  const [videoId, setVideoId] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [artefacts, setArtefacts] = useState<ArtefactSummary[]>([]);
   const [stage, setStage] = useState<Stage>("brief");
@@ -24,6 +25,7 @@ export function useWebChat(chatId: string) {
   const [loaded, setLoaded] = useState(false);
   const lock = useRef(false);
   const hydrate = useCallback((chat: GetChatResponse) => {
+    setVideoId(chat.videoId);
     setMessages(chat.messages);
     setArtefacts(chat.artefacts);
     setStage(chat.stage);
@@ -110,6 +112,7 @@ export function useWebChat(chatId: string) {
   return {
     client,
     runtime,
+    videoId,
     mediaProgress: Object.values(mediaProgress),
     messages,
     artefacts,

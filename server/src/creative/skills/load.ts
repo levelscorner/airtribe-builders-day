@@ -76,8 +76,12 @@ export function skillFiles(pack: SkillPack, genre?: Genre): string[] {
 }
 
 export function resolveCraftRoot(explicit?: string): string | null {
+  // An explicit root is the only place we look, so a missing mount stays empty.
+  if (explicit?.trim()) {
+    const root = resolve(explicit);
+    return existsSync(resolve(root, "skills")) ? root : null;
+  }
   const candidates = [
-    explicit,
     process.env.CHOTU_CRAFT_ROOT,
     resolve(process.cwd(), "vendor/chotu-craft"),
     resolve(process.cwd(), "server/vendor/chotu-craft"),

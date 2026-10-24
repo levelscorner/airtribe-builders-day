@@ -6,6 +6,7 @@ import type {
   ArtefactSummary,
   Brief,
   CastMember,
+  PlannedScene,
   ChatMessage,
   Genre,
   Language,
@@ -29,24 +30,18 @@ import {
   getPresetCast,
   nextQuestion,
   PromptGenOutputSchema,
+  ScenePlanSchema,
   ScriptGenOutputSchema,
+  createScenePlan,
   toQuestionMessage,
 } from "../creative/index.js";
 import type { IntakeAnswer } from "../creative/index.js";
-import {
-  claudeIntakeEnabled,
-  claudeOpeningBrief,
-  claudeParseFreeText,
-  claudeQuestion,
-} from "../llm/intake.js";
-import {
-  PROMPT_JSON_HINT,
-  SCRIPT_JSON_HINT,
-  creativeGenEnv,
-} from "../llm/wire.js";
+import { claudeIntakeEnabled, claudeOpeningBrief, claudeParseFreeText, claudeQuestion } from "../llm/intake.js";
+import { PROMPT_JSON_HINT, SCENE_PLAN_HINT, SCRIPT_JSON_HINT, creativeGenEnv } from "../llm/wire.js";
 import { artefactCreditCost, debitRegenerate } from "../credits/stub.js";
 import type { SqlClient } from "../db/client.js";
 import { createMediaPorts } from "../media/index.js";
+import { retainReferences } from "../creative/prompts/create.js";
 import { elementIdForAnchor } from "../media/cast/reference.js";
 import { resolveLlmProvider } from "../llm/provider.js";
 import { DEFAULT_CLAUDE_MODEL } from "../llm/claude.js";
@@ -73,6 +68,13 @@ const STAGE_ORDER: Stage[] = [
   "final",
   "done",
 ];
+
+function readScenePlan(payload: Record<string, unknown> | undefined): PlannedScene[] {
+  const plan = payload?.scenePlan;
+  if (!plan || typeof plan !== "object" || !("scenes" in plan)) return [];
+  const scenes = (plan as { scenes?: unknown }).scenes;
+  return Array.isArray(scenes) ? (scenes as PlannedScene[]) : [];
+}
 
 function now(): string {
   return new Date().toISOString();
@@ -560,6 +562,14 @@ async function beginScript(
     targetSeconds: video.targetSeconds,
   });
   const scenes = await store.replaceScenes(ctx.db, videoId, output.scenes);
+  const scenePlan = await createScenePlan(creativeGenEnv(ScenePlanSchema, SCENE_PLAN_HINT)).generate({
+    videoId,
+    brief: video.brief,
+    cast,
+    genre: video.genre,
+    language: video.language,
+    targetSeconds: video.targetSeconds,
+  });
   const review = await reviewScriptSafely(ctx, {
     genre: video.genre,
     brief: video.brief,
@@ -576,6 +586,7 @@ async function beginScript(
     payload: {
       scenes: output.scenes,
       sceneIds: scenes.map((s) => s.id),
+      scenePlan,
       agentReview: review,
       ...scriptProvider(),
     },
@@ -619,8 +630,9 @@ async function beginPrompts(
   const scenes = await store.listScenes(ctx.db, videoId);
   const members = await attachCast(ctx, videoId, video.brief.castIds ?? []);
   await progress(ctx, chatId, "prompts", "Image/video prompts…", "Prompts");
-  const gen = createPromptGen(
-    creativeGenEnv(PromptGenOutputSchema, PROMPT_JSON_HINT),
+  const gen = createPromptGen(creativeGenEnv(PromptGenOutputSchema, PROMPT_JSON_HINT));
+  const planned = readScenePlan(
+    (await store.listArtefacts(ctx.db, videoId)).find((item) => item.kind === "script")?.payload,
   );
   for (const scene of scenes) {
     if (
@@ -631,20 +643,28 @@ async function beginPrompts(
     )
       continue;
     const sceneCast = members.filter((m) => scene.castIds.includes(m.id));
-    const output = await gen.generate({
-      videoId,
-      scene,
-      brief: video.brief,
-      cast: sceneCast,
-      artStyle: video.artStyle,
+    const fromPlan = planned[scene.idx];
+    const output = fromPlan ? retainReferences({ videoId, scene, brief: video.brief, cast: sceneCast, artStyle: video.artStyle }, { imagePrompt: fromPlan.imagePrompt, videoPrompt: fromPlan.motionPrompt, elementIds: [] }) : await gen.generate({
+      videoId, scene, brief: video.brief, cast: sceneCast, artStyle: video.artStyle,
     });
+    const direction = fromPlan ? retainReferences({ videoId, scene, brief: video.brief, cast: sceneCast, artStyle: video.artStyle }, { imagePrompt: fromPlan.imagePrompt, videoPrompt: fromPlan.motionPrompt, elementIds: output.elementIds }) : output;
     const artefact = await store.insertArtefact(ctx.db, {
       videoId,
       sceneId: scene.id,
       kind: "prompt",
       state: review ? "awaiting_approval" : "approved",
       creditCost: artefactCreditCost("prompt"),
-      payload: { ...output, sceneIdx: scene.idx, title: scene.title },
+      payload: {
+        ...output,
+        imagePrompt: direction.imagePrompt,
+        videoPrompt: direction.videoPrompt,
+        motionPrompt: fromPlan?.motionPrompt ?? output.videoPrompt,
+        durationSec: fromPlan?.durationSec,
+        vo: fromPlan?.vo,
+        voiceId: fromPlan?.voiceId,
+        sceneIdx: scene.idx,
+        title: scene.title,
+      },
     });
     if (review)
       await approvalCard(

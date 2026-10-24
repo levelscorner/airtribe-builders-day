@@ -10,6 +10,7 @@ import type {
   Genre,
   PromptGenOutput,
   QuestionOption,
+  ScenePlan,
   ScriptGenOutput,
 } from "@chotu/shared";
 
@@ -142,6 +143,44 @@ export const PromptGenOutputSchema = z.object({
   elementIds: z.array(z.string()),
 });
 
+const VOICE_BANK_IDS = [
+  "warm_kid_female",
+  "playful_young_male",
+  "confident_presenter_female",
+  "deep_storyteller_male",
+] as const;
+
+export const PlannedSceneSchema = z
+  .object({
+    imagePrompt: z.string().min(1),
+    motionPrompt: z.string().min(1),
+    durationSec: z.union([z.literal(5), z.literal(10)]),
+    vo: z.string().min(1),
+    voiceId: z.string().min(1),
+  })
+  .superRefine((scene, ctx) => {
+    if (!(VOICE_BANK_IDS as readonly string[]).includes(scene.voiceId)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `voiceId must be one of ${VOICE_BANK_IDS.join(", ")}`,
+        path: ["voiceId"],
+      });
+    }
+    const words = scene.vo.trim().split(/\s+/).filter(Boolean).length;
+    const target = scene.durationSec * 2.5;
+    if (words < target * 0.5 || words > target * 1.6) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `vo should be about ${target} words for ${scene.durationSec}s, got ${words}`,
+        path: ["vo"],
+      });
+    }
+  });
+
+export const ScenePlanSchema = z.object({
+  scenes: z.array(PlannedSceneSchema).min(4).max(6),
+});
+
 export function parseGenre(input: unknown): Genre {
   return GenreSchema.parse(input);
 }
@@ -160,6 +199,10 @@ export function parseScriptGenOutput(input: unknown): ScriptGenOutput {
 
 export function parsePromptGenOutput(input: unknown): PromptGenOutput {
   return PromptGenOutputSchema.parse(input);
+}
+
+export function parseScenePlan(input: unknown): ScenePlan {
+  return ScenePlanSchema.parse(input);
 }
 
 export function parseQuestionOption(input: unknown): QuestionOption {

@@ -36,6 +36,10 @@ function writeSse(res: Response, frame: { id?: string; event: unknown }): void {
 export function createV1Router(deps: V1Deps): Router {
   const router = Router();
   const ctx: OrchestratorContext = createOrchestratorContext(deps.db, deps.mock);
+  router.param("id", (_req, res, next, id: string) => {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+    next();
+  });
 
   router.post("/users", async (req, res) => {
     try {
