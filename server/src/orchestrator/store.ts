@@ -50,6 +50,31 @@ export async function insertUser(
   };
 }
 
+/** Look up a demo profile by the email or phone stored on the user. */
+export async function findUserByContact(db: SqlClient, phoneOrEmail: string): Promise<User | null> {
+  const contact = phoneOrEmail.trim();
+  if (!contact) return null;
+  const result = await db.query<{
+    id: string;
+    display_name: string;
+    phone_or_email: string | null;
+    credit_balance: number;
+    created_at: Date | string;
+  }>(
+    "SELECT id, display_name, phone_or_email, credit_balance, created_at FROM users WHERE phone_or_email = $1",
+    [contact],
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    displayName: row.display_name,
+    phoneOrEmail: row.phone_or_email ?? undefined,
+    creditBalance: row.credit_balance,
+    createdAt: new Date(row.created_at).toISOString(),
+  };
+}
+
 export async function getUser(db: SqlClient, userId: string): Promise<User | null> {
   const result = await db.query<{
     id: string;
