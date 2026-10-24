@@ -43,7 +43,23 @@ function paymentIdFrom(req: Request): string {
   return query;
 }
 
-export function paymentsRouter(payments: PaymentsService): Router {
+export interface PaymentHooks {
+  onCreditsGranted?: (info: { userId?: string; paymentId: string; creditsGranted: number }) => Promise<void>;
+}
+
+async function noteGrant(
+  hooks: PaymentHooks | undefined,
+  info: { userId?: string; paymentId: string; creditsGranted: number },
+): Promise<void> {
+  if (!hooks?.onCreditsGranted || info.creditsGranted <= 0) return;
+  try {
+    await hooks.onCreditsGranted(info);
+  } catch (error) {
+    console.warn(`traction log failed: ${error instanceof Error ? error.message : error}`);
+  }
+}
+
+export function paymentsRouter(payments: PaymentsService, hooks?: PaymentHooks): Router {
   const router = Router();
 
   router.get("/v1/packs", async (_req, res) => {
@@ -63,6 +79,11 @@ export function paymentsRouter(payments: PaymentsService): Router {
     }
     try {
       const checkout = await payments.createCheckout({ userId, packId });
+      await noteGrant(hooks, {
+        userId,
+        paymentId: checkout.paymentId,
+        creditsGranted: checkout.creditsGranted ?? 0,
+      });
       res.status(201).json(checkout);
     } catch (error) {
       sendError(res, error);
@@ -82,6 +103,12 @@ export function paymentsRouter(payments: PaymentsService): Router {
         : undefined;
     try {
       const result = await payments.handleWebhook(rawBody, signature);
+      const payment = await payments.findPayment(result.paymentId);
+      await noteGrant(hooks, {
+        userId: payment?.user_id,
+        paymentId: result.paymentId,
+        creditsGranted: result.creditsGranted,
+      });
       res.json(result);
     } catch (error) {
       sendError(res, error);
@@ -140,6 +167,12 @@ ${action}
     }
     try {
       const result = await payments.mockPay(paymentId);
+      const payment = await payments.findPayment(paymentId);
+      await noteGrant(hooks, {
+        userId: payment?.user_id,
+        paymentId: result.paymentId,
+        creditsGranted: result.creditsGranted,
+      });
       if ((req.header("accept") ?? "").includes("application/json")) {
         res.json(result);
         return;
@@ -161,6 +194,12 @@ ${action}
     const paymentId = typeof req.query.payment_id === "string" ? req.query.payment_id : "";
     try {
       const result = await payments.confirmCallback(paymentId);
+      const payment = await payments.findPayment(result.paymentId);
+      await noteGrant(hooks, {
+        userId: payment?.user_id,
+        paymentId: result.paymentId,
+        creditsGranted: result.creditsGranted,
+      });
       const title =
         result.status === "paid" || result.status === "mocked" ? "Payment received" : "Payment pending";
       res.type("html").send(`<!doctype html>
