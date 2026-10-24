@@ -1777,6 +1777,23 @@ export async function regenerateArtefact(
     (typeof artefact.payload.rejectionNote === "string"
       ? artefact.payload.rejectionNote
       : undefined);
+  if (clipRetry && artefact.sceneId) {
+    const updated = await regenerateScene(ctx, {
+      videoId: artefact.videoId,
+      userId: input.userId,
+      sceneId: artefact.sceneId,
+      target: "clip",
+      feedback,
+    });
+    const after = await store.getUser(ctx.db, input.userId);
+    return {
+      artefactId: updated.id,
+      state: updated.state,
+      charged: updated.state === "failed" ? 0 : updated.creditCost,
+      balance: after?.creditBalance ?? user.creditBalance,
+      artefact: updated,
+    };
+  }
   if (
     typeof artefact.payload.failedStage === "string" &&
     artefact.kind !== "script"
@@ -2197,14 +2214,6 @@ export async function regenerateScene(
         regenerated: true,
       },
     });
-    if (clipRetry) {
-      await debitRegenerate(ctx.db, {
-        userId: input.userId,
-        videoId: input.videoId,
-        amount: clipChargeAfterAttempt(true),
-        ref: regenRef,
-      });
-    }
     publishMedia(video.chatId, {
       jobId: current.id,
       artefactId: current.id,
@@ -2218,6 +2227,14 @@ export async function regenerateScene(
     });
     if (input.target === "image") await rerunDownstreamClip(ctx, video, scene, updated);
     await reconcatIfPresent(ctx, input.videoId);
+    if (clipRetry) {
+      await debitRegenerate(ctx.db, {
+        userId: input.userId,
+        videoId: input.videoId,
+        amount: clipChargeAfterAttempt(true),
+        ref: regenRef,
+      });
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "regen_failed";
     const failedProvider = providerAfterFailure(

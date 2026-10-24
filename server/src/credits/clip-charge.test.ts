@@ -27,6 +27,7 @@ test("a failed clip is free and a later success is charged once", async () => {
     IMAGE_PROVIDER: process.env.IMAGE_PROVIDER,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     ARK_API_KEY: process.env.ARK_API_KEY,
+    OPENAI_API_BASE: process.env.OPENAI_API_BASE,
   };
   const user = await store.insertUser(db, { displayName: "Clip", phoneOrEmail: "clip-charge@example.com" });
   await grantSignupCredits(db, {
@@ -65,7 +66,9 @@ test("a failed clip is free and a later success is charged once", async () => {
 
   try {
     delete process.env.OPENAI_API_KEY;
-    delete process.env.ARK_API_KEY;
+    // A missing ARK key stays on the mock clip port and succeeds. A set key
+    // with a non-http still fails in seedanceFirstFrame before any network call.
+    process.env.ARK_API_KEY = "ark-test-key";
     process.env.CLIP_MOCK = "0";
     delete process.env.IMAGE_PROVIDER;
     const live = createOrchestratorContext(db, false);
@@ -113,6 +116,7 @@ test("a failed image retry is labelled with the provider that was called", async
     IMAGE_PROVIDER: process.env.IMAGE_PROVIDER,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     ARK_API_KEY: process.env.ARK_API_KEY,
+    OPENAI_API_BASE: process.env.OPENAI_API_BASE,
   };
   const user = await store.insertUser(db, { displayName: "Image", phoneOrEmail: "image-label@example.com" });
   await grantSignupCredits(db, {
@@ -149,7 +153,10 @@ test("a failed image retry is labelled with the provider that was called", async
     payload: { provider: "mock", error: "old" },
   });
   try {
-    delete process.env.OPENAI_API_KEY;
+    // A missing OpenAI key stays on the mock image port. Point the live call
+    // at a closed port so the failure is local and the row is labelled openai.
+    process.env.OPENAI_API_KEY = "sk-test-openai";
+    process.env.OPENAI_API_BASE = "http://127.0.0.1:9";
     delete process.env.ARK_API_KEY;
     delete process.env.IMAGE_PROVIDER;
     const live = createOrchestratorContext(db, false);
