@@ -512,6 +512,19 @@ async function storyboardCases(): Promise<void> {
   assert(clipAfter?.payload.feedback === "push in", "feedback lands on the clip");
   assert(imageAfter?.payload.feedback !== "push in", "image stays untouched when the target is the clip");
   assert(clipAfter?.state === "awaiting_approval", "clip returns to review");
+  for (let step = 0; step < 30; step += 1) {
+    await pump();
+    const snap = await api.getVideo(opened.videoId);
+    if (readFinal(snap.artefacts.find((item) => item.kind === "final"))) break;
+    for (const item of snap.artefacts) {
+      if ((item.kind === "image" || item.kind === "clip" || item.kind === "audio") && item.state === "awaiting_approval") {
+        await api.approveArtefact(item.id);
+      }
+    }
+  }
+  const stitched = await api.getVideo(opened.videoId);
+  const file = readFinal(stitched.artefacts.find((item) => item.kind === "final"));
+  assert(file?.url.startsWith("mock://") && file.downloadUrl.startsWith("mock://"), "approving the scenes opens the final download");
   stop();
 }
 

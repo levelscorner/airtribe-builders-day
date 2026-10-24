@@ -381,14 +381,15 @@ export function createMockStudio(options?: {
 
   async function maybeAdvance(chat: ChatRuntime): Promise<void> {
     const bundle = mustVideo(chat.videoId);
-    if (!stageSettled(bundle)) return;
-    const next = NEXT_STAGE[bundle.video.stage];
-    if (!next || next === bundle.video.stage) return;
-    if (next === "done") {
-      await complete(chat, bundle);
-      return;
+    while (stageSettled(bundle)) {
+      const next = NEXT_STAGE[bundle.video.stage];
+      if (!next || next === bundle.video.stage) return;
+      if (next === "done") {
+        await complete(chat, bundle);
+        return;
+      }
+      await beginStage(chat, bundle, next);
     }
-    await beginStage(chat, bundle, next);
   }
 
   async function complete(chat: ChatRuntime, bundle: VideoBundle): Promise<void> {
@@ -477,7 +478,6 @@ export function createMockStudio(options?: {
       const board = storyboardHost(bundle);
       if (board) emit(chat, { type: "artefact", artefact: { ...board, payload: { ...board.payload } } });
     }
-    if (stageSettled(bundle)) scheduleAdvance(chat);
     emitText(chat, "assistant", "Dekho. Theek lage to Approve, note ke saath Reject, ya Regenerate.");
   }
 
