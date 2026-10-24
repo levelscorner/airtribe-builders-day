@@ -20,6 +20,7 @@ import { resolveLlmProvider } from "../llm/provider.js";
 import { createMcpRouter } from "../mcp/http.js";
 import { warnIfMcpOpen } from "../mcp/auth.js";
 import { createVideoBrief, getJobStatus } from "../mcp/jobs.js";
+import { sheetsAreMock } from "../media/cast/sheet.js";
 import { mediaRoot } from "../media/files.js";
 import { createPayments, paymentsModeFrom, paymentsRouter } from "../payments/index.js";
 import { createV1Router } from "../routes/v1.js";
@@ -85,7 +86,11 @@ export async function startServer(options?: { port?: number; listen?: boolean })
   const health = () =>
     apiHealthBody({ mock, memory: db.memory, llm: resolveLlmProvider(), payments: payMode });
   app.get("/api/health", (_req, res) => {
-    res.json({ ...health(), creditsEnabled: creditsEnabled() });
+    res.json({
+      ...health(),
+      creditsEnabled: creditsEnabled(),
+      sheetsAreMock: sheetsAreMock({ ...process.env, ...(mock ? { MOCK: "1" } : {}) }),
+    });
   });
   warnIfMcpOpen(process.env);
   app.use(
