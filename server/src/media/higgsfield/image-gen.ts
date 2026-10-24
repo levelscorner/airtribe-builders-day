@@ -70,5 +70,5 @@ export interface ImageGenDeps {
 export function createImageGen(env: EnvLike = process.env, deps: ImageGenDeps = {}): ImageGenPort {
   const cast = deps.cast ?? createCastAdapter(env);
   if (moduleMock(env, "IMAGE_MOCK")) return new MockImageGen(env, cast);
-  return new LiveImageGen(cast, deps.higgsfield ?? createHiggsfieldClient(env));
+  return new LiveImageGen(env, cast, deps.higgsfield ?? createHiggsfieldClient(env));
 }

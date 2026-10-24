@@ -270,6 +270,7 @@ async function markStageFailed(
     payload: { generationFailed: true, error: message, failedStage: stage },
   });
   await approvalCard(ctx, chatId, stage, artefact, `Failed · ${stage}`);
+  await text(ctx, chatId, "assistant", `Visual preparation stopped: ${message}`);
   await progress(
     ctx,
     chatId,

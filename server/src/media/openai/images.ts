@@ -137,6 +137,20 @@ export function usableAnchorUrl(env: EnvLike, url: string | undefined): string |
   return undefined;
 }
 
+/**
+ * Anchors a remote provider can fetch. OpenAI reads data URLs and local stills
+ * itself; Seedream and Higgsfield only receive http(s).
+ */
+export function remoteHttpAnchors(env: EnvLike, urls: readonly string[]): string[] {
+  const kept: string[] = [];
+  for (const url of urls) {
+    const usable = usableAnchorUrl(env, url);
+    if (!usable || (!usable.startsWith("http://") && !usable.startsWith("https://"))) continue;
+    if (!kept.includes(usable)) kept.push(usable);
+  }
+  return kept;
+}
+
 async function postImage(
   env: EnvLike,
   fetchImpl: FetchLike,

@@ -8,6 +8,7 @@ import type { EnvLike } from "../flags.js";
 import { mediaRoot } from "../files.js";
 import { clipResolution, clipSeconds } from "../higgsfield/request.js";
 import { assertHttpUrl } from "../higgsfield/urls.js";
+import { remoteHttpAnchors } from "../openai/images.js";
 
 /** BytePlus ModelArk. International base checked against the create-task API. */
 export const ARK_API_BASE = "https://ark.ap-southeast.bytepluses.com/api/v3";
@@ -58,7 +59,7 @@ export function requirePrompt(resolved: ResolvedCastPrompt): string {
 
 export function buildSeedreamBody(input: ImageGenInput, resolved: ResolvedCastPrompt, env: EnvLike): Record<string, unknown> {
   const prompt = requirePrompt(resolved);
-  for (const url of resolved.anchorUrls) assertHttpUrl(url, "anchor url");
+  const anchors = remoteHttpAnchors(env, resolved.anchorUrls);
   const body: Record<string, unknown> = {
     model: seedreamModel(env),
     prompt,
@@ -66,7 +67,7 @@ export function buildSeedreamBody(input: ImageGenInput, resolved: ResolvedCastPr
     response_format: "url",
     watermark: false,
   };
-  if (resolved.anchorUrls.length > 0) body.image = resolved.anchorUrls;
+  if (anchors.length > 0) body.image = anchors;
   return body;
 }
 

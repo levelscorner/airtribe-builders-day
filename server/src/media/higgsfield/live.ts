@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { ClipGenInput, ClipGenOutput, ImageGenInput, ImageGenOutput } from "../../../../packages/shared/types.ts";
-import type { CastReferenceAdapter } from "../cast/reference.js";
+import type { CastReferenceAdapter, ResolvedCastPrompt } from "../cast/reference.js";
 import { PROVISIONAL_CREDITS } from "../credits.js";
+import type { EnvLike } from "../flags.js";
+import { remoteHttpAnchors } from "../openai/images.js";
 import { failedJob, JobStore, type MediaJob, type MediaJobStatus } from "../job.js";
 import type { ClipGenPort, ImageGenPort, SubmitOpts } from "../ports.js";
 import type { HfStatus, HiggsfieldClient } from "./client.js";
@@ -55,6 +57,7 @@ export class LiveImageGen implements ImageGenPort {
   private readonly inflight = new Map<string, Promise<MediaJob<ImageGenOutput>>>();
 
   constructor(
+    private readonly env: EnvLike,
     private readonly cast: CastReferenceAdapter,
     private readonly client: HiggsfieldClient,
   ) {}
@@ -77,9 +80,8 @@ export class LiveImageGen implements ImageGenPort {
 
   private async execute(input: ImageGenInput, idempotencyKey: string): Promise<MediaJob<ImageGenOutput>> {
     try {
-      const resolved = this.cast.resolvePrompt(input.prompt, input.elementIds ?? []);
+      const resolved = httpResolved(this.env, this.cast.resolvePrompt(input.prompt, input.elementIds ?? []));
       const submission = buildImageSubmission(input, resolved);
-      for (const url of resolved.anchorUrls) assertHttpUrl(url, "anchor url");
       const status = await this.client.generate(submission.endpoint, submission.body, idempotencyKey, "image");
       return this.store.insert(
         settle(status, idempotencyKey, PROVISIONAL_CREDITS.image, () => {
@@ -100,7 +102,7 @@ export class LiveClipGen implements ClipGenPort {
   private readonly inflight = new Map<string, Promise<MediaJob<ClipGenOutput>>>();
 
   constructor(
-    private readonly envClipResolution: string | undefined,
+    private readonly env: EnvLike,
     private readonly cast: CastReferenceAdapter,
     private readonly client: HiggsfieldClient,
   ) {}
@@ -123,10 +125,9 @@ export class LiveClipGen implements ClipGenPort {
 
   private async execute(input: ClipGenInput, idempotencyKey: string): Promise<MediaJob<ClipGenOutput>> {
     try {
-      const resolved = this.cast.resolvePrompt(input.videoPrompt, input.elementIds ?? []);
-      const submission = buildClipSubmission(input, resolved, { resolution: this.envClipResolution });
+      const resolved = httpResolved(this.env, this.cast.resolvePrompt(input.videoPrompt, input.elementIds ?? []));
+      const submission = buildClipSubmission(input, resolved, { resolution: this.env.CLIP_RESOLUTION });
       assertHttpUrl(input.imageUrl, "clip image url");
-      for (const url of resolved.anchorUrls) assertHttpUrl(url, "anchor url");
       const status = await this.client.generate(submission.endpoint, submission.body, idempotencyKey, "video");
       return this.store.insert(
         settle(status, idempotencyKey, PROVISIONAL_CREDITS.clip, () => {
@@ -139,4 +140,8 @@ export class LiveClipGen implements ClipGenPort {
       return this.store.insert(failedJob(idempotencyKey, error, "higgsfield"));
     }
   }
+}
+
+function httpResolved(env: EnvLike, resolved: ResolvedCastPrompt): ResolvedCastPrompt {
+  return { ...resolved, anchorUrls: remoteHttpAnchors(env, resolved.anchorUrls) };
 }
