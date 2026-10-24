@@ -7,7 +7,10 @@ import type {
   VoicePreset,
 } from "@chotu/shared";
 
-/** Open question in docs/13. Mock grants this many credits at signup. */
+/**
+ * Signup grant. Docs/13 still asks whether this is one free video.
+ * Pack sizes below are multiples of this number until Mars sets them.
+ */
 export const STARTER_CREDITS = 80;
 
 /** Shown on the card before Regenerate. Not a live price list. */
@@ -25,13 +28,35 @@ export const REGEN_COST: Record<ArtefactKind, number> = {
 };
 
 /**
- * Pack catalogue is Mars's. These two rows exist so the mock can answer
- * GET /v1/packs without inventing a checkout UI.
+ * Placeholder packs: 1, 3 and 10 videos.
+ * `amountInr` is 0 because CreditPack cannot say TBD. The screen prints TBD.
+ * Mars owns the real rupee price and the checkout API.
  */
-export const PACKS: CreditPack[] = [
-  { id: "pack_100", label: "100 credits", credits: 100, amountInr: 99 },
-  { id: "pack_300", label: "300 credits", credits: 300, amountInr: 249 },
+export const VIDEO_PACKS: ReadonlyArray<{ id: string; videos: number }> = [
+  { id: "pack_1", videos: 1 },
+  { id: "pack_3", videos: 3 },
+  { id: "pack_10", videos: 10 },
 ];
+
+export function packLabel(videos: number): string {
+  return videos === 1 ? "1 video" : `${videos} videos`;
+}
+
+export function creditsForVideos(videos: number): number {
+  return videos * STARTER_CREDITS;
+}
+
+/** 0 means the price is still TBD. A positive amount is a real rupee price from Mars. */
+export function packPriceLabel(amountInr: number): string {
+  return amountInr > 0 ? `₹${amountInr}` : "TBD";
+}
+
+export const PACKS: CreditPack[] = VIDEO_PACKS.map((pack) => ({
+  id: pack.id,
+  label: packLabel(pack.videos),
+  credits: creditsForVideos(pack.videos),
+  amountInr: 0,
+}));
 
 export const VOICES: VoicePreset[] = [
   {

@@ -8,6 +8,7 @@ import type {
   Stage,
 } from "@chotu/shared";
 import { getStudioClient, StudioHttpError, StudioMockError } from "../api";
+import { applyRejectNote } from "../reject-note";
 
 export type ChatLoadStatus = "loading" | "ready" | "error";
 
@@ -69,12 +70,14 @@ function projectMessage(message: ChatMessage, artefact: ArtefactSummary, force: 
   if (!force && previewVersion(message) === artefact.version && stateRank(message.state) > stateRank(legal)) {
     return message;
   }
-  return {
-    ...message,
-    preview: { ...artefact.payload },
-    regenerateCreditCost: artefact.creditCost,
-    state: legal,
-  };
+  return applyRejectNote(
+    {
+      ...message,
+      regenerateCreditCost: artefact.creditCost,
+      state: legal,
+    },
+    artefact.payload,
+  );
 }
 
 function mergeTranscript(server: ChatMessage[], local: ChatMessage[]): ChatMessage[] {
@@ -293,7 +296,7 @@ export function useChatStream(chatId: string) {
             ? {
                 ...previous,
                 state: "rejected" as const,
-                payload: { ...previous.payload, rejectionNote: note },
+                payload: { ...previous.payload, rejectNote: note },
               }
             : null;
         if (drafted) writeArtefact(drafted, false);
@@ -403,5 +406,6 @@ export function useChatStream(chatId: string) {
     confirmRegenerate,
     approveAll,
     reload,
+    refreshCredits,
   };
 }

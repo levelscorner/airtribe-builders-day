@@ -1,6 +1,6 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Composer } from "../chat/Composer";
 import { MessageList } from "../chat/MessageList";
@@ -15,6 +15,11 @@ export function ChatScreen({ chatId }: { chatId: string }) {
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboardInset();
   const stream = useChatStream(chatId);
+  useFocusEffect(
+    useCallback(() => {
+      void stream.refreshCredits();
+    }, [stream.refreshCredits]),
+  );
   const question = openQuestion(stream.messages);
   const showApproveAll =
     stream.status === "ready" && stream.stage !== "brief" && stream.stage !== "done" && stream.awaitingCount > 0;
@@ -45,8 +50,11 @@ export function ChatScreen({ chatId }: { chatId: string }) {
       onConfirmRegenerate: (artefactId: string) => {
         void stream.confirmRegenerate(artefactId);
       },
+      onNeedCredits: () => {
+        router.push(`/packs?from=${encodeURIComponent(`/chat/${chatId}`)}`);
+      },
     }),
-    [stream],
+    [stream, router],
   );
 
   function onSend(text: string) {
@@ -72,12 +80,18 @@ export function ChatScreen({ chatId }: { chatId: string }) {
             <Text style={styles.brand}>Chotu Studio</Text>
             <Text style={styles.sub}>Orchestrator chat</Text>
           </View>
-          <Text
-            accessibilityLabel={stream.credits === null ? "Credits loading" : `${stream.credits} credits`}
-            style={styles.credits}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={
+              stream.credits === null ? "Credits, open packs" : `${stream.credits} credits, open packs`
+            }
+            hitSlop={hitSlop}
+            onPress={() => router.push(`/packs?from=${encodeURIComponent(`/chat/${chatId}`)}`)}
+            style={styles.creditsBtn}
           >
-            {stream.credits === null ? "— credits" : `${stream.credits} credits`}
-          </Text>
+            <Text style={styles.credits}>{stream.credits === null ? "— credits" : `${stream.credits} credits`}</Text>
+            <Text style={styles.creditsHint}>Packs</Text>
+          </Pressable>
         </View>
         <ProgressStrip stage={stream.stage} />
         {showApproveAll ? (
@@ -107,6 +121,17 @@ export function ChatScreen({ chatId }: { chatId: string }) {
           <Text accessibilityRole="alert" style={styles.error}>
             {stream.error}
           </Text>
+        ) : null}
+        {stream.error && /credit/i.test(stream.error) ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Credits kam hain, packs dekho"
+            hitSlop={hitSlop}
+            onPress={() => router.push(`/packs?from=${encodeURIComponent(`/chat/${chatId}`)}`)}
+            style={styles.all}
+          >
+            <Text style={styles.allText}>Packs dekho</Text>
+          </Pressable>
         ) : null}
         {stream.status === "error" && !stream.missing ? (
           <Pressable
@@ -192,10 +217,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.inkSoft,
   },
+  creditsBtn: {
+    minHeight: layout.hit,
+    justifyContent: "center",
+    alignItems: "flex-end",
+    paddingHorizontal: 8,
+  },
   credits: {
     fontSize: 16,
     fontWeight: "700",
     color: colors.ink,
+  },
+  creditsHint: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.stripe,
   },
   all: {
     minHeight: layout.hit,
