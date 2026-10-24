@@ -1329,6 +1329,27 @@
   max-width: 100%;
   max-height: 350px;
 }
+.media-reviews {
+  display: grid;
+  gap: 18px;
+  margin: 16px 0;
+}
+.later-review h3 {
+  font-size: 15px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  text-transform: capitalize;
+}
+.later-review .script-actions {
+  margin-top: 12px;
+}
+.canvas-mobile-approve,
+.canvas-mobile-ready {
+  display: none;
+}
+.canvas-mobile-approve {
+  margin-top: 16px;
+}
 .idea-arriving {
   animation: idea-rise 0.55s var(--ease);
 }
@@ -1546,6 +1567,10 @@
   }
   .canvas-open .conversation {
     visibility: hidden;
+  }
+  .canvas-mobile-approve,
+  .canvas-mobile-ready {
+    display: block;
   }
   .canvas-heading {
     height: 62px;

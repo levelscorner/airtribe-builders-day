@@ -252,6 +252,10 @@ async function approvalCard(
         : "awaiting_approval",
     createdAt: now(),
   };
+  // Stage work is detached from the request, and the canvas reads artefacts
+  // rather than the approval card. Publish the artefact itself or the web
+  // client waits for the next chat poll to show frames and Approve.
+  await publishArtefact(chatId, artefact);
   return publishMessage(ctx, message);
 }
 
@@ -1548,7 +1552,9 @@ export async function handleAnswer(
     !answer.skip &&
     !answer.useDefaults;
   let result: { brief: Brief; error?: string };
-  if (answer.field === "__defaults" && answer.useDefaults) {
+  // The web control sends field "__defaults", which is not a question id.
+  // Fill the open question and the rest of the brief instead of rejecting it.
+  if (answer.field === "__defaults") {
     result = { brief: applyDefaults(defaultBrief) };
   } else if (freeText && claudeIntakeEnabled()) {
     try {

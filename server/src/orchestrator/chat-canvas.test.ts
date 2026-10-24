@@ -172,6 +172,25 @@ test("a stale script action cannot change the already approved web review", asyn
   assert.equal((await store.getVideoRow(db, chat.videoId))!.stage, "cast");
 });
 
+test("__defaults fills the open intake question instead of a stale-field error", async () => {
+  const owner = await user();
+  const chat = await startChat(ctx, {
+    userId: owner.id,
+    experience: "chat_canvas",
+    initialMessage: "bees",
+  });
+  assert.equal(chat.stage, "brief");
+  await handleAnswer(ctx, chat.chatId, { field: "__defaults", useDefaults: true });
+  const video = (await store.getVideoRow(db, chat.videoId))!;
+  assert.equal(video.stage, "script");
+  assert.equal(video.brief.genre ?? video.genre, "kids");
+  const messages = await store.listMessages(db, chat.chatId);
+  assert.equal(
+    messages.some((item) => item.kind === "text" && item.text.includes("Unknown question field")),
+    false,
+  );
+});
+
 test('one complete configuration summary is persisted before the script', async () => {
   const owner = await user();
   const chat = await startChat(ctx, { userId: owner.id, experience: 'chat_canvas', initialMessage: 'bees' });
