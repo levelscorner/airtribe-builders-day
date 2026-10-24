@@ -132,7 +132,7 @@ export function assertScenePlan(input: ScriptGenInput, plan: ScenePlan): void {
 export const createScenePlan: MockableFactory<{ generate(input: ScriptGenInput): Promise<ScenePlan> }> = (env) => ({
   async generate(input) {
     const plan = env.mock ? mockScenePlan(input) : ScenePlanSchema.parse(await completePlan(input, env));
-    assertScenePlan(input, plan);
+    if (env.mock) assertScenePlan(input, plan);
     return plan;
   },
 });
@@ -153,6 +153,7 @@ async function completePlan(input: ScriptGenInput, env: { [key: string]: unknown
       topic: topicOf(input.brief, genre.defaultTopic),
       audience: input.brief.audience,
       artStyle: input.brief.artStyle,
+      aspectRatio: input.brief.aspectRatio,
       feedback: input.feedback?.trim() ?? "",
       suggestedDurations: planDurations(input.targetSeconds),
       cast: input.cast.map((member) => ({

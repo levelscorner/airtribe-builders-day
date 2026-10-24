@@ -12,6 +12,12 @@ npm run mobile:export          # Expo web → apps/mobile/dist
 MOCK=1 npm start               # /v1 API + static Expo web (default PORT 8787)
 ```
 
+The web client has an independent conversation-first interface: a prompt and local reference attachments, one replacing configuration box, a single completed plan summary, script approval/revision, and a right-hand visual canvas. Native screens remain separate. `chat_canvas` is an opt-in experience in the existing `/v1` contract, so other clients retain their flow.
+
+Run browser flow checks with `npm --prefix apps/mobile run test:web` against the server above. `npm run test:orchestrator` covers script-first approvals, targeted revisions, refresh recovery, and configuration persistence. See [DESIGN.md](DESIGN.md) for the web design system.
+
+This preview uses sample generation and credits. Attachments remain in the current browser; the sample generator does not read them. Actual script/frame generation is awaiting the teammate-owned provider integration and must be verified after those changes are available.
+
 Legacy Chotu mini (`app/` → `/api/jobs`) is still available via a separate process:
 
 ```bash

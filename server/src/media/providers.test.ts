@@ -250,7 +250,7 @@ test("a blank IMAGE_PROVIDER calls gpt-image-2 even when an Ark key is set", asy
   assert.equal(JSON.stringify(body).includes("ark-test-key"), false);
 });
 
-test("MOCK=1 and missing keys stay on the mock ports", () => {
+test("explicit mock mode stays on sample ports; live mode requires credentials", () => {
   const mocked = createMediaPorts({ MOCK: "1", OPENAI_API_KEY: "sk-test-openai", ARK_API_KEY: "ark-test-key" });
   assert.equal(mocked.images.mode, "mock");
   assert.equal(mocked.clips.mode, "mock");

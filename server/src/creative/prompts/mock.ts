@@ -103,7 +103,7 @@ export function mockPrompts(input: PromptGenInput): PromptGenOutput {
   const genre = input.brief.genre ?? "kids";
   const ratio = input.brief.aspectRatio ?? "9:16";
   const traits = styleTraits(input);
-  const action = visualLine(input, visible);
+  const action = [visualLine(input, visible), input.feedback ? `Visual revision: ${stripBlockedNames(input.feedback)}` : ""].filter(Boolean).join(" ");
   const shared = [
     ...identities,
     ...tokens,

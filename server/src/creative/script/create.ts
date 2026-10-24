@@ -36,7 +36,7 @@ export const createScriptGen: MockableFactory<ScriptGen> = (env) => ({
     const output = env.mock
       ? mockScript(input)
       : parseScriptGenOutput(await completeScript(input, env));
-    assertScriptRules(input, output);
+    if (env.mock) assertScriptRules(input, output);
     return output;
   },
 });

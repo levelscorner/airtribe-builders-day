@@ -3,6 +3,14 @@
  * Enough for MOCK/demo; Mars can swap for Redis later.
  */
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import {
+  existsSync,
+  readFileSync,
+  mkdirSync,
+  writeFileSync,
+  renameSync,
+} from "node:fs";
+import { dirname } from "node:path";
 import type { NextFunction, Request, Response } from "express";
 
 export const SESSION_COOKIE = "chotu_sid";
@@ -13,6 +21,8 @@ export type BrowserSession = {
 };
 
 type SessionStore = Map<string, BrowserSession>;
+const saveStore = new WeakMap<SessionStore, () => void>();
+const sessionStore = new WeakMap<BrowserSession, SessionStore>();
 
 declare global {
   namespace Express {
@@ -69,12 +79,39 @@ function parseCookieHeader(header: string | undefined): Record<string, string> {
   return out;
 }
 
-export function createSessionStore(): SessionStore {
-  return new Map();
+export function createSessionStore(file?: string): SessionStore {
+  const store: SessionStore = new Map();
+  if (file && existsSync(file)) {
+    const sessions: unknown = JSON.parse(readFileSync(file, "utf8"));
+    if (!Array.isArray(sessions))
+      throw new Error("Local session store is unreadable");
+    for (const row of sessions)
+      if (
+        row &&
+        typeof row.id === "string" &&
+        (row.userId === null || typeof row.userId === "string")
+      ) {
+        store.set(row.id, row);
+        sessionStore.set(row, store);
+      }
+  }
+  if (file)
+    saveStore.set(store, () => {
+      mkdirSync(dirname(file), { recursive: true });
+      writeFileSync(`${file}.tmp`, JSON.stringify([...store.values()]), {
+        mode: 0o600,
+      });
+      renameSync(`${file}.tmp`, file);
+    });
+  return store;
 }
 
 export function createSessionMiddleware(store: SessionStore) {
-  return function sessionMiddleware(req: Request, res: Response, next: NextFunction): void {
+  return function sessionMiddleware(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): void {
     const cookies = parseCookieHeader(req.headers.cookie);
     const sessionId = unpack(cookies[SESSION_COOKIE]);
     let session = sessionId ? store.get(sessionId) : undefined;
@@ -82,6 +119,8 @@ export function createSessionMiddleware(store: SessionStore) {
       const id = randomUUID();
       session = { id, userId: null };
       store.set(id, session);
+      sessionStore.set(session, store);
+      saveStore.get(store)?.();
       writeSessionCookie(req, res, id);
     }
     req.browserSession = session;
@@ -89,7 +128,11 @@ export function createSessionMiddleware(store: SessionStore) {
   };
 }
 
-export function writeSessionCookie(req: Request, res: Response, sessionId: string): void {
+export function writeSessionCookie(
+  req: Request,
+  res: Response,
+  sessionId: string,
+): void {
   const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
   const parts = [
     `${SESSION_COOKIE}=${encodeURIComponent(pack(sessionId))}`,
@@ -107,6 +150,8 @@ export function bindSessionUser(req: Request, userId: string): void {
   const session = req.browserSession;
   if (!session) throw new Error("session_missing");
   session.userId = userId;
+  const store = sessionStore.get(session);
+  if (store) saveStore.get(store)?.();
 }
 
 export function requireSessionUser(req: Request, res: Response): string | null {

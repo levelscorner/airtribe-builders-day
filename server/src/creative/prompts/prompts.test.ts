@@ -137,3 +137,16 @@ test("prompt regenerate feedback reaches the mock and the model request", async 
   assert.match(prompt, /wider camera angle/);
   assert.match(prompt, /Apply this change|feedback/);
 });
+
+test("live composition keeps canonical narrator identity and disclosure even when the model omits them", async () => {
+  const [narrator] = getPresets(["preset_narrator"]);
+  assert.ok(narrator);
+  const output = await createPromptGen({ mock: false, complete: async () => ({ imagePrompt: "Watercolor light splitting inside a raindrop.", videoPrompt: "Slow push through a prism.", elementIds: ["invented-reference"] }) }).generate({
+    videoId: "test-narrator", brief: { genre: "faceless" }, cast: [narrator], scene: scene({ idx: 0, castIds: [narrator.id] }),
+  });
+  assert.match(output.imagePrompt, /Watercolor light/);
+  assert.ok(output.imagePrompt.includes(narrator.identityText));
+  assert.ok(output.videoPrompt.includes(narrator.identityText));
+  assert.ok(output.imagePrompt.includes("AI-generated scene."));
+  assert.deepEqual(output.elementIds, []);
+});

@@ -83,8 +83,9 @@ export function libraryLines(
   topic: string,
   product: string,
 ): string[] | undefined {
-  const key =
-    genre === "ad" ? `${genre}::${topic}::${product}` : `${genre}::${topic}`;
+  const matchedTopic = genre === "kids" && /bee|honey|शहद|मधुमक्ख/.test(topic) ? BEES
+    : genre === "faceless" && /monsoon|मानसून/.test(topic) ? MONSOON : topic;
+  const key = genre === "ad" ? `${genre}::${topic}::${product}` : `${genre}::${matchedTopic}`;
   return LINES[key]?.[language];
 }
 

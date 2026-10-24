@@ -1,3 +1,4 @@
+import "../runtime-env.js";
 /**
  * Replit / single-process start: migrate DB, serve /v1 API + SSE, static Expo web.
  * Mars owns polish; Saturn wires the demo path (docs/14 §5).
@@ -36,7 +37,7 @@ export async function startServer(options?: { port?: number; listen?: boolean })
   const db = await getDb();
   await migrate(db);
 
-  const sessions = createSessionStore();
+  const sessions = createSessionStore(mock ? undefined : join(root, "server/data/sessions.json"));
   const app = express();
   app.set("trust proxy", 1);
   app.use(
@@ -76,7 +77,7 @@ export async function startServer(options?: { port?: number; listen?: boolean })
   app.use(adminRouter(events, { mock, database: !db.memory }, review));
 
   app.get("/api/health", (_req, res) => {
-    res.json({ ok: true, mock, memory: db.memory, payments: payMode });
+    res.json({ ok: true, mock, memory: db.memory, llm: resolveLlmProvider(), payments: payMode });
   });
 
   app.use("/v1", createV1Router({ db, mock }));

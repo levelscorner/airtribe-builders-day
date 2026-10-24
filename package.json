@@ -26,6 +26,7 @@
     "test:media": "npm --prefix server run test:media",
     "db:migrate": "npm --prefix server run db:migrate",
     "test:db": "npm --prefix server run test:db",
-    "install:all": "npm --prefix server install && npm --prefix app install && npm --prefix apps/mobile install"
+    "install:all": "npm --prefix server install && npm --prefix app install && npm --prefix apps/mobile install",
+    "start:live": "MOCK=0 LLM_PROVIDER=claude npm --prefix server run start"
   }
 }

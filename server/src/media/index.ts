@@ -31,11 +31,14 @@ export function createMediaPorts(env: EnvLike = process.env, deps: MediaPortDeps
       ? (bytes: Uint8Array, contentType: string) => deps.higgsfield!.upload(bytes, contentType)
       : undefined);
   const cast = createCastAdapter(env, { uploadAnchor });
+  let images: ImageGenPort | undefined;
+  let clips: ClipGenPort | undefined;
+  let voice: VoiceGenPort | undefined;
   return {
     cast,
-    images: createStudioImageGen(env, { ...deps, cast }),
-    clips: createStudioClipGen(env, { ...deps, cast }),
-    voice: createVoiceGen(env, deps.voice),
+    get images() { return images ??= createStudioImageGen(env, { ...deps, cast }); },
+    get clips() { return clips ??= createStudioClipGen(env, { ...deps, cast }); },
+    get voice() { return voice ??= createVoiceGen(env, deps.voice); },
   };
 }
 

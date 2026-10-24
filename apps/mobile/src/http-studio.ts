@@ -23,6 +23,7 @@ import type {
   RejectArtefactResponse,
 } from "@chotu/shared";
 import { parseMediaProgress, type RegenerateSceneRequest, type StudioEvent } from "./media-contract";
+import type { StudioRuntime } from "./web/generation";
 import type { StudioClient } from "./studio-client";
 
 export class StudioHttpError extends Error {
@@ -82,7 +83,10 @@ export function createHttpStudio(baseUrl = ""): StudioClient {
     return readJson<T>(response);
   }
 
-  async function hydrateChat(chatId: string, onEvent: (event: StudioEvent) => void): Promise<void> {
+  async function hydrateChat(
+    chatId: string,
+    onEvent: (event: StudioEvent) => void,
+  ): Promise<void> {
     try {
       const chat = await api<GetChatResponse>(ApiPaths.chat(chatId));
       onEvent({ type: "stage", videoId: chat.videoId, stage: chat.stage });
@@ -102,6 +106,9 @@ export function createHttpStudio(baseUrl = ""): StudioClient {
   }
 
   return {
+    getRuntime() {
+      return api<StudioRuntime>("/api/health");
+    },
     createUser(body: CreateUserRequest) {
       return api<CreateUserResponse>(ApiPaths.users, {
         method: "POST",
@@ -131,11 +138,17 @@ export function createHttpStudio(baseUrl = ""): StudioClient {
     },
     subscribe(chatId: string, onEvent: (event: StudioEvent) => void) {
       if (typeof EventSource === "undefined") {
-        throw new StudioHttpError("sse", "EventSource unavailable in this runtime");
+        throw new StudioHttpError(
+          "sse",
+          "EventSource unavailable in this runtime",
+        );
       }
-      const source = new EventSource(joinUrl(baseUrl, ApiPaths.chatEvents(chatId)), {
-        withCredentials: true,
-      });
+      const source = new EventSource(
+        joinUrl(baseUrl, ApiPaths.chatEvents(chatId)),
+        {
+          withCredentials: true,
+        },
+      );
       let openedOnce = false;
       source.onopen = () => {
         // First open + every reconnect: pull authoritative chat state.
@@ -155,17 +168,24 @@ export function createHttpStudio(baseUrl = ""): StudioClient {
       };
       source.onerror = () => {
         if (source.readyState === EventSource.CLOSED) {
-          onEvent({ type: "error", code: "sse_closed", message: "Live updates ruk gayi." });
+          onEvent({
+            type: "error",
+            code: "sse_closed",
+            message: "Live updates ruk gayi.",
+          });
         }
         // CONNECTING: browser will reopen → onopen hydrates again.
       };
       return () => source.close();
     },
     approveArtefact(artefactId: string) {
-      return api<ApproveArtefactResponse>(ApiPaths.artefactApprove(artefactId), {
-        method: "POST",
-        body: "{}",
-      });
+      return api<ApproveArtefactResponse>(
+        ApiPaths.artefactApprove(artefactId),
+        {
+          method: "POST",
+          body: "{}",
+        },
+      );
     },
     rejectArtefact(artefactId: string, body: RejectArtefactRequest) {
       return api<RejectArtefactResponse>(ApiPaths.artefactReject(artefactId), {
@@ -189,10 +209,13 @@ export function createHttpStudio(baseUrl = ""): StudioClient {
       );
     },
     approveAllRemaining(videoId: string) {
-      return api<ApproveAllRemainingResponse>(ApiPaths.approveAllRemaining(videoId), {
-        method: "POST",
-        body: "{}",
-      });
+      return api<ApproveAllRemainingResponse>(
+        ApiPaths.approveAllRemaining(videoId),
+        {
+          method: "POST",
+          body: "{}",
+        },
+      );
     },
     listCast() {
       return api<ListCastResponse>(ApiPaths.cast);
@@ -207,7 +230,10 @@ export function createHttpStudio(baseUrl = ""): StudioClient {
       return api<ListPacksResponse>(ApiPaths.packs);
     },
     async checkout(_body: CheckoutRequest): Promise<CheckoutResponse> {
-      throw new StudioHttpError("not_implemented", "Packs checkout abhi Mars pe pending hai.");
+      throw new StudioHttpError(
+        "not_implemented",
+        "Packs checkout abhi Mars pe pending hai.",
+      );
     },
   };
 }

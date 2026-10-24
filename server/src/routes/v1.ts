@@ -56,6 +56,10 @@ function writeSse(res: Response, frame: { id?: string; event: unknown }): void {
 export function createV1Router(deps: V1Deps): Router {
   const router = Router();
   const ctx: OrchestratorContext = createOrchestratorContext(deps.db, deps.mock);
+  router.param("id", (_req, res, next, id: string) => {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) { res.status(400).json({ error: "invalid_id" }); return; }
+    next();
+  });
 
   router.post("/users", async (req, res) => {
     try {
@@ -78,7 +82,12 @@ export function createV1Router(deps: V1Deps): Router {
       const refreshed = (await store.getUser(deps.db, user.id))!;
       res.status(201).json(refreshed);
     } catch (error) {
-      res.status(500).json({ error: error instanceof Error ? error.message : "signup_failed" });
+      const message = error instanceof Error ? error.message : "";
+      if ((error as { code?: string })?.code === "23505" || /duplicate key/i.test(message)) {
+        res.status(409).json({ error: "This email is already used in the demo. Try a different email." });
+      } else {
+        res.status(500).json({ error: "Could not create your demo profile. Please try again." });
+      }
     }
   });
 
@@ -102,6 +111,7 @@ export function createV1Router(deps: V1Deps): Router {
         userId,
         title: body.title,
         initialMessage: body.initialMessage,
+        experience: body.experience === "chat_canvas" ? "chat_canvas" : undefined,
       });
       res.status(201).json(opened);
     } catch (error) {

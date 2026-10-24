@@ -166,6 +166,8 @@ export interface User {
 }
 
 export interface Brief {
+  /** Web's script-first, combined visual review. Omitted preserves the original flow. */
+  experience?: 'chat_canvas';
   /** Creator topic / subject line from chat intake. */
   topic?: string;
   genre?: Genre;
@@ -328,6 +330,7 @@ export type CreateUserResponse = User;
 export type GetMeResponse = User;
 
 export interface CreateChatRequest {
+  experience?: 'chat_canvas';
   title?: string;
   /** Optional seed topic; orchestrator still runs brief. */
   initialMessage?: string;

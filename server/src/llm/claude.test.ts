@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
 import { ANTHROPIC_MESSAGES_URL, ANTHROPIC_VERSION, completeClaudeJson, DEFAULT_CLAUDE_MODEL } from "./claude.js";
-import { claudeParseFreeText, claudeQuestion } from "./intake.js";
+import { claudeOpeningBrief, claudeParseFreeText, claudeQuestion } from "./intake.js";
 import { resolveLlmProvider } from "./provider.js";
 import { creativeGenEnv } from "./wire.js";
 
@@ -160,4 +160,13 @@ test("free-text Hindi and a generated question stay on the brief contract", asyn
     question.options?.map((option) => option.id),
     ["hi", "hinglish", "en"],
   );
+});
+
+test("opening intake cannot silently fill unspecified creator preferences", async () => {
+  const fallback = { genre: "kids" as const, topic: "bees" };
+  const fetchImpl: typeof fetch = async () => claudeMessage(JSON.stringify({ topic: "how bees make honey", genre: "kids", language: "en", targetSeconds: 45, aspectRatio: "9:16", artStyle: "bright-2d-cartoon", castIds: ["preset_mini"] }));
+  const brief = await claudeOpeningBrief("Explain bees", fallback, { fetchImpl, apiKey: SECRET });
+  assert.equal(brief.topic, "how bees make honey");
+  assert.equal(brief.genre, "kids");
+  for (const field of ["language", "targetSeconds", "aspectRatio", "artStyle", "castIds"]) assert.equal((brief as Record<string, unknown>)[field], undefined);
 });

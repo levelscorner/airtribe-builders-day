@@ -2,7 +2,11 @@ import type { Brief } from "@chotu/shared";
 import { z } from "zod";
 import { applyAnswer, type IntakeAnswer } from "../creative/intake/intake.js";
 import type { IntakeQuestion } from "../creative/schema.js";
-import { BriefSchema, IntakeQuestionSchema, parseBrief } from "../creative/schema.js";
+import {
+  BriefSchema,
+  IntakeQuestionSchema,
+  parseBrief,
+} from "../creative/schema.js";
 import { completeClaudeJson, type ClaudeJsonInput } from "./claude.js";
 import { resolveLlmProvider } from "./provider.js";
 
@@ -10,7 +14,9 @@ type ClaudeDeps = Pick<ClaudeJsonInput, "fetchImpl" | "apiKey" | "model">;
 
 const ValueSchema = z.object({ value: z.string().min(1) });
 
-export function claudeIntakeEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+export function claudeIntakeEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
   return resolveLlmProvider(env) === "claude";
 }
 
@@ -25,7 +31,9 @@ export async function claudeQuestion(
     system: [
       "Write one clarifying question for a short-video brief.",
       `The field must be "${fallback.field}".`,
-      optionIds.length > 0 ? `Option ids must be from: ${optionIds.join(", ")}.` : "No options.",
+      optionIds.length > 0
+        ? `Option ids must be from: ${optionIds.join(", ")}.`
+        : "No options.",
       "Ask about genre, language (Hindi, Hinglish, or English), length, resolution, audience, art style, or cast — whichever field this is.",
       "Keep the prompt short.",
     ].join(" "),
@@ -63,7 +71,11 @@ export async function claudeParseFreeText(
       "cast is a preset id or a name.",
       'Return {"value":"..."} only.',
     ].join(" "),
-    prompt: JSON.stringify({ field: answer.field, text: answer.freeText ?? "", brief }),
+    prompt: JSON.stringify({
+      field: answer.field,
+      text: answer.freeText ?? "",
+      brief,
+    }),
     schema: ValueSchema,
     schemaHint: '{"value":""}',
     ...deps,
@@ -75,7 +87,11 @@ export async function claudeParseFreeText(
 }
 
 /** Pull topic and any obvious brief fields out of the opening chat line. */
-export async function claudeOpeningBrief(text: string, fallback: Brief, deps?: ClaudeDeps): Promise<Brief> {
+export async function claudeOpeningBrief(
+  text: string,
+  fallback: Brief,
+  deps?: ClaudeDeps,
+): Promise<Brief> {
   const raw = await completeClaudeJson({
     system: [
       "Read a creator's opening line and fill a video brief.",
@@ -90,7 +106,10 @@ export async function claudeOpeningBrief(text: string, fallback: Brief, deps?: C
       '{"topic":"","genre":"kids|ad|faceless","language":"hi|hinglish|en","resolution":"720p|1080p","targetSeconds":45,"audience":"","artStyle":"","castIds":[]}',
     ...deps,
   });
-  return parseBrief({ ...fallback, ...defined(parseBrief(raw)) });
+  const inferred = defined(parseBrief(raw));
+  // Only explicit, recognizable choices can skip configuration questions.
+  // A model-suggested default is not evidence of the creator's preference.
+  return parseBrief({ ...fallback, topic: inferred.topic || fallback.topic });
 }
 
 function defined(brief: Brief): Brief {
@@ -100,7 +119,8 @@ function defined(brief: Brief): Brief {
   if (brief.language) next.language = brief.language;
   if (brief.aspectRatio) next.aspectRatio = brief.aspectRatio;
   if (brief.resolution) next.resolution = brief.resolution;
-  if (typeof brief.targetSeconds === "number") next.targetSeconds = brief.targetSeconds;
+  if (typeof brief.targetSeconds === "number")
+    next.targetSeconds = brief.targetSeconds;
   if (brief.audience) next.audience = brief.audience;
   if (brief.artStyle) next.artStyle = brief.artStyle;
   if (brief.artStyleTraits?.length) next.artStyleTraits = brief.artStyleTraits;

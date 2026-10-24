@@ -118,14 +118,22 @@ const LABEL_RULES: ReadonlyArray<{
   { provider: "render_workflow", providerOnly: true, label: "Render" },
 ];
 
-const STATUSES = new Set<MediaProgressStatus>(["queued", "generating", "done", "failed"]);
+const STATUSES = new Set<MediaProgressStatus>([
+  "queued",
+  "generating",
+  "done",
+  "failed",
+]);
 
 function record(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object") return undefined;
   return value as Record<string, unknown>;
 }
 
-function textField(row: Record<string, unknown> | undefined, key: string): string | undefined {
+function textField(
+  row: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
   const value = row?.[key];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
@@ -144,12 +152,19 @@ function fieldsAt(row: Record<string, unknown> | undefined): MediaFields {
   };
 }
 
-function knownProvider(value: string | undefined): KnownMediaProvider | undefined {
-  return value && PROVIDERS.has(value as KnownMediaProvider) ? (value as KnownMediaProvider) : undefined;
+function knownProvider(
+  value: string | undefined,
+): KnownMediaProvider | undefined {
+  return value && PROVIDERS.has(value as KnownMediaProvider)
+    ? (value as KnownMediaProvider)
+    : undefined;
 }
 
 /** Artefact field wins, then the same key on payload. */
-function preferField(top: string | undefined, nested: string | undefined): string | undefined {
+function preferField(
+  top: string | undefined,
+  nested: string | undefined,
+): string | undefined {
   return top ?? nested;
 }
 
@@ -167,7 +182,10 @@ export function readModel(source: unknown): string | undefined {
   return preferField(top.model, nested.model);
 }
 
-function matchLabel(provider: string | undefined, model: string | undefined): string | undefined {
+function matchLabel(
+  provider: string | undefined,
+  model: string | undefined,
+): string | undefined {
   for (const rule of LABEL_RULES) {
     if (rule.provider && rule.provider !== provider) continue;
     if (rule.providerOnly) {
@@ -225,20 +243,34 @@ export function providerChipLabel(source: unknown): string | undefined {
 export function progressCopy(event: MediaProgressEvent): string {
   if (event.status === "queued") return "Queued";
   if (event.status === "generating") {
-    return typeof event.percent === "number" ? `Generating ${Math.round(event.percent)}%` : "Generating";
+    return typeof event.percent === "number"
+      ? `Generating ${Math.round(event.percent)}%`
+      : "Generating";
   }
   if (event.status === "done") return "Done";
   return event.error?.trim() || "Failed";
 }
 
-export function parseMediaProgress(value: unknown): MediaProgressEvent | undefined {
+export function parseMediaProgress(
+  value: unknown,
+): MediaProgressEvent | undefined {
   const row = record(value);
   if (!row || row.type !== "media.progress") return undefined;
   if (typeof row.jobId !== "string" || !row.jobId.trim()) return undefined;
-  if (typeof row.artefactId !== "string" || !row.artefactId.trim()) return undefined;
-  if (row.kind !== "image" && row.kind !== "clip" && row.kind !== "voice") return undefined;
-  if (typeof row.status !== "string" || !STATUSES.has(row.status as MediaProgressStatus)) return undefined;
-  if (typeof row.provider !== "string" || !PROVIDERS.has(row.provider as KnownMediaProvider)) return undefined;
+  if (typeof row.artefactId !== "string" || !row.artefactId.trim())
+    return undefined;
+  if (row.kind !== "image" && row.kind !== "clip" && row.kind !== "voice")
+    return undefined;
+  if (
+    typeof row.status !== "string" ||
+    !STATUSES.has(row.status as MediaProgressStatus)
+  )
+    return undefined;
+  if (
+    typeof row.provider !== "string" ||
+    !PROVIDERS.has(row.provider as KnownMediaProvider)
+  )
+    return undefined;
   const percent =
     typeof row.percent === "number" && row.percent >= 0 && row.percent <= 100 ? Math.round(row.percent) : undefined;
   const model = typeof row.model === "string" && row.model.trim() ? row.model.trim() : undefined;

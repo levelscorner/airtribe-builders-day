@@ -1,5 +1,17 @@
-import type { Brief, Genre, PostMessageRequest, QuestionMessage } from "@chotu/shared";
-import { artStylePreset, GENRE_ORDER, getGenre, getPreset, getPresetCast, getPresets } from "../genres/load.js";
+import type {
+  Brief,
+  Genre,
+  PostMessageRequest,
+  QuestionMessage,
+} from "@chotu/shared";
+import {
+  artStylePreset,
+  GENRE_ORDER,
+  getGenre,
+  getPreset,
+  getPresetCast,
+  getPresets,
+} from "../genres/load.js";
 import type { ArtStylePreset, IntakeQuestion } from "../schema.js";
 import { parseBrief } from "../schema.js";
 import { stripBlockedNames, traitsFromArtText } from "./art-style.js";
@@ -7,8 +19,10 @@ import { markSkipped, noteValue, skippedFields, upsertNote } from "./notes.js";
 
 export type IntakeAnswer = NonNullable<PostMessageRequest["answer"]>;
 
-const KIDS_HINT = /\b(kid|kids|child|children|learn|school|quiz|tutor|bachch|bacch|padh|edu)\b/i;
-const AD_HINT = /\b(ad|ads|advert|sale|offer|shop|brand|product|dukaan|d2c|cta)\b/i;
+const KIDS_HINT =
+  /\b(kid|kids|child|children|learn|school|quiz|tutor|bachch|bacch|padh|edu)\b/i;
+const AD_HINT =
+  /\b(ad|ads|advert|sale|offer|shop|brand|product|dukaan|d2c|cta)\b/i;
 const FACELESS_HINT = /\b(faceless|facts?|story|motivat|documentary|narrat)\b/i;
 
 export function guessGenre(text: string): Genre | undefined {
@@ -23,7 +37,84 @@ export function briefFromMessage(text: string): Brief {
   const trimmed = text.trim().replace(/\s+/g, " ");
   return parseBrief({
     genre: trimmed ? guessGenre(trimmed) : undefined,
-    topic: trimmed || undefined,
+    topic: trimmed
+      ? trimmed
+          .replace(
+            /\b(?:create|make|produce|generate)\s+(?:me\s+)?(?:an?\s+)?/i,
+            "",
+          )
+          .replace(/\b\d{1,2}[ -]?(?:seconds?|secs?|s)\b/gi, "")
+          .replace(/\b(?:in\s+)?(?:English|Hindi|Hinglish)\b/gi, "")
+          .replace(
+            /\b(?:cartoon(?:ish)?|animated|watercolou?r|stick figure|vertical|landscape|square)(?:\s+format)?\b/gi,
+            "",
+          )
+          .replace(
+            /\b(?:an?\s+)?(?:video|explainer|short)\s+(?:about|explaining|on)\s+/i,
+            "",
+          )
+          .replace(/\bfor\s+(?:kids|children)(?:\s+aged?\s+[\d -]+)?/gi, "")
+          .replace(/\b(?:in\s+)?(?:9:16|16:9|1:1|720p|1080p)\b/gi, "")
+          .replace(/\s+/g, " ")
+          .replace(/\s+in\s*(?:format)?[.!]?$/i, "")
+          .trim() || trimmed
+      : undefined,
+    language: /hinglish/i.test(trimmed)
+      ? "hinglish"
+      : /hindi|[\u0900-\u097f]/i.test(trimmed)
+        ? "hi"
+        : /english/i.test(trimmed)
+          ? "en"
+          : undefined,
+    aspectRatio: /16:9|landscape|widescreen/i.test(trimmed)
+      ? "16:9"
+      : /1:1|square/i.test(trimmed)
+        ? "1:1"
+        : /9:16|vertical|reel|shorts/i.test(trimmed)
+          ? "9:16"
+          : undefined,
+    targetSeconds: (() => {
+      const n = Number(
+        trimmed.match(/\b(\d{1,2})[ -]?(?:seconds?|secs?|s)\b/i)?.[1],
+      );
+      return n >= 5 && n <= 60 ? n : undefined;
+    })(),
+    resolution: /1080p/i.test(trimmed)
+      ? "1080p"
+      : /720p/i.test(trimmed)
+        ? "720p"
+        : undefined,
+    artStyle: /anime/i.test(trimmed)
+      ? "anime illustration"
+      : /photorealis|realistic/i.test(trimmed)
+        ? "cinematic-realistic"
+        : /watercolou?r/i.test(trimmed)
+          ? "watercolor"
+          : /stick figures?/i.test(trimmed)
+            ? "stick figure"
+            : /3d/i.test(trimmed)
+              ? "soft-3d-toon"
+              : /cartoon/i.test(trimmed)
+                ? "bright-2d-cartoon"
+                : undefined,
+    audience: /kids|children/i.test(trimmed)
+      ? "Children"
+      : /adults?/i.test(trimmed)
+        ? "Adults"
+        : undefined,
+    castIds:
+      /no (?:on.screen )?characters|unseen narrator|narrator only|no people/i.test(
+        trimmed,
+      )
+        ? ["preset_narrator"]
+        : (() => {
+            const named = getPresetCast()
+              .filter((member) =>
+                new RegExp(`\\b${member.name}\\b`, "i").test(trimmed),
+              )
+              .map((member) => member.id);
+            return named.length ? named : undefined;
+          })(),
   });
 }
 
@@ -66,8 +157,16 @@ function castQuestion(genreId: Genre): IntakeQuestion {
   const members = getPresets(genre.defaultCastIds);
   const options = members.map((member) => ({
     id: member.id,
-    label: member.role === "narrator" ? `${member.name} (no one on screen)` : member.name,
+    label:
+      member.role === "narrator"
+        ? `${member.name} (no one on screen)`
+        : member.name,
   }));
+  if (!options.some((option) => option.id === "preset_narrator"))
+    options.push({
+      id: "preset_narrator",
+      label: "Narrator only — no character on screen",
+    });
   if (genreId === "kids" && members.length > 1) {
     options.unshift({
       id: members.map((member) => member.id).join(","),
@@ -89,7 +188,13 @@ function castQuestion(genreId: Genre): IntakeQuestion {
 
 function fixedQuestions(genreId: Genre): IntakeQuestion[] {
   const genre = getGenre(genreId);
-  const lengths = [...new Set([genre.minSeconds, genre.defaultTargetSeconds, genre.maxSeconds])];
+  const lengths = [
+    ...new Set([
+      genre.minSeconds,
+      genre.defaultTargetSeconds,
+      genre.maxSeconds,
+    ]),
+  ];
   return [
     {
       field: "resolution",
@@ -115,7 +220,10 @@ function fixedQuestions(genreId: Genre): IntakeQuestion[] {
     {
       field: "target_seconds",
       prompt: `How long should it be? ${genre.label} usually sits between ${genre.minSeconds} and ${genre.maxSeconds} seconds.`,
-      options: lengths.map((seconds) => ({ id: String(seconds), label: `${seconds} seconds` })),
+      options: lengths.map((seconds) => ({
+        id: String(seconds),
+        label: `${seconds} seconds`,
+      })),
       allowFreeText: true,
       allowSkip: true,
       allowDefaults: true,
@@ -141,8 +249,12 @@ function fixedQuestions(genreId: Genre): IntakeQuestion[] {
     },
     {
       field: "art_style",
-      prompt: "What art style? Pick a preset or describe the look in plain words. Skip artist and brand names.",
-      options: genre.artStylePresets.map((preset) => ({ id: preset.id, label: preset.label })),
+      prompt:
+        "What art style? Pick a preset or describe the look in plain words. Skip artist and brand names.",
+      options: genre.artStylePresets.map((preset) => ({
+        id: preset.id,
+        label: preset.label,
+      })),
       allowFreeText: true,
       allowSkip: true,
       allowDefaults: true,
@@ -193,17 +305,41 @@ export function questionsFor(brief: Brief): IntakeQuestion[] {
 }
 
 export function nextQuestion(brief: Brief): IntakeQuestion | null {
-  return questionsFor(brief).find((question) => !isAnswered(brief, question.field)) ?? null;
+  const questions = questionsFor(brief);
+  if (brief.experience === "chat_canvas") {
+    const order = [
+      "genre",
+      "topic",
+      "product",
+      "aspect_ratio",
+      "target_seconds",
+      "language",
+      "art_style",
+      "audience",
+      "cast_ids",
+      "resolution",
+    ];
+    questions.sort((a, b) => order.indexOf(a.field) - order.indexOf(b.field));
+  }
+  return (
+    questions.find((question) => !isAnswered(brief, question.field)) ?? null
+  );
 }
 
 function parseSeconds(raw: string): number | undefined {
-  const match = /^\s*(\d{1,3})(?:\s*(?:s|sec|secs|second|seconds))?\s*$/i.exec(raw);
+  const match = /^\s*(\d{1,3})(?:\s*(?:s|sec|secs|second|seconds))?\s*$/i.exec(
+    raw,
+  );
   if (!match?.[1]) return undefined;
   const value = Number(match[1]);
   return Number.isInteger(value) ? value : undefined;
 }
 
-function fillField(brief: Brief, field: string, raw: string): { brief: Brief; error?: string } {
+function fillField(
+  brief: Brief,
+  field: string,
+  raw: string,
+): { brief: Brief; error?: string } {
   const genre = brief.genre ? getGenre(brief.genre) : undefined;
   const useDefault = raw === "default";
 
@@ -221,43 +357,85 @@ function fillField(brief: Brief, field: string, raw: string): { brief: Brief; er
       return { brief: { ...brief, resolution: value } };
     }
     case "aspect_ratio": {
-      const value = useDefault ? (genre?.defaultAspectRatio ?? "9:16") : raw;
-      if (!/^\d{1,2}:\d{1,2}$/.test(value)) return { brief, error: "Use a ratio like 9:16." };
+      const value = useDefault
+        ? (genre?.defaultAspectRatio ?? "9:16")
+        : /vertical|reels?|shorts?/i.test(raw)
+          ? "9:16"
+          : /wide|landscape|youtube/i.test(raw)
+            ? "16:9"
+            : /square/i.test(raw)
+              ? "1:1"
+              : raw;
+      if (!/^\d{1,2}:\d{1,2}$/.test(value))
+        return { brief, error: "Use a ratio like 9:16." };
       return { brief: { ...brief, aspectRatio: value } };
     }
     case "target_seconds": {
-      const value = useDefault ? (genre?.defaultTargetSeconds ?? 45) : parseSeconds(raw);
+      const value = useDefault
+        ? (genre?.defaultTargetSeconds ?? 45)
+        : parseSeconds(raw);
       if (value === undefined || value < 5 || value > 60) {
-        return { brief, error: "Length must be a whole number of seconds, up to 60." };
+        return {
+          brief,
+          error: "Length must be a whole number of seconds, up to 60.",
+        };
       }
       return { brief: { ...brief, targetSeconds: value } };
     }
     case "language": {
-      const value = useDefault ? (genre?.defaultLanguage ?? "hinglish") : raw.trim().toLowerCase();
+      const word = raw.trim().toLowerCase();
+      const value = useDefault
+        ? (genre?.defaultLanguage ?? "hinglish")
+        : ({ hindi: "hi", english: "en" }[word] ?? word);
       if (value !== "hi" && value !== "hinglish" && value !== "en") {
         return { brief, error: "Language is Hindi, Hinglish, or English." };
       }
       return { brief: { ...brief, language: value } };
     }
     case "audience": {
-      const value = useDefault ? (genre?.defaultAudience ?? "a general audience") : raw.trim();
+      const value = useDefault
+        ? (genre?.defaultAudience ?? "a general audience")
+        : raw.trim();
       return { brief: { ...brief, audience: value.slice(0, 200) } };
     }
     case "art_style": {
       if (useDefault) {
         const id = genre?.defaultArtStyle ?? "bright-2d-cartoon";
         const preset = findArtPreset(id);
-        return { brief: { ...brief, artStyle: id, artStyleTraits: preset?.traits } };
+        return {
+          brief: { ...brief, artStyle: id, artStyleTraits: preset?.traits },
+        };
       }
       const preset = findArtPreset(raw);
-      if (preset) return { brief: { ...brief, artStyle: preset.id, artStyleTraits: preset.traits } };
+      if (preset)
+        return {
+          brief: {
+            ...brief,
+            artStyle: preset.id,
+            artStyleTraits: preset.traits,
+          },
+        };
       const parsed = traitsFromArtText(raw);
-      return { brief: { ...brief, artStyle: parsed.artStyle, artStyleTraits: parsed.artStyleTraits } };
+      return {
+        brief: {
+          ...brief,
+          artStyle: parsed.artStyle,
+          artStyleTraits: parsed.artStyleTraits,
+        },
+      };
     }
     case "cast_ids": {
-      if (useDefault) return { brief: { ...brief, castIds: genre?.defaultCastIds ?? [] } };
-      const byName = getPresetCast().find((member) => member.name.toLowerCase() === raw.toLowerCase());
-      const tokens = (byName ? [byName.id] : raw.split(",").map((token) => token.trim()).filter(Boolean));
+      if (useDefault)
+        return { brief: { ...brief, castIds: genre?.defaultCastIds ?? [] } };
+      const byName = getPresetCast().find(
+        (member) => member.name.toLowerCase() === raw.toLowerCase(),
+      );
+      const tokens = byName
+        ? [byName.id]
+        : raw
+            .split(",")
+            .map((token) => token.trim())
+            .filter(Boolean);
       if (tokens.length > 0 && tokens.every((id) => getPreset(id))) {
         return { brief: { ...brief, castIds: tokens } };
       }
@@ -270,29 +448,52 @@ function fillField(brief: Brief, field: string, raw: string): { brief: Brief; er
       };
     }
     case "topic": {
-      const value = useDefault ? (genre?.defaultTopic ?? "a short video") : raw.trim();
+      const value = useDefault
+        ? (genre?.defaultTopic ?? "a short video")
+        : raw.trim();
       return { brief: { ...brief, topic: value.slice(0, 200) } };
     }
     case "product": {
-      const source = useDefault ? (genre?.defaultProduct ?? "the product") : raw;
+      const source = useDefault
+        ? (genre?.defaultProduct ?? "the product")
+        : raw;
       const cleaned = stripBlockedNames(source);
-      const value = cleaned.length > 0 ? cleaned.slice(0, 200) : (genre?.defaultProduct ?? "the product");
-      return { brief: { ...brief, notes: upsertNote(brief.notes, "product", value) } };
+      const value =
+        cleaned.length > 0
+          ? cleaned.slice(0, 200)
+          : (genre?.defaultProduct ?? "the product");
+      return {
+        brief: { ...brief, notes: upsertNote(brief.notes, "product", value) },
+      };
     }
     default:
       return { brief, error: `Unknown question field ${field}.` };
   }
 }
 
-export function applyAnswer(brief: Brief, answer: IntakeAnswer): { brief: Brief; error?: string } {
+export function applyAnswer(
+  brief: Brief,
+  answer: IntakeAnswer,
+): { brief: Brief; error?: string } {
   if (!answer.field.trim()) return { brief, error: "Missing question field." };
   if (answer.skip || answer.useDefaults) {
     const filled = fillField(brief, answer.field, "default");
     if (filled.error || !answer.skip) return filled;
-    return { brief: { ...filled.brief, notes: markSkipped(filled.brief.notes, answer.field) } };
+    return {
+      brief: {
+        ...filled.brief,
+        notes: markSkipped(filled.brief.notes, answer.field),
+      },
+    };
   }
-  const raw = (answer.optionId ?? answer.freeText ?? "").trim();
-  if (!raw) return { brief, error: "Choose an option, type an answer, or skip." };
+  const raw = (
+    answer.optionIds?.join(",") ??
+    answer.optionId ??
+    answer.freeText ??
+    ""
+  ).trim();
+  if (!raw)
+    return { brief, error: "Choose an option, type an answer, or skip." };
   return fillField(brief, answer.field, raw);
 }
 

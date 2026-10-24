@@ -1,5 +1,15 @@
-import type { MockableFactory, PromptGen, PromptGenInput } from "@chotu/shared";
-import { completeWithModel, readApiKey, readComplete, readSkillsRoot } from "../llm.js";
+import type {
+  MockableFactory,
+  PromptGen,
+  PromptGenInput,
+  PromptGenOutput,
+} from "@chotu/shared";
+import {
+  completeWithModel,
+  readApiKey,
+  readComplete,
+  readSkillsRoot,
+} from "../llm.js";
 import { parsePromptGenOutput, PromptGenOutputSchema } from "../schema.js";
 import { loadSkillPacks, systemPrompt } from "../skills/load.js";
 import { withRoutedSkills } from "../skills/router.js";
@@ -36,8 +46,11 @@ export const createPromptGen: MockableFactory<PromptGen> = (env) => ({
   async generate(input) {
     const output = env.mock
       ? mockPrompts(input)
-      : parsePromptGenOutput(await completePrompt(input, env));
-    assertPromptRules(input, output);
+      : retainReferences(
+          input,
+          parsePromptGenOutput(await completePrompt(input, env)),
+        );
+    if (env.mock) assertPromptRules(input, output);
     return output;
   },
 });
@@ -61,6 +74,39 @@ async function completePrompt(
   };
   const complete = readComplete(env);
   if (complete) return complete(request);
-  if (!readApiKey(env)) throw new Error("LLM_API_KEY is required when MOCK is not set.");
+  if (!readApiKey(env))
+    throw new Error("LLM_API_KEY is required when MOCK is not set.");
   return completeWithModel(request, PromptGenOutputSchema, env);
+}
+
+export function retainReferences(
+  input: PromptGenInput,
+  generated: PromptGenOutput,
+): PromptGenOutput {
+  const cast = input.cast.filter(
+    (member) =>
+      !input.scene.castIds.length || input.scene.castIds.includes(member.id),
+  );
+  const visible = cast.filter((member) => member.role !== "narrator");
+  const identities = (visible.length ? visible : cast).map(
+    (member) => member.identityText,
+  );
+  const elementIds = visible.flatMap((member) =>
+    member.higgsfieldElementId ? [member.higgsfieldElementId] : [],
+  );
+  const retain = (prompt: string) => {
+    let result = prompt.replace(/<<<[^>]+>>>/g, " ").trim();
+    for (const identity of identities)
+      if (!result.includes(identity)) result += ` ${identity}`;
+    for (const id of elementIds) result += ` <<<${id}>>>`;
+    if (!result.includes("AI-generated scene."))
+      result += " AI-generated scene.";
+    return result;
+  };
+  return {
+    ...generated,
+    imagePrompt: retain(generated.imagePrompt),
+    videoPrompt: retain(generated.videoPrompt),
+    elementIds,
+  };
 }

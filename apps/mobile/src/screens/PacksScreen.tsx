@@ -191,40 +191,41 @@ export function PacksScreen() {
             </Pressable>
           </View>
         ) : null}
-        {pay.status === "entering" || pay.status === "pending" ? (
-          <View style={styles.stack}>
-            <Image
-              accessibilityLabel={`PhonePe QR for ${PHONEPE_PAYEE}`}
-              resizeMode="contain"
-              source={phonePeQr}
-              style={styles.qr}
-            />
-            <Text style={styles.meta}>Payee {PHONEPE_PAYEE}</Text>
-            <TextInput
-              accessibilityLabel="UPI reference"
-              autoCapitalize="characters"
-              editable={pay.status === "entering"}
-              onChangeText={(utr) => setPay({ status: "entering", packId: pay.packId, utr })}
-              placeholder="UPI ref / UTR"
-              style={styles.input}
-              value={pay.utr}
-            />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="I've paid"
-              accessibilityState={{ disabled: busy || pay.utr.trim().length < 8 }}
-              disabled={busy || pay.utr.trim().length < 8}
-              hitSlop={hitSlop}
-              onPress={() => {
-                void payFor(pay.packId, pay.utr);
-              }}
-              style={styles.primary}
-            >
-              <Text style={styles.primaryText}>I've paid</Text>
-            </Pressable>
-          </View>
-        ) : null}
-        <ScrollView style={styles.flex} contentContainerStyle={[styles.list, wide ? styles.listWide : null]}>
+        <ScrollView style={styles.flex} contentContainerStyle={styles.list}>
+          {pay.status === "entering" || pay.status === "pending" ? (
+            <View style={styles.stack}>
+              <Image
+                accessibilityLabel={`PhonePe QR for ${PHONEPE_PAYEE}`}
+                resizeMode="contain"
+                source={phonePeQr}
+                style={styles.qr}
+              />
+              <Text style={styles.meta}>Payee {PHONEPE_PAYEE}</Text>
+              <TextInput
+                accessibilityLabel="UPI reference"
+                autoCapitalize="characters"
+                editable={pay.status === "entering"}
+                onChangeText={(utr) => setPay({ status: "entering", packId: pay.packId, utr })}
+                placeholder="UPI ref / UTR"
+                style={styles.input}
+                value={pay.utr}
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="I've paid"
+                accessibilityState={{ disabled: busy || pay.utr.trim().length < 8 }}
+                disabled={busy || pay.utr.trim().length < 8}
+                hitSlop={hitSlop}
+                onPress={() => {
+                  void payFor(pay.packId, pay.utr);
+                }}
+                style={styles.primary}
+              >
+                <Text style={styles.primaryText}>I've paid</Text>
+              </Pressable>
+            </View>
+          ) : null}
+          <View style={[styles.cards, wide ? styles.listWide : null]}>
           {packs.map((pack) => {
             const price = packPriceLabel(pack.amountInr);
             const pendingThis = pay.status === "pending" && pay.packId === pack.id;
@@ -252,6 +253,7 @@ export function PacksScreen() {
               </View>
             );
           })}
+          </View>
         </ScrollView>
       </View>
     </View>
@@ -338,12 +340,7 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 8,
   },
-  qr: {
-    width: "100%",
-    maxWidth: 320,
-    aspectRatio: 1080 / 1860,
-    alignSelf: "center",
-  },
+  qr: { width: 320, height: 551, alignSelf: "center" },
   input: {
     minHeight: layout.hit,
     borderWidth: 1,
@@ -359,6 +356,9 @@ const styles = StyleSheet.create({
   list: {
     gap: 12,
     paddingBottom: 16,
+  },
+  cards: {
+    gap: 12,
   },
   card: {
     backgroundColor: colors.card,

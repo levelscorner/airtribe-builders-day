@@ -8,7 +8,7 @@ export interface HiggsfieldCredentials {
 
 /** `Authorization: Key ID:SECRET`. Accepts the docs/14 name and the split console vars. */
 export function higgsfieldCredentials(env: EnvLike): HiggsfieldCredentials {
-  const combined = env.HIGGSFIELD_API_KEY?.trim() || env.HF_CREDENTIALS?.trim() || env.HF_KEY?.trim() || "";
+  const combined = env.HIGGSFIELD_API_KEY?.trim() || env.HF_API_KEY?.trim() || env.HF_CREDENTIALS?.trim() || env.HF_KEY?.trim() || "";
   if (combined) {
     const splitAt = combined.indexOf(":");
     const id = splitAt > 0 ? combined.slice(0, splitAt).trim() : "";
