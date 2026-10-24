@@ -461,6 +461,27 @@ export interface PromptGen {
   generate(input: PromptGenInput): Promise<PromptGenOutput>;
 }
 
+/**
+ * One planned clip. Neptune renders the still, the Seedance clip, and the voice.
+ * This server only fills the plan.
+ */
+export interface PlannedScene {
+  /** gpt-image-2 portrait still. Repeats on-screen cast identity and dna. */
+  imagePrompt: string;
+  /** Seedance 2.5 image-to-video. No output ratio. */
+  motionPrompt: string;
+  /** 5 or 10 seconds. */
+  durationSec: 5 | 10;
+  /** Spoken line, about 2.5 words per second of durationSec. */
+  vo: string;
+  /** Studio voice bank id (voices.id). */
+  voiceId: string;
+}
+
+export interface ScenePlan {
+  scenes: PlannedScene[];
+}
+
 export interface ImageGenInput {
   prompt: string;
   elementIds: string[];

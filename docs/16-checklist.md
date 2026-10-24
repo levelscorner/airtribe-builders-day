@@ -34,7 +34,7 @@ MOCK=0 npm --prefix server start
 |---|---|---|---|
 | Higgsfield API key + live prices | Abhinav / Neptune | 🔒 | Needed for N3 live images/clips; MOCK path ships without it |
 | ElevenLabs API key + 4 confirmed library voice IDs | Abhinav / Neptune | 🔒 | Seed uses mock voice ids today |
-| chotu-craft repo access (private skills) | Abhinav / Venus | 🔒 | V2 blocked; ScriptGen/PromptGen mocks work |
+| chotu-craft repo access (private skills) | Abhinav / Venus | 🔒 | Repo 404 here. Placeholders are vendored; swap in the real SKILL.md files when the repo is readable |
 | `ANTHROPIC_API_KEY` + optional `CLAUDE_MODEL` for live brief, script, prompts | Abhinav / Saturn | 🔒 | Names only in `.env.example`. `MOCK=1` stays on samples |
 | Pine Labs merchant + webhook secret | Abhinav / Mars | 🔒 | Packs checkout stubbed |
 | AgenticOrg API key + agent id | Abhinav / Saturn | 🔒 | `AGENTICORG_API_KEY` and `AGENTICORG_AGENT_ID` only. Blank or `MOCK=1` uses the mock review |
@@ -87,7 +87,7 @@ MOCK=0 npm --prefix server start
 |---|---|---|---|
 | V0 | Genre configs (kids / ad / faceless) + schemas | ✅ | PR #11 |
 | V1 | ScriptGen interface + mock | ✅ | PR #13 |
-| V2 | Load chotu-craft skills server-side | 🔒 | Needs repo access |
+| V2 | Load chotu-craft skills server-side | 🟡 | Placeholder vendor + router. Real repo 404 from this environment |
 | V3 | Live ScriptGen via LLM + doubts | ⬜ | After V2 + keys |
 | V4 | PromptGen + mock (`<<<el_*>>>` tokens) | ✅ | PR #13 |
 | V5 | Live PromptGen with craft skills | 🔒 | After V2 |

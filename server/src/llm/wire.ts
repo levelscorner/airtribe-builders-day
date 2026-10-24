@@ -5,6 +5,9 @@ import { resolveLlmProvider } from "./provider.js";
 export const SCRIPT_JSON_HINT =
   '{"scenes":[{"idx":0,"title":"hook","narration":"Narrator: line\\nName: spoken line","durationMs":9000,"doubts":[],"castIds":["id"]}]}';
 
+export const SCENE_PLAN_HINT =
+  '{"scenes":[{"imagePrompt":"portrait, cast identity, AI-generated scene.","motionPrompt":"push-in, 5 seconds, no ratio, AI-generated scene.","durationSec":5,"vo":"about thirteen words here","voiceId":"playful_young_male"}]}';
+
 export const PROMPT_JSON_HINT =
   '{"imagePrompt":"traits. identityText. dna. <<<element_id>>> AI-generated scene.","videoPrompt":"camera, pace, duration, identityText, <<<element_id>>> AI-generated scene.","elementIds":["element_id"]}';
 

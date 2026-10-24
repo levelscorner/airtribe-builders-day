@@ -4,6 +4,7 @@ import { completeWithModel, readApiKey, readComplete, readSkillsRoot } from "../
 import { parseScriptGenOutput, ScriptGenOutputSchema } from "../schema.js";
 import { INHERITED_RULES, SCRIPT_TASK } from "../skills/rules.js";
 import { loadSkillPacks, systemPrompt } from "../skills/load.js";
+import { withRoutedSkills } from "../skills/router.js";
 import { getGenre } from "../genres/load.js";
 import { assertScriptRules, mockScript } from "./mock.js";
 
@@ -50,7 +51,10 @@ async function completeScript(
     root: readSkillsRoot(env),
   });
   const request = {
-    system: systemPrompt(skills, SCRIPT_TASK, INHERITED_RULES),
+    system: withRoutedSkills(systemPrompt(skills, SCRIPT_TASK, INHERITED_RULES), input.genre, [
+      "script",
+      "voiceover",
+    ]),
     prompt: userPrompt(input),
   };
   const complete = readComplete(env);

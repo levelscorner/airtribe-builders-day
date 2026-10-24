@@ -396,7 +396,9 @@ Source of truth: [`packages/shared/types.ts`](../packages/shared/types.ts). Summ
 
 Factories: `createX(env) → X`. When `process.env.MOCK === '1'`, return the mock implementation (deterministic, offline, no network).
 
-Claude (`server/src/llm/claude.ts`) is the live model for brief questions, free-text brief parsing, ScriptGen, PromptGen, and regenerate feedback. Chat still emits the same SSE `question`, `progress`, and `approval` messages, so Expo web and mobile stay on the existing stream. The script artefact payload remains `{ scenes, sceneIds }` so a script critic can attach `agentReview` beside those fields. `MOCK=1` keeps the sample generators and never calls Anthropic.
+Claude (`server/src/llm/claude.ts`) is the live model for brief questions, free-text brief parsing, ScriptGen, PromptGen, and regenerate feedback. Chat still emits the same SSE `question`, `progress`, and `approval` messages, so Expo web and mobile stay on the existing stream. The script artefact payload remains `{ scenes, sceneIds, scenePlan }` so a script critic can attach `agentReview` beside those fields. `scenePlan.scenes[]` uses `imagePrompt`, `motionPrompt`, `durationSec` (5 or 10), `vo`, and `voiceId`. Neptune executes images, clips, and stitching. `MOCK=1` keeps the sample generators and never calls Anthropic.
+
+A skill router (`server/src/creative/skills/router.ts`) picks vendored chotu-craft files by genre (kids edu-fun, ads, faceless) and stage (script, image prompt, motion prompt, voiceover) and injects them into the ScriptGen and PromptGen system prompts. JSON fences are stripped before the plan is parsed. The real `levelscorner/chotu-craft` repo was not readable here; `server/src/creative/skills/vendor/README.md` says so and holds placeholders.
 
 ---
 
