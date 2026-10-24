@@ -73,10 +73,13 @@ export async function assembleWithFfmpeg(input: RendererInput, options: Assemble
       throw new Error(`scene ${scene.idx} has no duration`);
     }
     const segment = join(dir, `scene-${scene.idx}.mp4`);
-    const audio = await materialize(scene.audioUrl, join(dir, `audio-${scene.idx}`), options.fetchImpl);
     const clip = scene.clipUrl
       ? await materialize(scene.clipUrl, join(dir, `clip-${scene.idx}`), options.fetchImpl)
       : undefined;
+    const nativeAudio = scene.nativeAudio === true && Boolean(clip);
+    const audio = nativeAudio
+      ? ""
+      : await materialize(scene.audioUrl, join(dir, `audio-${scene.idx}`), options.fetchImpl);
     const image = !clip && scene.imageUrl
       ? await materialize(scene.imageUrl, join(dir, `image-${scene.idx}`), options.fetchImpl)
       : undefined;
@@ -94,6 +97,7 @@ export async function assembleWithFfmpeg(input: RendererInput, options: Assemble
       captionFile: wrapped ? captionFile : undefined,
       font,
       fontSize,
+      nativeAudio,
     });
     segments.push(segment);
   }
@@ -137,7 +141,25 @@ async function encodeScene(input: {
   captionFile?: string;
   font: string;
   fontSize: number;
+  nativeAudio?: boolean;
 }): Promise<void> {
+  if (input.nativeAudio && input.clip) {
+    const drawtext = input.captionFile
+      ? `drawtext=fontfile='${filterPath(input.font)}':textfile='${filterPath(input.captionFile)}':text_shaping=1:fontsize=${input.fontSize}:fontcolor=white:borderw=4:bordercolor=black:line_spacing=8:x=(w-text_w)/2:y=h-text_h-96`
+      : undefined;
+    await run("ffmpeg", encodeSceneArgs({
+      clip: input.clip,
+      image: input.image,
+      audio: input.clip,
+      width: input.width,
+      height: input.height,
+      voSec: input.durationSec,
+      segment: input.segment,
+      drawtext,
+      nativeAudio: true,
+    }));
+    return;
+  }
   const voDur = await probeDuration(input.audio).catch(() => input.durationSec);
   const clipSec = input.clip ? await probeDuration(input.clip).catch(() => undefined) : undefined;
   const drawtext = input.captionFile

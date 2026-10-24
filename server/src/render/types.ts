@@ -7,6 +7,8 @@ export interface RenderSceneInput {
   audioUrl: string;
   narration: string;
   durationMs: number;
+  /** Clip already contains Seedance audio. Do not mix an ElevenLabs track. */
+  nativeAudio?: boolean;
 }
 
 export interface RendererInput {

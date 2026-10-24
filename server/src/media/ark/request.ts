@@ -20,7 +20,7 @@ export const ArkModels = {
 /**
  * Seedance 2.5 with a first_frame image must not send ratio or --ratio.
  * The output ratio follows the image (400 TaskTypeConstraint otherwise).
- * generate_audio stays false so ElevenLabs owns the voiceover.
+ * generate_audio stays false unless this scene is the ElevenLabs fallback.
  */
 export function seedanceModel(env: EnvLike): string {
   return env.SEEDANCE_MODEL?.trim() || ArkModels.seedance25;
@@ -131,6 +131,6 @@ export function buildSeedanceBody(input: ClipGenInput, prompt: string, env: EnvL
     content,
     duration: clipSeconds(input.durationMs),
     resolution: clipResolution(env.CLIP_RESOLUTION),
-    generate_audio: false,
+    generate_audio: input.generateAudio === true,
   };
 }

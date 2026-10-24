@@ -52,6 +52,7 @@ import { resolveLlmProvider } from "../llm/provider.js";
 import { DEFAULT_CLAUDE_MODEL } from "../llm/claude.js";
 import { mediaRoot } from "../media/files.js";
 import { mockAssets, publicUrl } from "../media/placeholders.js";
+import { needsSeedanceNativeAudio, seedanceFallbackNote } from "../media/voice-fallback.js";
 import {
   castAnchorIds,
   mapWithConcurrency,
@@ -895,6 +896,93 @@ async function beginClips(
   });
 }
 
+async function recoverSceneWithSeedanceAudio(
+  ctx: OrchestratorContext,
+  chatId: string,
+  video: { aspectRatio: string },
+  scene: Scene,
+  plan: PlannedScene | undefined,
+  prompt: ArtefactSummary | undefined,
+  artefacts: ArtefactSummary[],
+  media: ReturnType<typeof createMediaPorts>,
+  voiceArtefactId: string,
+  voiceId: string,
+  spoken: string,
+  reason: string,
+): Promise<boolean> {
+  try {
+    const image = [...artefacts].reverse().find((item) => item.kind === "image" && item.sceneId === scene.id);
+    const videoPrompt = String(plan?.motionPrompt ?? prompt?.payload.motionPrompt ?? prompt?.payload.videoPrompt ?? "gentle motion")
+      .replace(/<<<[^>]+>>>/g, " ")
+      .trim();
+    const generated = await media.clips.generate({
+      imageUrl: String(image?.payload.url ?? mockAssets.keyframe),
+      videoPrompt,
+      elementIds: [],
+      durationMs: scene.durationMs ?? 5000,
+      aspectRatio: video.aspectRatio,
+      generateAudio: true,
+    });
+    if (!generated.url?.trim()) return false;
+    const note = seedanceFallbackNote(scene.idx + 1);
+    console.error(note);
+    const clip = [...artefacts].reverse().find((item) => item.kind === "clip" && item.sceneId === scene.id);
+    const clipPayload = {
+      ...(clip?.payload ?? {}),
+      url: generated.url,
+      provider: generated.provider,
+      model: generated.model ?? "",
+      providerLabel: generated.providerLabel ?? "Seedance 2.5",
+      seedanceNativeAudio: true,
+      imageId: image?.id,
+    };
+    if (clip) {
+      await store.updateArtefact(ctx.db, clip.id, { state: "awaiting_approval", payload: clipPayload });
+    } else {
+      await store.insertArtefact(ctx.db, {
+        videoId: scene.videoId,
+        sceneId: scene.id,
+        kind: "clip",
+        state: "awaiting_approval",
+        creditCost: artefactCreditCost("clip"),
+        payload: clipPayload,
+      });
+    }
+    const artefact = await store.updateArtefact(ctx.db, voiceArtefactId, {
+      state: "awaiting_approval",
+      payload: {
+        voiceId,
+        narration: spoken,
+        seedanceNativeAudio: true,
+        provider: "ark",
+        model: generated.model ?? "dreamina-seedance-2-5-260628",
+        providerLabel: "Seedance 2.5",
+        error: reason,
+      },
+    });
+    publishMedia(chatId, {
+      jobId: voiceArtefactId,
+      artefactId: artefact.id,
+      kind: "voice",
+      status: "done",
+      percent: 100,
+      sceneId: scene.id,
+      provider: "ark",
+      model: generated.model ?? "",
+    });
+    await store.logEvent(ctx.db, {
+      videoId: scene.videoId,
+      kind: "agent_activity",
+      payload: { message: note, sceneId: scene.id, scene: scene.idx + 1, error: reason },
+    });
+    await approvalCard(ctx, chatId, "audio", artefact, `Voice · ${scene.title ?? scene.idx}`);
+    return true;
+  } catch (fallbackError) {
+    console.error("[media] seedance native audio fallback failed", fallbackError);
+    return false;
+  }
+}
+
 async function beginAudio(
   ctx: OrchestratorContext,
   chatId: string,
@@ -912,7 +1000,7 @@ async function beginAudio(
     const plan = planned[scene.idx];
     const prompt = prompts.find((item) => item.sceneId === scene.id);
     const speaker = cast.find((m) => scene.castIds.includes(m.id)) ?? cast[0];
-    const voiceId = plan?.voiceId || textOf(prompt?.payload.voiceId) || speaker?.voiceId || "deep_storyteller_male";
+    const voiceId = plan?.voiceId || textOf(prompt?.payload.voiceId) || speaker?.voiceId || "7b9mYhmnp0y2qSH1FnBL";
     const spoken = plan?.vo || textOf(prompt?.payload.vo) || scene.narration || "";
     const pending = await store.insertArtefact(ctx.db, {
       videoId,
@@ -938,6 +1026,9 @@ async function beginAudio(
         voiceId,
         language: video.language,
       });
+      if (needsSeedanceNativeAudio(generated.url)) {
+        throw new Error("ElevenLabs returned no audio");
+      }
       const provider = asMediaProvider(generated.provider);
       const model = generated.model ?? "";
       const providerLabel = generated.providerLabel ?? (provider === "elevenlabs" ? "ElevenLabs" : "Mock");
@@ -968,6 +1059,8 @@ async function beginAudio(
     } catch (error) {
       const message = error instanceof Error ? error.message : "voice failed";
       console.error(`[media] voice generate failed: ${message}`, error);
+      const recovered = await recoverSceneWithSeedanceAudio(ctx, chatId, video, scene, plan, prompt, artefacts, media, pending.id, voiceId, spoken, message);
+      if (recovered) return;
       await store.updateArtefact(ctx.db, pending.id, {
         state: "failed",
         payload: { voiceId, narration: spoken, error: message, provider: "mock" },
@@ -1042,14 +1135,18 @@ async function renderCut(ctx: OrchestratorContext, videoId: string): Promise<{ u
       const clip = latestOf(artefacts, scene.id, ["clip"]);
       const image = latestOf(artefacts, scene.id, ["image"]);
       const voice = latestOf(artefacts, scene.id, ["voice", "audio"]);
-      const durationMs = typeof voice?.payload.durationMs === "number" ? voice.payload.durationMs : scene.durationMs ?? 5000;
+      const nativeAudio = voice?.payload.seedanceNativeAudio === true || clip?.payload.seedanceNativeAudio === true;
+      const durationMs = nativeAudio
+        ? scene.durationMs ?? 5000
+        : typeof voice?.payload.durationMs === "number" ? voice.payload.durationMs : scene.durationMs ?? 5000;
       return {
         idx: scene.idx,
         clipUrl: textOf(clip?.payload.url) || undefined,
         imageUrl: textOf(image?.payload.url) || undefined,
-        audioUrl: textOf(voice?.payload.url),
+        audioUrl: nativeAudio ? "" : textOf(voice?.payload.url),
         narration: textOf(voice?.payload.narration) || scene.narration || "",
         durationMs,
+        nativeAudio,
       };
     }),
   };
@@ -1949,7 +2046,7 @@ export async function regenerateScene(
     } else {
       const cast = await store.listCastMembers(ctx.db, scene.castIds);
       const speaker = cast.find((member) => member.voiceId) ?? cast[0];
-      const voiceId = plan?.voiceId || textOf(current.payload.voiceId) || speaker?.voiceId || "deep_storyteller_male";
+      const voiceId = plan?.voiceId || textOf(current.payload.voiceId) || speaker?.voiceId || "7b9mYhmnp0y2qSH1FnBL";
       const text = feedback || plan?.vo || scene.narration || textOf(current.payload.narration);
       const generated = await media.voice.generate({
         text,

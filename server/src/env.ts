@@ -20,7 +20,7 @@ function transport(raw: string | undefined, fallback: McpTransportKind): McpTran
 
 const openaiKey = process.env.OPENAI_API_KEY?.trim() || "";
 const elevenKey = process.env.ELEVENLABS_API_KEY?.trim() || "";
-const elevenVoice = process.env.ELEVENLABS_VOICE_ID?.trim() || "";
+const elevenVoice = process.env.ELEVENLABS_VOICE_ID?.trim() || "7b9mYhmnp0y2qSH1FnBL";
 
 const explicitMock = process.env.MOCK_MODE !== undefined ? truthy(process.env.MOCK_MODE) : null;
 

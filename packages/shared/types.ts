@@ -561,6 +561,8 @@ export interface ClipGenInput {
   elementIds: string[];
   durationMs: number;
   aspectRatio: string;
+  /** Seedance native audio. Set only when ElevenLabs produced no line for the scene. */
+  generateAudio?: boolean;
 }
 
 export interface ClipGenOutput {

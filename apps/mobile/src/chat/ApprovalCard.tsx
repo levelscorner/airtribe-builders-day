@@ -151,7 +151,7 @@ function PreviewBody({
       </View>
     );
   }
-  if (message.artefactKind === "audio") {
+  if (message.artefactKind === "audio" || message.artefactKind === "voice") {
     return (
       <View style={styles.stack}>
         <Text style={styles.strong}>

@@ -17,6 +17,9 @@ export interface VoiceBankPreset {
 
 const MODEL = 'eleven_multilingual_v2';
 
+/** Hinglish funny male. Used when a scene has no voice, or the id is not in the bank. */
+export const DEFAULT_VOICE_ID = '7b9mYhmnp0y2qSH1FnBL';
+
 export const VOICE_PRESETS: readonly VoiceBankPreset[] = [
   { id: 'hi-male-young', voiceId: 'FZkK3TvQ0pjyDmT8fzIW', label: 'Hi-Male-Young', lang: 'hi', gender: 'male', age: 'young', role: 'character', model: MODEL },
   { id: 'hi-female-young', voiceId: 'RABOvaPec1ymXz02oDQi', label: 'Hi-Female-Young', lang: 'hi', gender: 'female', age: 'young', role: 'character', model: MODEL },
