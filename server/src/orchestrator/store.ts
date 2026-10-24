@@ -7,6 +7,7 @@ import type {
   ChatMessage,
   Genre,
   Language,
+  MediaProviderName,
   Resolution,
   Scene,
   Stage,
@@ -430,10 +431,36 @@ function mapArtefact(row: {
     creditCost: row.credit_cost,
     version: row.version,
     updatedAt: new Date(row.updated_at).toISOString(),
+    ...readMediaFields(payload),
+    ...readOutputFields(payload),
   };
   if (artefact.kind !== "script") return artefact;
   const agentReview = readAgentReview(payload.agentReview);
   return agentReview ? { ...artefact, agentReview } : artefact;
+}
+
+function readOutputFields(payload: Record<string, unknown>): Pick<ArtefactSummary, "url" | "downloadUrl"> {
+  const url = typeof payload.url === "string" && payload.url ? payload.url : undefined;
+  const downloadUrl = typeof payload.downloadUrl === "string" && payload.downloadUrl ? payload.downloadUrl : undefined;
+  return {
+    ...(url ? { url } : {}),
+    ...(downloadUrl ? { downloadUrl } : {}),
+  };
+}
+
+const MEDIA_PROVIDERS = new Set<MediaProviderName>(["openai", "ark", "higgsfield", "elevenlabs", "mock"]);
+
+function readMediaFields(payload: Record<string, unknown>): Pick<ArtefactSummary, "provider" | "model" | "providerLabel"> {
+  const provider = typeof payload.provider === "string" && MEDIA_PROVIDERS.has(payload.provider as MediaProviderName)
+    ? (payload.provider as MediaProviderName)
+    : undefined;
+  const model = typeof payload.model === "string" ? payload.model : undefined;
+  const providerLabel = typeof payload.providerLabel === "string" ? payload.providerLabel : undefined;
+  return {
+    ...(provider ? { provider } : {}),
+    ...(model ? { model } : {}),
+    ...(providerLabel ? { providerLabel } : {}),
+  };
 }
 
 export async function recordApproval(

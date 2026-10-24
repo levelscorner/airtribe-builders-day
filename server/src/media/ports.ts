@@ -26,6 +26,7 @@ export interface VoiceLineOutput {
   durationMs: number;
   provider: "elevenlabs" | "mock";
   model: string;
+  providerLabel?: string;
   alignment: CaptionAlignment;
 }
 

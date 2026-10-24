@@ -131,18 +131,21 @@ async function encodeScene(input: {
   font: string;
   fontSize: number;
 }): Promise<void> {
+  const voDur = await probeDuration(input.audio).catch(() => input.durationSec);
+  const duration = voDur.toFixed(3);
   const videoInput = input.clip
-    ? ["-stream_loop", "-1", "-i", input.clip]
+    ? ["-i", input.clip]
     : input.image
       ? ["-loop", "1", "-i", input.image]
       : ["-f", "lavfi", "-i", `color=c=0x1a1a2e:s=${input.width}x${input.height}:r=25`];
   const draw = input.captionFile
     ? `drawtext=fontfile='${filterPath(input.font)}':textfile='${filterPath(input.captionFile)}':text_shaping=1:fontsize=${input.fontSize}:fontcolor=white:borderw=4:bordercolor=black:line_spacing=8:x=(w-text_w)/2:y=h-text_h-96,`
     : "";
-  const duration = input.durationSec.toFixed(3);
+  // Freeze the last frame so a short Seedance clip lasts as long as the voiceover.
+  const tpad = input.clip ? `tpad=stop_mode=clone:stop_duration=${duration},` : "";
   const filter =
-    `[0:v]scale=${input.width}:${input.height}:force_original_aspect_ratio=increase,crop=${input.width}:${input.height},fps=25,${draw}format=yuv420p[v];` +
-    `[1:a]aformat=sample_fmts=fltp:channel_layouts=stereo,apad,atrim=0:${duration}[a]`;
+    `[0:v]scale=${input.width}:${input.height}:force_original_aspect_ratio=increase,crop=${input.width}:${input.height},fps=25,${tpad}${draw}format=yuv420p[v];` +
+    `[1:a]aformat=sample_fmts=fltp:channel_layouts=stereo,apad[a]`;
   await run("ffmpeg", [
     "-y",
     "-hide_banner",
@@ -205,6 +208,16 @@ export interface Probe {
   width: number;
   height: number;
   durationSec: number;
+}
+
+async function probeDuration(path: string): Promise<number> {
+  const duration = Number(await runCapture("ffprobe", [
+    "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path,
+  ]));
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw new Error(`ffprobe could not read duration ${path}`);
+  }
+  return duration;
 }
 
 export async function probeVideo(path: string): Promise<Probe> {

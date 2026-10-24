@@ -140,7 +140,7 @@ export async function migrate(client?: SqlClient): Promise<{ applied: string[]; 
       await db.query(sql);
     } catch (error) {
       // pg-mem may already have failed in 001 CHECK; skip widen-only migration.
-      if (id === "002_artefact_failed.sql" && db.memory) {
+      if ((id === "002_artefact_failed.sql" || id === "003_artefact_voice.sql") && db.memory) {
         await db.query("INSERT INTO schema_migrations (id) VALUES ($1)", [id]);
         applied.push(id);
         continue;

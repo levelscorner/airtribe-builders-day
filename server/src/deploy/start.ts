@@ -84,6 +84,8 @@ export async function startServer(options?: { port?: number; listen?: boolean })
   if (existsSync(publicDir)) {
     app.use(express.static(publicDir, { fallthrough: true }));
   }
+  const mediaDir = process.env.MEDIA_ROOT?.trim() || resolve(__dirname, "../../data/media");
+  app.use("/media", express.static(mediaDir, { fallthrough: true }));
 
   const expoWeb =
     process.env.EXPO_WEB_DIST?.trim() ||

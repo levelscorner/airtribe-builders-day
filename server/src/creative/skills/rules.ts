@@ -18,6 +18,7 @@ export const SCRIPT_TASK = [
   "castIds may only use ids from the cast you were given.",
   "Put real doubts in the doubts array. Use an empty array when a scene is clear.",
   "durationMs values are positive integers and sum to targetSeconds * 1000.",
+  "Keep each scene's narration to about 15 words when the scene is about 5 seconds, and about 30 words when it is about 10 seconds, so the voiceover fits the clip.",
   "If feedback is set on the request, revise the script to honour it.",
 ].join("\n");
 
