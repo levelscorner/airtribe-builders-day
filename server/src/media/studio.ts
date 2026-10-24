@@ -11,6 +11,7 @@ import type { ClipGenPort, ImageGenPort, SubmitOpts } from "./ports.js";
 import { createClipGen } from "./higgsfield/clip-gen.js";
 import { createImageGen } from "./higgsfield/image-gen.js";
 import { ArkClient, createArkClient, type ArkDeps, type FetchLike } from "./ark/client.js";
+import { prepareArkImages } from "./ark/references.js";
 import { buildSeedanceBody, buildSeedreamBody, requirePrompt, seedanceFirstFrame, seedanceModel, seedreamModel, SEEDREAM_PORTRAIT_SIZE } from "./ark/request.js";
 import { cropToNineSixteen, generateOpenAiImage, openaiImageModel } from "./openai/images.js";
 
@@ -47,6 +48,7 @@ class StudioImageGen implements ImageGenPort {
       const resolved = this.cast.resolvePrompt(input.prompt, input.elementIds ?? []);
       requirePrompt(resolved);
       const choice = imageProvider(this.env);
+      let openAiFailure: unknown;
       if (choice !== "ark" && this.env.OPENAI_API_KEY?.trim()) {
         try {
           const url = await this.openAiFrame(input, resolved);
@@ -65,12 +67,19 @@ class StudioImageGen implements ImageGenPort {
           });
         } catch (error) {
           if (error instanceof MediaInputError || !this.env.ARK_API_KEY?.trim()) throw error;
+          openAiFailure = error;
         }
       }
       if (!this.env.ARK_API_KEY?.trim()) {
         throw new Error(choice === "ark" ? "ARK_API_KEY is not set" : "OPENAI_API_KEY is not set");
       }
-      const url = await this.seedreamFrame(input, resolved);
+      let url: string;
+      try {
+        url = await this.seedreamFrame(input, resolved);
+      } catch (error) {
+        if (!openAiFailure) throw error;
+        throw new Error(`${providerFailure("openai", openAiFailure)}; ${providerFailure("ark", error)}`);
+      }
       return this.store.insert({
         jobId: newJobId(),
         provider: "ark",
@@ -108,7 +117,8 @@ class StudioImageGen implements ImageGenPort {
   /** Request the large 9:16 frame, then store the 720x1280 still the pipeline uses. */
   private async seedreamFrame(input: ImageGenInput, resolved: ResolvedCastPrompt): Promise<string> {
     const client = createArkClient(this.env, this.deps);
-    const body = buildSeedreamBody(input, resolved, this.env);
+    const images = await prepareArkImages(this.env, resolved.anchorUrls, this.fetchImpl());
+    const body = buildSeedreamBody(input, resolved, this.env, images);
     const remote = await client.image(body);
     if (body.size !== SEEDREAM_PORTRAIT_SIZE) return remote;
     const response = await this.fetchImpl()(remote);
@@ -189,6 +199,12 @@ class StudioClipGen implements ClipGenPort {
     if (job.status !== "completed" || !job.result) throw new Error(job.error || `clip job ${job.status}`);
     return job.result;
   }
+}
+
+function providerFailure(name: "openai" | "ark", error: unknown): string {
+  const text = (error instanceof Error ? error.message : "image failed").replace(/\s+/g, " ").trim();
+  const detail = text.replace(new RegExp(`^${name}\\s*:?\\s*`, "i"), "");
+  return `${name}: ${detail || text}`;
 }
 
 function mockImages(env: EnvLike, cast: CastReferenceAdapter): ImageGenPort {

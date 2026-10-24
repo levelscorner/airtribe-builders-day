@@ -83,7 +83,8 @@ function failText(payload: Record<string, unknown>, status: number): string {
   return `request failed (${status})`;
 }
 
-function localMediaImage(env: EnvLike, imageUrl: string): string | undefined {
+/** A PNG this process stored under /media/images, when the file is still on disk. */
+export function localMediaImage(env: EnvLike, imageUrl: string): string | undefined {
   let pathname = imageUrl;
   if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
     try {
