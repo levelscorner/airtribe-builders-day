@@ -1,5 +1,6 @@
 import type { CastMember } from "../../../../packages/shared/types.ts";
 import type { FetchLike } from "../ark/client.js";
+import { anchorUrlFromElementId, elementIdForAnchor } from "./reference.js";
 import type { EnvLike } from "../flags.js";
 import { moduleMock } from "../flags.js";
 import { generateCharacterSheet, usableAnchorUrl } from "../openai/images.js";
@@ -87,4 +88,59 @@ export async function sceneCastReference(
   const missing = identities.filter((text) => !prompt.includes(text));
   const next = missing.length > 0 ? `${missing.join("\n")}\n${prompt}`.trim() : prompt.trim();
   return { prompt: next, elementIds };
+}
+
+export interface CastImageSource {
+  kind: "sheet" | "anchor";
+  castId: string;
+  url: string;
+  state: string;
+}
+
+/** The approved sheet or anchor wins. Otherwise the latest image that is not failed. */
+export function preferredCastImage(member: CastMember, sources: readonly CastImageSource[]): CastMember {
+  const pick = (kind: "sheet" | "anchor"): string | undefined => {
+    const rows = sources.filter((row) => row.kind === kind && row.castId === member.id && row.url.trim() && row.state !== "failed");
+    return (rows.find((row) => row.state === "approved") ?? rows.at(-1))?.url;
+  };
+  return {
+    ...member,
+    sheetUrl: pick("sheet") ?? member.sheetUrl,
+    anchorUrl: pick("anchor") ?? member.anchorUrl,
+  };
+}
+
+/**
+ * Scene edits must receive the sheet as well as the face anchor.
+ * `references` is the kinds that were actually attached, sheet first.
+ */
+export function includeCastReferences(
+  elementIds: readonly string[],
+  members: readonly Pick<CastMember, "role" | "sheetUrl" | "anchorUrl">[],
+): { elementIds: string[]; references: Array<"sheet" | "anchor"> } {
+  const visible = members.filter((member) => member.role !== "narrator");
+  const sheetUrls = visible.map((member) => member.sheetUrl?.trim() ?? "").filter(Boolean);
+  const anchorUrls = visible.map((member) => member.anchorUrl?.trim() ?? "").filter(Boolean);
+  const sheets: string[] = [];
+  const anchors: string[] = [];
+  const rest: string[] = [];
+  const place = (id: string) => {
+    const url = anchorUrlFromElementId(id) ?? id;
+    if (sheetUrls.includes(url)) {
+      if (!sheets.includes(id)) sheets.push(id);
+      return;
+    }
+    if (anchorUrls.includes(url)) {
+      if (!anchors.includes(id)) anchors.push(id);
+      return;
+    }
+    if (!rest.includes(id)) rest.push(id);
+  };
+  for (const id of elementIds) place(id);
+  for (const url of sheetUrls) place(elementIdForAnchor(url));
+  for (const url of anchorUrls) place(elementIdForAnchor(url));
+  const references: Array<"sheet" | "anchor"> = [];
+  if (sheets.length > 0) references.push("sheet");
+  if (anchors.length > 0) references.push("anchor");
+  return { elementIds: [...sheets, ...anchors, ...rest], references };
 }

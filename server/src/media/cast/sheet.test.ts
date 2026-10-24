@@ -7,7 +7,7 @@ import sharp from "sharp";
 import type { CastMember } from "../../../../packages/shared/types.ts";
 import type { FetchLike } from "../ark/client.js";
 import { createStudioImageGen } from "../studio.js";
-import { sceneCastReference } from "./sheet.js";
+import { includeCastReferences, preferredCastImage, sceneCastReference } from "./sheet.js";
 
 function member(id: string, identityText: string, role: CastMember["role"] = "hero"): CastMember {
   return {
@@ -115,6 +115,28 @@ test("a scene image edits with every cast sheet and the next scene reuses them",
   assert.equal(savedAgain, false);
   assert.equal(calls.length, before);
   assert.deepEqual(second.elementIds, first.elementIds);
+});
+
+test("an approved sheet is sent even when the prompt only has the anchor", () => {
+  const asha = member("asha", "Asha wears a red cap");
+  asha.sheetUrl = "http://studio.test/old-sheet.png";
+  asha.anchorUrl = "http://studio.test/old-anchor.png";
+  const prepared = preferredCastImage(asha, [
+    { kind: "sheet", castId: "asha", url: "http://studio.test/draft-sheet.png", state: "awaiting_approval" },
+    { kind: "sheet", castId: "asha", url: "http://studio.test/approved-sheet.png", state: "approved" },
+    { kind: "anchor", castId: "asha", url: "http://studio.test/approved-anchor.png", state: "approved" },
+  ]);
+  assert.equal(prepared.sheetUrl, "http://studio.test/approved-sheet.png");
+  assert.equal(prepared.anchorUrl, "http://studio.test/approved-anchor.png");
+  const applied = includeCastReferences(
+    ["ref:" + encodeURIComponent("http://studio.test/approved-anchor.png")],
+    [prepared, member("narrator", "a warm storyteller", "narrator")],
+  );
+  assert.deepEqual(applied.references, ["sheet", "anchor"]);
+  assert.deepEqual(
+    applied.elementIds.map((id) => decodeURIComponent(id.slice("ref:".length))),
+    ["http://studio.test/approved-sheet.png", "http://studio.test/approved-anchor.png"],
+  );
 });
 
 test("mock sheets are distinct refs and do not call OpenAI", async () => {
