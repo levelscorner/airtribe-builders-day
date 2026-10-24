@@ -29,7 +29,9 @@ export function SignupScreen() {
     try {
       const client = getStudioClient();
       await client.createUser({ displayName, phoneOrEmail });
-      const chat = await client.createChat({});
+      const chat = await client.createChat({
+        initialMessage: "Why do bees make honey — kids explainer",
+      });
       router.replace(`/chat/${chat.chatId}?videoId=${chat.videoId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Shuru nahi ho paya.");

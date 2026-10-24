@@ -21,25 +21,21 @@ import {
   type OrchestratorContext,
 } from "../orchestrator/machine.js";
 import * as store from "../orchestrator/store.js";
+import { bindSessionUser, requireSessionUser } from "../sessions.js";
 
 export type V1Deps = {
   db: SqlClient;
   mock: boolean;
-  /** Demo: single active user id for /v1/me until auth exists. */
-  session: { userId: string | null };
 };
+
+function writeSse(res: Response, frame: { id?: string; event: unknown }): void {
+  if (frame.id) res.write(`id: ${frame.id}\n`);
+  res.write(`data: ${JSON.stringify(frame.event)}\n\n`);
+}
 
 export function createV1Router(deps: V1Deps): Router {
   const router = Router();
   const ctx: OrchestratorContext = createOrchestratorContext(deps.db, deps.mock);
-
-  function requireUser(res: Response): string | null {
-    if (!deps.session.userId) {
-      res.status(401).json({ error: "signup_required" });
-      return null;
-    }
-    return deps.session.userId;
-  }
 
   router.post("/users", async (req, res) => {
     try {
@@ -58,7 +54,7 @@ export function createV1Router(deps: V1Deps): Router {
         ref: `signup:${user.id}`,
       });
       await store.logEvent(deps.db, { userId: user.id, kind: "signup", payload: {} });
-      deps.session.userId = user.id;
+      bindSessionUser(req, user.id);
       const refreshed = (await store.getUser(deps.db, user.id))!;
       res.status(201).json(refreshed);
     } catch (error) {
@@ -66,8 +62,8 @@ export function createV1Router(deps: V1Deps): Router {
     }
   });
 
-  router.get("/me", async (_req, res) => {
-    const userId = requireUser(res);
+  router.get("/me", async (req, res) => {
+    const userId = requireSessionUser(req, res);
     if (!userId) return;
     const user = await store.getUser(deps.db, userId);
     if (!user) {
@@ -78,7 +74,7 @@ export function createV1Router(deps: V1Deps): Router {
   });
 
   router.post("/chats", async (req, res) => {
-    const userId = requireUser(res);
+    const userId = requireSessionUser(req, res);
     if (!userId) return;
     try {
       const body = (req.body ?? {}) as CreateChatRequest;
@@ -94,7 +90,7 @@ export function createV1Router(deps: V1Deps): Router {
   });
 
   router.get("/chats/:id", async (req, res) => {
-    const userId = requireUser(res);
+    const userId = requireSessionUser(req, res);
     if (!userId) return;
     const meta = await store.getChatMeta(deps.db, req.params.id);
     if (!meta || meta.userId !== userId) {
@@ -114,7 +110,7 @@ export function createV1Router(deps: V1Deps): Router {
   });
 
   router.get("/chats/:id/messages", async (req, res) => {
-    const userId = requireUser(res);
+    const userId = requireSessionUser(req, res);
     if (!userId) return;
     const meta = await store.getChatMeta(deps.db, req.params.id);
     if (!meta || meta.userId !== userId) {
@@ -125,7 +121,7 @@ export function createV1Router(deps: V1Deps): Router {
   });
 
   router.post("/chats/:id/messages", async (req, res) => {
-    const userId = requireUser(res);
+    const userId = requireSessionUser(req, res);
     if (!userId) return;
     const meta = await store.getChatMeta(deps.db, req.params.id);
     if (!meta || meta.userId !== userId) {
@@ -139,9 +135,7 @@ export function createV1Router(deps: V1Deps): Router {
         res.json({ accepted: true, message });
         return;
       }
-      // Free text outside brief: acknowledge.
-      const { appendMessage } = store;
-      const message = await appendMessage(deps.db, {
+      const message = await store.appendMessage(deps.db, {
         id: randomUUID(),
         chatId: meta.chatId,
         role: "user",
@@ -157,7 +151,7 @@ export function createV1Router(deps: V1Deps): Router {
   });
 
   router.get("/chats/:id/events", async (req, res) => {
-    const userId = requireUser(res);
+    const userId = requireSessionUser(req, res);
     if (!userId) return;
     const meta = await store.getChatMeta(deps.db, req.params.id);
     if (!meta || meta.userId !== userId) {
@@ -169,13 +163,20 @@ export function createV1Router(deps: V1Deps): Router {
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders?.();
 
-    const send = (event: unknown) => {
-      res.write(`data: ${JSON.stringify(event)}\n\n`);
-    };
-    send({ type: "heartbeat", ts: new Date().toISOString() });
-    const unsubscribe = chatBus.subscribe(meta.chatId, send);
+    const lastEventId =
+      (typeof req.headers["last-event-id"] === "string" ? req.headers["last-event-id"] : undefined) ||
+      (typeof req.query.lastEventId === "string" ? req.query.lastEventId : undefined);
+
+    for (const frame of chatBus.replay(meta.chatId, lastEventId)) {
+      writeSse(res, frame);
+    }
+
+    writeSse(res, { event: { type: "heartbeat", ts: new Date().toISOString() } });
+    const unsubscribe = chatBus.subscribe(meta.chatId, (frame) => {
+      writeSse(res, frame);
+    });
     const heartbeat = setInterval(() => {
-      send({ type: "heartbeat", ts: new Date().toISOString() });
+      writeSse(res, { event: { type: "heartbeat", ts: new Date().toISOString() } });
     }, 15000);
     req.on("close", () => {
       clearInterval(heartbeat);
@@ -183,11 +184,30 @@ export function createV1Router(deps: V1Deps): Router {
     });
   });
 
+  async function requireOwnedArtefact(req: Request, res: Response, artefactId: string) {
+    const userId = requireSessionUser(req, res);
+    if (!userId) return null;
+    const artefact = await store.getArtefact(deps.db, artefactId);
+    if (!artefact) {
+      res.status(404).json({ error: "not_found" });
+      return null;
+    }
+    const video = await store.getVideoRow(deps.db, artefact.videoId);
+    if (!video || video.userId !== userId) {
+      res.status(404).json({ error: "not_found" });
+      return null;
+    }
+    return { userId, artefact, video };
+  }
+
   router.post("/artefacts/:id/approve", async (req, res) => {
-    const userId = requireUser(res);
-    if (!userId) return;
+    const owned = await requireOwnedArtefact(req, res, req.params.id);
+    if (!owned) return;
     try {
-      const artefact = await approveArtefact(ctx, { artefactId: req.params.id, userId });
+      const artefact = await approveArtefact(ctx, {
+        artefactId: req.params.id,
+        userId: owned.userId,
+      });
       res.json({ artefact });
     } catch (error) {
       res.status(400).json({ error: error instanceof Error ? error.message : "approve_failed" });
@@ -195,8 +215,8 @@ export function createV1Router(deps: V1Deps): Router {
   });
 
   router.post("/artefacts/:id/reject", async (req, res) => {
-    const userId = requireUser(res);
-    if (!userId) return;
+    const owned = await requireOwnedArtefact(req, res, req.params.id);
+    if (!owned) return;
     try {
       const body = (req.body ?? {}) as RejectArtefactRequest;
       if (!body.rejectNote?.trim()) {
@@ -205,7 +225,7 @@ export function createV1Router(deps: V1Deps): Router {
       }
       const artefact = await rejectArtefact(ctx, {
         artefactId: req.params.id,
-        userId,
+        userId: owned.userId,
         rejectNote: body.rejectNote.trim(),
       });
       res.json({ artefact });
@@ -215,8 +235,8 @@ export function createV1Router(deps: V1Deps): Router {
   });
 
   router.post("/artefacts/:id/regenerate", async (req, res) => {
-    const userId = requireUser(res);
-    if (!userId) return;
+    const owned = await requireOwnedArtefact(req, res, req.params.id);
+    if (!owned) return;
     try {
       const body = (req.body ?? {}) as RegenerateRequest;
       const confirmQuery = req.query.confirm;
@@ -224,7 +244,7 @@ export function createV1Router(deps: V1Deps): Router {
         body.confirm === true || confirmQuery === "1" || confirmQuery === "true";
       const result = await regenerateArtefact(ctx, {
         artefactId: req.params.id,
-        userId,
+        userId: owned.userId,
         confirm,
         feedback: body.feedback,
       });
@@ -235,8 +255,13 @@ export function createV1Router(deps: V1Deps): Router {
   });
 
   router.post("/videos/:id/approve-all-remaining", async (req, res) => {
-    const userId = requireUser(res);
+    const userId = requireSessionUser(req, res);
     if (!userId) return;
+    const video = await store.getVideoRow(deps.db, req.params.id);
+    if (!video || video.userId !== userId) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
     try {
       const result = await approveAllRemaining(ctx, { videoId: req.params.id, userId });
       res.json(result);
@@ -246,7 +271,7 @@ export function createV1Router(deps: V1Deps): Router {
   });
 
   router.get("/videos/:id", async (req, res) => {
-    const userId = requireUser(res);
+    const userId = requireSessionUser(req, res);
     if (!userId) return;
     const video = await store.getVideoRow(deps.db, req.params.id);
     if (!video || video.userId !== userId) {
@@ -260,14 +285,14 @@ export function createV1Router(deps: V1Deps): Router {
     });
   });
 
-  router.get("/cast", async (_req, res) => {
-    const userId = requireUser(res);
+  router.get("/cast", async (req, res) => {
+    const userId = requireSessionUser(req, res);
     if (!userId) return;
     res.json({ items: await store.listCastMembers(deps.db) });
   });
 
-  router.get("/voices", async (_req, res) => {
-    const userId = requireUser(res);
+  router.get("/voices", async (req, res) => {
+    const userId = requireSessionUser(req, res);
     if (!userId) return;
     res.json({ items: await store.listVoices(deps.db) });
   });

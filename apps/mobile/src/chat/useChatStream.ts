@@ -7,8 +7,7 @@ import type {
   RegeneratePreviewResponse,
   Stage,
 } from "@chotu/shared";
-import { getStudioClient } from "../api";
-import { StudioMockError } from "../mock-studio";
+import { getStudioClient, StudioHttpError, StudioMockError } from "../api";
 
 function mergeMessages(server: ChatMessage[], local: ChatMessage[]): ChatMessage[] {
   const map = new Map<string, ChatMessage>();
@@ -95,7 +94,12 @@ export function useChatStream(chatId: string, videoId: string) {
       try {
         await work();
       } catch (err) {
-        if (err instanceof StudioMockError && err.code === "bad_state") return;
+        if (
+          (err instanceof StudioMockError || err instanceof StudioHttpError) &&
+          err.code === "bad_state"
+        ) {
+          return;
+        }
         setError(err instanceof Error ? err.message : "Nahi ho paya.");
       } finally {
         locks.current.delete(key);
@@ -134,7 +138,7 @@ export function useChatStream(chatId: string, videoId: string) {
     async (artefactId: string): Promise<RegeneratePreviewResponse> => {
       const result = await client.regenerateArtefact(artefactId, 0);
       if (!("canAfford" in result)) {
-        throw new StudioMockError("preview", "Cost abhi nahi mili.");
+        throw new StudioHttpError("preview", "Cost abhi nahi mili.");
       }
       return result;
     },
