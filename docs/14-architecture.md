@@ -316,7 +316,8 @@ CREATE TABLE payments (
   provider        text NOT NULL DEFAULT 'pine_labs',
   provider_ref    text,
   status          text NOT NULL DEFAULT 'pending' CHECK (status IN (
-                    'pending', 'paid', 'failed', 'mocked'
+                    'pending', 'paid', 'failed', 'mocked',
+                    'pending_verification', 'rejected'
                   )),
   created_at      timestamptz NOT NULL DEFAULT now(),
   updated_at      timestamptz NOT NULL DEFAULT now()
@@ -417,7 +418,8 @@ A skill router (`server/src/creative/skills/router.ts`) picks vendored chotu-cra
 | `ANTHROPIC_API_KEY` | live Claude | Saturn | Messages API key for brief intake, ScriptGen, PromptGen, regenerate. Never log or commit the value |
 | `CLAUDE_MODEL` | no | Saturn | Default `claude-sonnet-4-5` |
 | `LLM_PROVIDER` | no | Saturn | `claude` or `mock`. Default is `claude` when `ANTHROPIC_API_KEY` is set and `MOCK` is not `1`; otherwise the existing mock samples |
-| `PINE_LABS_MERCHANT_ID` | live pay | Mars | Checkout |
+| `PAYMENTS_MODE` | no | Mars | `qr` (default, PhonePe UPI QR plus admin approval), `pinelabs`, or `mock`. Pine Labs stays dormant unless this is `pinelabs`. |
+| `PINE_LABS_MERCHANT_ID` | live pay | Mars | Checkout when `PAYMENTS_MODE=pinelabs` |
 | `PINE_LABS_API_KEY` | live pay | Mars | Checkout |
 | `PINE_LABS_WEBHOOK_SECRET` | live pay | Mars | Verify webhook |
 | `RENDER_API_KEY` | stretch | Mars | Trigger Render Workflow ffmpeg; if unset, local/Replit ffmpeg |

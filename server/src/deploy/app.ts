@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import cors from "cors";
 import express, { type Express } from "express";
 import { asyncRoute } from "../admin/async-route.js";
-import { adminRouter } from "../admin/routes.js";
+import { adminRouter, type PaymentReview } from "../admin/routes.js";
 import { createMemoryEventLog, createPostgresEventLog, type EventLog } from "../admin/log.js";
 import { createPgDb, createPgPool, migrate, type Db } from "../credits/db.js";
 import { createCredits } from "../credits/index.js";
@@ -33,6 +33,19 @@ export async function createApp(options: AppOptions = {}): Promise<Express> {
   const database = Boolean(db);
   const events: EventLog = db ? createPostgresEventLog(db) : createMemoryEventLog();
   const payments = buildPayments(config, db);
+  const review: PaymentReview | undefined =
+    payments.listPending && payments.approvePayment && payments.rejectPayment
+      ? {
+          listPending: () => payments.listPending!(),
+          approve: async (paymentId) => {
+            const result = await payments.approvePayment!(paymentId);
+            return { creditsGranted: result.creditsGranted };
+          },
+          reject: async (paymentId) => {
+            await payments.rejectPayment!(paymentId);
+          },
+        }
+      : undefined;
 
   const workDir = options.workDir ?? join(serverRoot, "data", "renders");
   const publicDir = options.publicDir ?? join(serverRoot, "public");
@@ -62,7 +75,7 @@ export async function createApp(options: AppOptions = {}): Promise<Express> {
       },
     }),
   );
-  app.use(adminRouter(events, { mock: config.mock, database }));
+  app.use(adminRouter(events, { mock: config.mock, database }, review));
 
   app.get("/v1/videos/:id/download", asyncRoute(async (req, res) => {
     const videoId = req.params.id;
@@ -127,9 +140,20 @@ export async function createApp(options: AppOptions = {}): Promise<Express> {
 
 function buildPayments(config: ReturnType<typeof readDeployConfig>, db: Db | undefined): PaymentsService {
   const pineLabsMock = config.pineLabsMock ? "1" : "0";
-  if (config.mock || config.pineLabsMock) {
+  const mode = config.paymentsMode;
+  if (mode === "qr") {
+    return createPayments({
+      PAYMENTS_MODE: "qr",
+      mock: false,
+      ledger: db ? createCredits({ mock: false, db }) : createCredits({ mock: true }),
+      db,
+      publicBaseUrl: config.publicBaseUrl,
+    });
+  }
+  if (mode === "mock" || config.mock || config.pineLabsMock) {
     const useDb = Boolean(db) && !config.mock;
     return createPayments({
+      PAYMENTS_MODE: mode === "mock" ? "mock" : "pinelabs",
       mock: config.mock,
       PINE_LABS_MOCK: pineLabsMock,
       ledger: useDb && db ? createCredits({ mock: false, db }) : createCredits({ mock: true }),
@@ -141,6 +165,7 @@ function buildPayments(config: ReturnType<typeof readDeployConfig>, db: Db | und
     return unconfiguredPayments();
   }
   return createPayments({
+    PAYMENTS_MODE: "pinelabs",
     mock: false,
     PINE_LABS_MOCK: "0",
     ledger: createCredits({ mock: false, db }),
