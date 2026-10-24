@@ -35,10 +35,11 @@ export async function insertUser(
     phone_or_email: string | null;
     credit_balance: number;
     created_at: Date | string;
+    last_active_at: Date | string | null;
   }>(
     `INSERT INTO users (display_name, phone_or_email, credit_balance)
      VALUES ($1, $2, 0)
-     RETURNING id, display_name, phone_or_email, credit_balance, created_at`,
+     RETURNING id, display_name, phone_or_email, credit_balance, created_at, last_active_at`,
     [input.displayName, input.phoneOrEmail ?? null],
   );
   const row = result.rows[0]!;
@@ -48,7 +49,30 @@ export async function insertUser(
     phoneOrEmail: row.phone_or_email ?? undefined,
     creditBalance: row.credit_balance,
     createdAt: new Date(row.created_at).toISOString(),
+    lastActiveAt: isoOrUndefined(row.last_active_at),
   };
+}
+
+const lastActiveTouch = new Map<string, number>();
+
+/** Stamp last_active_at at most once a minute for this process and for the row. */
+export async function touchLastActive(
+  db: { query: (text: string, params?: unknown[]) => Promise<unknown> },
+  userId: string,
+  now = Date.now(),
+): Promise<void> {
+  const previous = lastActiveTouch.get(userId) ?? 0;
+  if (now - previous < 60_000) return;
+  lastActiveTouch.set(userId, now);
+  const stamp = new Date(now).toISOString();
+  const cutoff = new Date(now - 60_000).toISOString();
+  await db.query(
+    `UPDATE users
+     SET last_active_at = $2
+     WHERE id = $1
+       AND (last_active_at IS NULL OR last_active_at < $3)`,
+    [userId, stamp, cutoff],
+  );
 }
 
 /** Look up a demo profile by the email or phone stored on the user. */
@@ -61,8 +85,9 @@ export async function findUserByContact(db: SqlClient, phoneOrEmail: string): Pr
     phone_or_email: string | null;
     credit_balance: number;
     created_at: Date | string;
+    last_active_at: Date | string | null;
   }>(
-    "SELECT id, display_name, phone_or_email, credit_balance, created_at FROM users WHERE phone_or_email = $1",
+    "SELECT id, display_name, phone_or_email, credit_balance, created_at, last_active_at FROM users WHERE phone_or_email = $1",
     [contact],
   );
   const row = result.rows[0];
@@ -73,6 +98,7 @@ export async function findUserByContact(db: SqlClient, phoneOrEmail: string): Pr
     phoneOrEmail: row.phone_or_email ?? undefined,
     creditBalance: row.credit_balance,
     createdAt: new Date(row.created_at).toISOString(),
+    lastActiveAt: isoOrUndefined(row.last_active_at),
   };
 }
 
@@ -83,7 +109,8 @@ export async function getUser(db: SqlClient, userId: string): Promise<User | nul
     phone_or_email: string | null;
     credit_balance: number;
     created_at: Date | string;
-  }>("SELECT id, display_name, phone_or_email, credit_balance, created_at FROM users WHERE id = $1", [
+    last_active_at: Date | string | null;
+  }>("SELECT id, display_name, phone_or_email, credit_balance, created_at, last_active_at FROM users WHERE id = $1", [
     userId,
   ]);
   const row = result.rows[0];
@@ -94,7 +121,14 @@ export async function getUser(db: SqlClient, userId: string): Promise<User | nul
     phoneOrEmail: row.phone_or_email ?? undefined,
     creditBalance: row.credit_balance,
     createdAt: new Date(row.created_at).toISOString(),
+    lastActiveAt: isoOrUndefined(row.last_active_at),
   };
+}
+
+function isoOrUndefined(value: Date | string | null | undefined): string | undefined {
+  if (value == null || value === "") return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
 /** Videos owned by this user. Contact details of other accounts are not selected. */

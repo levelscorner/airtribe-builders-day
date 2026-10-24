@@ -91,6 +91,7 @@ test("DEMO_EMAIL_LOGIN=1 signs in an existing email and still refuses admin emai
   const me = await returning.get("/v1/me").expect(200);
   assert.equal(me.body.id, created.body.id);
   assert.equal(me.body.creditsEnabled, false);
+  assert.match(me.body.lastActiveAt, /^\d{4}-\d{2}-\d{2}T/);
 
   const admin = await request(app)
     .post("/v1/users")

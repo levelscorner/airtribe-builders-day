@@ -5,6 +5,7 @@ export interface AdminUser {
   displayName: string;
   phoneOrEmail: string;
   createdAt: string;
+  lastActiveAt: string | null;
 }
 
 export interface AdminUserVideo {
@@ -29,8 +30,9 @@ export function createUserDirectory(db: Db): UserDirectory {
         display_name: string;
         phone_or_email: string | null;
         created_at: Date | string;
+        last_active_at: Date | string | null;
       }>(
-        `SELECT id, display_name, phone_or_email, created_at
+        `SELECT id, display_name, phone_or_email, created_at, last_active_at
          FROM users
          ORDER BY created_at DESC, display_name ASC
          LIMIT $1`,
@@ -44,8 +46,9 @@ export function createUserDirectory(db: Db): UserDirectory {
         display_name: string;
         phone_or_email: string | null;
         created_at: Date | string;
+        last_active_at: Date | string | null;
       }>(
-        `SELECT id, display_name, phone_or_email, created_at
+        `SELECT id, display_name, phone_or_email, created_at, last_active_at
          FROM users
          WHERE id = $1`,
         [id],
@@ -85,12 +88,14 @@ function toUser(row: {
   display_name: string;
   phone_or_email: string | null;
   created_at: Date | string;
+  last_active_at?: Date | string | null;
 }): AdminUser {
   return {
     id: String(row.id),
     displayName: row.display_name,
     phoneOrEmail: row.phone_or_email ?? "",
     createdAt: asIso(row.created_at),
+    lastActiveAt: row.last_active_at == null || row.last_active_at === "" ? null : asIso(row.last_active_at),
   };
 }
 

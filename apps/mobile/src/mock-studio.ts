@@ -1029,12 +1029,18 @@ export function createMockStudio(options?: {
         creditBalance: starterCredits,
         creditsEnabled: false,
         createdAt: now(),
+        lastActiveAt: now(),
       };
       return user;
     },
 
     async getMe() {
-      return mustUser();
+      const current = mustUser();
+      const seen = Date.parse(current.lastActiveAt ?? "");
+      if (!current.lastActiveAt || Number.isNaN(seen) || Date.now() - seen >= 60_000) {
+        current.lastActiveAt = now();
+      }
+      return current;
     },
 
     async listMyVideos() {

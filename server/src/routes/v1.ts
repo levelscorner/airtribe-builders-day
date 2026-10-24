@@ -102,6 +102,18 @@ export function createV1Router(deps: V1Deps): Router {
     next();
   });
 
+  router.use((req, _res, next) => {
+    const userId = req.browserSession?.userId;
+    if (!userId) {
+      next();
+      return;
+    }
+    void store.touchLastActive(deps.db, userId).then(
+      () => next(),
+      () => next(),
+    );
+  });
+
   router.post("/users", async (req, res) => {
     const body = req.body as CreateUserRequest;
     const phoneOrEmail = body?.phoneOrEmail?.trim();
