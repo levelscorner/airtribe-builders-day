@@ -95,7 +95,17 @@ test("detailed web prompt goes directly to script; visuals wait for approval", a
   arts = await store.listArtefacts(db, chat.videoId);
   assert.equal((await store.getVideoRow(db, chat.videoId))!.stage, "cast");
   assert.ok(arts.some((a) => a.kind === "identity"));
+  assert.ok(arts.some((a) => a.kind === "sheet" && typeof a.payload.url === "string" && a.payload.url.length > 0));
   assert.equal(arts.filter((a) => a.kind === "image").length, 2);
+  assert.ok(
+    arts
+      .filter((a) => a.kind === "image")
+      .every((a) => Array.isArray(a.payload.references) && a.payload.references.includes("sheet")),
+  );
+  const sheetMessages = (await store.listMessages(db, chat.chatId)).filter(
+    (message) => message.kind === "approval" && message.artefactKind === "sheet",
+  );
+  assert.ok(sheetMessages.length > 0);
   assert.equal(
     arts.some((a) => a.kind === "clip"),
     false,

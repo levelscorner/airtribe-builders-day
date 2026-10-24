@@ -1273,6 +1273,7 @@ function Canvas({
                         {name}
                         {item.state === "approved" && <Check size={14} />}
                       </h4>
+                      {reference?.kind === "sheet" && <p>Character sheet</p>}
                       <p>{str(item.payload.identityText)}</p>
                       <ProviderLine
                         source={reference ?? item}
@@ -1812,6 +1813,52 @@ export function WebConversation({
                         />
                       </div>
                     );
+                  if (message.artefactKind === "sheet") {
+                    const payload = art?.payload ?? message.preview;
+                    const url = str(payload.url);
+                    const names = Array.isArray(payload.names)
+                      ? payload.names.filter((item): item is string => typeof item === "string").join(", ")
+                      : "";
+                    return (
+                      <article className="message assistant sheet-card" key={message.id}>
+                        <span className="assistant-name">
+                          <Brand />
+                        </span>
+                        <h3>{message.title || "Character sheet"}</h3>
+                        {url ? (
+                          <SceneImage index={0} url={url} alt={message.title || "Character sheet"} />
+                        ) : (
+                          <p>{names || str(payload.note) || "Character sheet"}</p>
+                        )}
+                        <p className="muted">Turnaround sheet for this character. Approve it to keep this look.</p>
+                        {art?.state === "approved" ? (
+                          <span className="approved-line">
+                            <Check size={15} />
+                            Approved
+                          </span>
+                        ) : (
+                          <div className="script-actions">
+                            <button
+                              className="primary-button"
+                              disabled={chat.busy}
+                              onClick={() => approve(message.artefactId)}
+                            >
+                              Approve character sheet
+                            </button>
+                            {art && (
+                              <button
+                                className="text-button"
+                                disabled={chat.busy}
+                                onClick={() => requestFeedback(art)}
+                              >
+                                Request a change
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </article>
+                    );
+                  }
                   if (visualKinds.has(message.artefactKind)) {
                     if (message.id !== firstVisualMessage?.id) return null;
                     return (
