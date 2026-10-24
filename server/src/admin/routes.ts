@@ -3,7 +3,7 @@ import express, { type Request, type Response, Router } from "express";
 import { VIEWPORT_META } from "../html.js";
 import type { PendingPayment } from "../payments/qr.js";
 import { asyncRoute } from "./async-route.js";
-import { escapeHtml, renderAdminCsv, renderAdminHtml } from "./format.js";
+import { escapeHtml, renderAdminCsv, renderAdminHtml, renderMissingUser, renderUserPage } from "./format.js";
 import type { EventLog } from "./log.js";
 import type { UserDirectory } from "./users.js";
 
@@ -127,6 +127,21 @@ export function adminRouter(
       .send(renderAdminCsv(rows, people));
   }));
 
+  router.get("/admin/users/:id", asyncRoute(async (req, res) => {
+    const id = text(req.params.id);
+    if (!users || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      res.status(404).type("html").send(renderMissingUser());
+      return;
+    }
+    const person = await users.get(id);
+    if (!person) {
+      res.status(404).type("html").send(renderMissingUser());
+      return;
+    }
+    const videos = await users.videos(person.id);
+    res.type("html").send(renderUserPage(person, videos));
+  }));
+
   return router;
 }
 
@@ -167,13 +182,18 @@ function sameToken(got: string, expected: string): boolean {
 
 /** Pages served without ADMIN_TOKEN when ADMIN_OPEN=1. Approve and reject stay gated. */
 const OPEN_ADMIN_PATHS = new Set(["/admin", "/admin/payments", "/admin/export.csv"]);
+const OPEN_USER_PAGE = /^\/admin\/users\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function adminOpen(): boolean {
   return (process.env.ADMIN_OPEN ?? "").trim() === "1";
 }
 
+function openAdminPath(path: string): boolean {
+  return OPEN_ADMIN_PATHS.has(path) || OPEN_USER_PAGE.test(path);
+}
+
 function allowAdmin(req: Request, res: Response): boolean {
-  if (adminOpen() && OPEN_ADMIN_PATHS.has(req.path)) return true;
+  if (adminOpen() && openAdminPath(req.path)) return true;
   const expected = adminToken();
   if (!expected) {
     res.status(503).json({ error: "admin_unconfigured" });

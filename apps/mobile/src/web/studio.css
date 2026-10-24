@@ -228,6 +228,47 @@
   align-items: center;
   gap: 18px;
 }
+.profile-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.profile-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #1c1915;
+  color: #fff;
+  font-size: 14px;
+}
+.profile-sheet {
+  position: fixed;
+  z-index: 30;
+  top: 84px;
+  right: 16px;
+  width: min(360px, calc(100vw - 32px));
+  padding: 16px;
+  background: #fff;
+  color: #1a1a1a;
+  border: 1px solid #ddd;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+}
+.profile-sheet h2 {
+  font-size: 16px;
+  margin: 12px 0 6px;
+}
+.profile-sheet button {
+  min-height: 44px;
+  margin-top: 8px;
+}
 .brand-home {
   padding: 0 !important;
 }

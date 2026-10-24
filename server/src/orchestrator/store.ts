@@ -8,6 +8,7 @@ import type {
   Genre,
   Language,
   MediaProviderName,
+  OwnVideoSummary,
   Resolution,
   Scene,
   Stage,
@@ -94,6 +95,32 @@ export async function getUser(db: SqlClient, userId: string): Promise<User | nul
     creditBalance: row.credit_balance,
     createdAt: new Date(row.created_at).toISOString(),
   };
+}
+
+/** Videos owned by this user. Contact details of other accounts are not selected. */
+export async function listUserVideos(db: SqlClient, userId: string): Promise<OwnVideoSummary[]> {
+  const result = await db.query<{
+    id: string;
+    status: OwnVideoSummary["status"];
+    stage: OwnVideoSummary["stage"];
+    created_at: Date | string;
+    title: string | null;
+  }>(
+    `SELECT v.id, v.status, v.stage, v.created_at, c.title
+     FROM videos v
+     LEFT JOIN chats c ON c.id = v.chat_id
+     WHERE v.user_id = $1
+     ORDER BY v.created_at DESC
+     LIMIT 50`,
+    [userId],
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    title: row.title ?? undefined,
+    status: row.status,
+    stage: row.stage,
+    createdAt: new Date(row.created_at).toISOString(),
+  }));
 }
 
 export async function createChatVideo(

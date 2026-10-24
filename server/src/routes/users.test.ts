@@ -40,8 +40,18 @@ test("without DEMO_EMAIL_LOGIN an existing email stays 409 and does not sign in"
     .post("/v1/users")
     .send({ displayName: "Asha", phoneOrEmail: "asha-closed@example.com" })
     .expect(201);
+  assert.equal(created.body.displayName, "Asha");
+  assert.equal(created.body.phoneOrEmail, "asha-closed@example.com");
+  assert.match(created.body.createdAt, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(created.body.creditBalance, store.STARTER_CREDITS);
   assert.equal(created.body.creditsEnabled, false);
+  const stored = await db.query<{ display_name: string; phone_or_email: string; created_at: Date | string }>(
+    "SELECT display_name, phone_or_email, created_at FROM users WHERE id = $1",
+    [created.body.id],
+  );
+  assert.equal(stored.rows[0]?.display_name, "Asha");
+  assert.equal(stored.rows[0]?.phone_or_email, "asha-closed@example.com");
+  assert.ok(stored.rows[0]?.created_at);
 
   const returning = request.agent(app);
   const blocked = await returning
@@ -98,4 +108,30 @@ test("DEMO_EMAIL_LOGIN=1 signs in an existing email and still refuses admin emai
   assert.ok(adminRow);
   assert.equal(adminRow.creditBalance, store.STARTER_CREDITS);
   assert.notEqual(adminRow.id, created.body.id);
+});
+
+test("GET /v1/me/videos lists only the signed-in user's videos", async () => {
+  const asha = request.agent(app);
+  const created = await asha
+    .post("/v1/users")
+    .send({ displayName: "Asha Films", phoneOrEmail: "asha-films@example.com" })
+    .expect(201);
+  assert.equal(created.body.displayName, "Asha Films");
+  assert.equal(created.body.phoneOrEmail, "asha-films@example.com");
+  const chat = await asha.post("/v1/chats").send({ title: "Bees" }).expect(201);
+
+  const ravi = request.agent(app);
+  await ravi.post("/v1/users").send({ displayName: "Ravi", phoneOrEmail: "ravi-secret@example.com" }).expect(201);
+  const other = await ravi.post("/v1/chats").send({ title: "Secret film" }).expect(201);
+
+  const mine = await asha.get("/v1/me/videos").expect(200);
+  const videos = mine.body.videos as Array<{ id: string; title?: string; status: string; phoneOrEmail?: string }>;
+  assert.ok(videos.some((video) => video.id === chat.body.videoId && video.status === "active" && video.title === "Bees"));
+  assert.equal(videos.some((video) => video.id === other.body.videoId), false);
+  assert.equal(JSON.stringify(mine.body).includes("ravi-secret@example.com"), false);
+  assert.equal(JSON.stringify(mine.body).includes("Secret film"), false);
+  assert.equal(videos.every((video) => video.phoneOrEmail === undefined), true);
+
+  const anon = await request(app).get("/v1/me/videos");
+  assert.equal(anon.status, 401);
 });

@@ -10,6 +10,7 @@ import type {
   CreateUserResponse,
   GetChatResponse,
   GetMeResponse,
+  OwnVideoSummary,
   GetVideoResponse,
   ListCastResponse,
   ListMessagesResponse,
@@ -129,6 +130,9 @@ export function createHttpStudio(baseUrl = ""): StudioClient {
     },
     getMe() {
       return api<GetMeResponse>(ApiPaths.me);
+    },
+    listMyVideos() {
+      return api<{ videos: OwnVideoSummary[] }>(ApiPaths.myVideos);
     },
     createChat(body: CreateChatRequest) {
       return api<CreateChatResponse>(ApiPaths.chats, {
