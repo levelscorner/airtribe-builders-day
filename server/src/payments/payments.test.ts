@@ -21,6 +21,10 @@ test("Pine Labs base URL stays on the UAT host", () => {
     () => assertPineLabsTestOrigin("https://api.pluralpay.in"),
     (error: unknown) => error instanceof PaymentError && error.code === "live_host_refused",
   );
+  assert.throws(
+    () => assertPineLabsTestOrigin("https://pluraluat.example.com"),
+    (error: unknown) => error instanceof PaymentError && error.code === "live_host_refused",
+  );
 });
 
 test("PINE_LABS_MOCK defaults on and only an explicit off selects the live adapter", () => {
@@ -206,6 +210,11 @@ test("UAT webhook and callback credit the ledger once", async () => {
         });
       }
       if (url.includes("/api/pay/v1/payment-links/pl_test_")) {
+        if (url.includes("pl_test_3")) {
+          await pg.db.query("UPDATE payments SET status = 'paid' WHERE provider_ref = 'pl_test_3'");
+          return Response.json({ status: "FAILED" });
+        }
+        if (url.includes("pl_test_4")) return Response.json({ status: "CAPTURED" });
         return Response.json({
           status: "CAPTURED",
           amount: { value: inrToPaise(499), currency: "INR" },
@@ -294,6 +303,21 @@ test("UAT webhook and callback credit the ledger once", async () => {
     assert.equal(viaCallback.status, "paid");
     assert.equal(viaCallback.creditsGranted, 500);
     assert.equal(viaCallbackAgain.creditsGranted, 0);
+    assert.equal(await ledger.balance(userId), 1000);
+
+    const raced = await payments.createCheckout({ userId, packId: "starter" });
+    const racedResult = await payments.confirmCallback(raced.paymentId);
+    assert.equal(racedResult.status, "paid");
+    const racedRow = await pg.db.query("SELECT status FROM payments WHERE id = $1", [raced.paymentId]);
+    assert.equal(racedRow.rows[0]?.status, "paid");
+
+    const bare = await payments.createCheckout({ userId, packId: "starter" });
+    await assert.rejects(
+      () => payments.confirmCallback(bare.paymentId),
+      (error: unknown) => error instanceof PaymentError && error.code === "amount_missing",
+    );
+    const bareRow = await pg.db.query("SELECT status FROM payments WHERE id = $1", [bare.paymentId]);
+    assert.equal(bareRow.rows[0]?.status, "pending");
     assert.equal(await ledger.balance(userId), 1000);
     assert.ok(calls.some((call) => call.startsWith("POST https://pluraluat.v2.pinepg.in/api/pay/v1/payment-links")));
   } finally {

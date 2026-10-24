@@ -1,0 +1,46 @@
+{
+  "id": "kids",
+  "label": "Kids edu-fun",
+  "who": "parents, kids channels, tutors",
+  "tone": "playful, simple words, a mascot",
+  "shape": "hook, 3 facts, quiz, 45s",
+  "beats": ["hook", "fact", "fact", "fact", "quiz"],
+  "defaultTargetSeconds": 45,
+  "minSeconds": 35,
+  "maxSeconds": 50,
+  "defaultResolution": "1080p",
+  "defaultAspectRatio": "9:16",
+  "defaultLanguage": "hinglish",
+  "defaultAudience": "Parents and children aged 5 to 9",
+  "defaultTopic": "a curious everyday idea",
+  "artStylePresets": [
+    {
+      "id": "bright-2d-cartoon",
+      "label": "Bright 2D cartoon",
+      "traits": ["bright flat colours", "bold clean outlines", "simple shapes", "even friendly light"]
+    },
+    {
+      "id": "soft-3d-toon",
+      "label": "Soft 3D toon",
+      "traits": ["soft rounded forms", "gentle studio light", "pastel surfaces", "smooth shading"]
+    },
+    {
+      "id": "indian-folk-flat",
+      "label": "Indian folk-art flat",
+      "traits": ["flat folk-art shapes", "earthy mineral colours", "hand-drawn pattern fills", "even light"]
+    }
+  ],
+  "defaultArtStyle": "bright-2d-cartoon",
+  "defaultCastIds": ["preset_chintu", "preset_mini"],
+  "captionStyle": "Large rounded high-contrast captions, one short line",
+  "followUps": [
+    {
+      "field": "topic",
+      "prompt": "What should this short teach, in one line?",
+      "allowFreeText": true,
+      "allowSkip": true,
+      "allowDefaults": true
+    }
+  ],
+  "skillRefs": ["cards-format-kids", "kids", "cards-format-explainer"]
+}
