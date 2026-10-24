@@ -1,12 +1,23 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import type { ApprovalCardMessage, ArtefactState, ArtefactSummary, RegeneratePreviewResponse } from "@chotu/shared";
+import type {
+  ApprovalCardMessage,
+  ArtefactState,
+  ArtefactSummary,
+  RegeneratePreviewResponse,
+  VoicePreset,
+} from "@chotu/shared";
 import { readAgentReview, reviewFeedback } from "../agent-review";
-import { MockMeter } from "../screens/PlayerCard";
+import type { MediaProgressEvent } from "../media-contract";
+import { progressCopy, providerChipLabel } from "../media-contract";
+import { VOICES } from "../mock-fixtures";
+import { MockMeter, PlayerCard } from "../screens/PlayerCard";
 import { readRejectNote } from "../reject-note";
 import { colors, hitSlop, layout } from "../theme";
 import { AgentReviewPanel } from "./AgentReviewPanel";
+import { ImageFrame } from "./MediaFrames";
 import { KIND_LABEL, STAGE_LABEL } from "./labels";
+import { VoicePicker } from "./VoicePicker";
 
 function str(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
@@ -26,15 +37,17 @@ function records(value: unknown): Record<string, unknown>[] {
   return value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object");
 }
 
-function Frame({ swatch, label }: { swatch?: string; label: string }) {
-  return (
-    <View style={[styles.frame, { backgroundColor: colors.swatch[swatch ?? ""] ?? colors.swatch.marigold }]}>
-      <Text style={styles.frameText}>{label}</Text>
-    </View>
-  );
-}
-
-function PreviewBody({ message }: { message: ApprovalCardMessage }) {
+function PreviewBody({
+  message,
+  voices,
+  voiceId,
+  onVoice,
+}: {
+  message: ApprovalCardMessage;
+  voices: VoicePreset[];
+  voiceId?: string;
+  onVoice: (id: string) => void;
+}) {
   const preview = message.preview;
   if (message.artefactKind === "identity") {
     return (
@@ -58,7 +71,7 @@ function PreviewBody({ message }: { message: ApprovalCardMessage }) {
         <Text style={styles.body}>{strList(preview.names).join(", ")}</Text>
         <View style={styles.views}>
           {strList(preview.views).map((view) => (
-            <Frame key={view} swatch={str(preview.swatch)} label={view} />
+            <ImageFrame key={view} swatch={str(preview.swatch)} label={view} />
           ))}
         </View>
       </View>
@@ -67,7 +80,7 @@ function PreviewBody({ message }: { message: ApprovalCardMessage }) {
   if (message.artefactKind === "anchor") {
     return (
       <View style={styles.stack}>
-        <Frame swatch={str(preview.swatch)} label={strList(preview.names).join(", ") || "Face"} />
+        <ImageFrame swatch={str(preview.swatch)} label={strList(preview.names).join(", ") || "Face"} />
         <Text style={styles.body}>{str(preview.note) ?? ""}</Text>
       </View>
     );
@@ -75,6 +88,7 @@ function PreviewBody({ message }: { message: ApprovalCardMessage }) {
   if (message.artefactKind === "voice_sample") {
     return (
       <View style={styles.stack}>
+        <VoicePicker voices={voices} selectedId={voiceId} onSelect={onVoice} />
         {records(preview.samples).map((sample, index) => (
           <View key={`${str(sample.name) ?? "voice"}-${index}`} style={styles.stack}>
             <Text style={styles.strong}>
@@ -120,14 +134,20 @@ function PreviewBody({ message }: { message: ApprovalCardMessage }) {
       </View>
     );
   }
-  if (message.artefactKind === "image" || message.artefactKind === "clip") {
+  if (message.artefactKind === "image") {
     return (
       <View style={styles.stack}>
-        <Frame swatch={str(preview.swatch)} label={str(preview.sceneTitle) ?? message.title} />
+        <ImageFrame large swatch={str(preview.swatch)} label={str(preview.sceneTitle) ?? message.title} />
         <Text style={styles.body}>{str(preview.caption) ?? ""}</Text>
-        {message.artefactKind === "clip" ? (
-          <MockMeter durationMs={num(preview.durationMs) ?? 4000} label={message.title} />
-        ) : null}
+      </View>
+    );
+  }
+  if (message.artefactKind === "clip") {
+    const url = str(preview.url) ?? `mock://clip/${message.artefactId}`;
+    return (
+      <View style={styles.stack}>
+        <PlayerCard embedded title={message.title} url={url} durationMs={num(preview.durationMs) ?? 4000} />
+        <Text style={styles.body}>{str(preview.caption) ?? ""}</Text>
       </View>
     );
   }
@@ -143,9 +163,10 @@ function PreviewBody({ message }: { message: ApprovalCardMessage }) {
       </View>
     );
   }
+  const url = str(preview.url) ?? `mock://final/${message.artefactId}`;
   return (
     <View style={styles.stack}>
-      <Frame swatch={str(preview.swatch)} label={str(preview.title) ?? "Final cut"} />
+      <PlayerCard embedded title={str(preview.title) ?? message.title} url={url} durationMs={num(preview.durationMs)} />
       <Text style={styles.body}>{str(preview.caption) ?? ""}</Text>
       <Text style={styles.meta}>{Math.round((num(preview.durationMs) ?? 0) / 1000)}s</Text>
     </View>
@@ -156,6 +177,8 @@ export function ApprovalCard({
   message,
   liveState,
   artefact,
+  progress,
+  voices = VOICES,
   onApprove,
   onReject,
   onPreviewRegenerate,
@@ -165,6 +188,8 @@ export function ApprovalCard({
   message: ApprovalCardMessage;
   liveState: ArtefactState;
   artefact?: ArtefactSummary;
+  progress?: MediaProgressEvent;
+  voices?: VoicePreset[];
   onApprove: () => void;
   onReject: (note: string) => void;
   onPreviewRegenerate: () => Promise<RegeneratePreviewResponse>;
@@ -176,19 +201,32 @@ export function ApprovalCard({
   const [quote, setQuote] = useState<RegeneratePreviewResponse | null>(null);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [pendingFeedback, setPendingFeedback] = useState<string | undefined>(undefined);
+  const [draft, setDraft] = useState("");
+  const [composing, setComposing] = useState(false);
+  const [voiceId, setVoiceId] = useState<string | undefined>();
   const version = num(message.preview.version) ?? 1;
   const rejectionNote = readRejectNote(message);
   const review =
     message.artefactKind === "script" ? readAgentReview(artefact) ?? readAgentReview(message.preview) : undefined;
   const fixFeedback = review ? reviewFeedback(review) : "";
+  const chip = providerChipLabel(artefact) ?? providerChipLabel(message.preview);
+  const voiceLabel = voices.find((voice) => voice.id === voiceId)?.label;
   const generating = liveState === "generating";
   const approved = !generating && (liveState === "approved" || message.state === "approved");
   const rejected = !generating && (liveState === "rejected" || message.state === "rejected");
   const waiting = !approved && !rejected && !generating;
   const stateWord = generating ? "generating" : approved ? "approved" : rejected ? "rejected" : "waiting";
 
+  function feedbackText(typed?: string): string | undefined {
+    const noteText = typed?.trim() ?? "";
+    const voiceNote = voiceLabel ? `Voice: ${voiceLabel}` : "";
+    const joined = [noteText, voiceNote && !noteText.includes(voiceNote) ? voiceNote : ""].filter(Boolean).join(" ");
+    return joined ? joined.slice(0, 280) : undefined;
+  }
+
   function askQuote(feedback?: string) {
     setQuoteError(null);
+    setComposing(false);
     setPendingFeedback(feedback);
     void onPreviewRegenerate()
       .then(setQuote)
@@ -199,19 +237,27 @@ export function ApprovalCard({
   }
 
   return (
-    <View style={styles.card} accessibilityLabel={`${message.title}, ${stateWord}`}>
+    <View style={styles.card} accessibilityLabel={`${message.title}, ${chip ?? "no model"}, ${stateWord}`}>
       <View style={styles.head}>
         <Text style={styles.stamp}>
           {STAGE_LABEL[message.stage]} · {KIND_LABEL[message.artefactKind]}
         </Text>
+        {chip ? (
+          <View style={styles.modelChip} accessibilityLabel={`Model ${chip}`}>
+            <Text style={styles.modelChipText}>{chip}</Text>
+          </View>
+        ) : null}
         <Text style={[styles.state, approved ? styles.ok : null, rejected ? styles.bad : null]}>{stateWord}</Text>
       </View>
       <Text style={styles.title}>
         {message.title}
         {version > 1 ? ` · v${version}` : ""}
       </Text>
-      <PreviewBody message={message} />
+      <PreviewBody message={message} voices={voices} voiceId={voiceId} onVoice={setVoiceId} />
       {review ? <AgentReviewPanel review={review} /> : null}
+      {progress ? (
+        <Text style={progress.status === "failed" ? styles.doubt : styles.meta}>{progressCopy(progress)}</Text>
+      ) : null}
       {rejectionNote ? <Text style={styles.doubt}>Note: {rejectionNote}</Text> : null}
       {generating ? <Text style={styles.meta}>Dobara bana rahe hain.</Text> : null}
       {waiting || rejected ? (
@@ -271,6 +317,7 @@ export function ApprovalCard({
                 {quote.creditCost} credits lagenge. Balance {quote.balance}.
                 {quote.canAfford ? "" : " Credits kam hain."}
               </Text>
+              {pendingFeedback ? <Text style={styles.meta}>Feedback: {pendingFeedback}</Text> : null}
               {quote.canAfford ? (
                 <Pressable
                   accessibilityRole="button"
@@ -304,6 +351,7 @@ export function ApprovalCard({
                 onPress={() => {
                   setQuote(null);
                   setPendingFeedback(undefined);
+                  setComposing(false);
                 }}
                 style={styles.secondary}
               >
@@ -323,15 +371,37 @@ export function ApprovalCard({
                   <Text style={styles.secondaryText}>Apply fixes & regenerate</Text>
                 </Pressable>
               ) : null}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Regenerate ${message.title}, ${message.regenerateCreditCost} credits, pehle cost dikhao`}
-                hitSlop={hitSlop}
-                onPress={() => askQuote()}
-                style={styles.secondary}
-              >
-                <Text style={styles.secondaryText}>Regenerate · {message.regenerateCreditCost} credits</Text>
-              </Pressable>
+              {composing ? (
+                <View style={styles.stack}>
+                  <TextInput
+                    value={draft}
+                    onChangeText={setDraft}
+                    placeholder="Feedback, optional"
+                    placeholderTextColor={colors.inkSoft}
+                    style={styles.input}
+                    accessibilityLabel={`Regenerate feedback for ${message.title}`}
+                  />
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Show regenerate cost for ${message.title}`}
+                    hitSlop={hitSlop}
+                    onPress={() => askQuote(feedbackText(draft))}
+                    style={styles.secondary}
+                  >
+                    <Text style={styles.secondaryText}>Cost dikhao</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Regenerate ${message.title}, ${message.regenerateCreditCost} credits, pehle cost dikhao`}
+                  hitSlop={hitSlop}
+                  onPress={() => setComposing(true)}
+                  style={styles.secondary}
+                >
+                  <Text style={styles.secondaryText}>Regenerate · {message.regenerateCreditCost} credits</Text>
+                </Pressable>
+              )}
             </View>
           )}
           {quoteError ? <Text style={styles.doubt}>{quoteError}</Text> : null}
@@ -353,8 +423,20 @@ const styles = StyleSheet.create({
   },
   head: {
     flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
     justifyContent: "space-between",
     gap: 8,
+  },
+  modelChip: {
+    backgroundColor: colors.chip,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  modelChipText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.ink,
   },
   stamp: {
     flex: 1,
@@ -407,18 +489,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-  },
-  frame: {
-    width: 92,
-    aspectRatio: 3 / 4,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 6,
-  },
-  frameText: {
-    fontSize: 13,
-    textAlign: "center",
-    color: colors.ink,
   },
   actions: {
     gap: 8,

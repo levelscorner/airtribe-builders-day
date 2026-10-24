@@ -18,6 +18,9 @@ export const colors = {
 
 export const layout = {
   maxWidth: 440,
+  /** Chat plus a media side panel. Used from 1024px up. */
+  desktop: 1120,
+  side: 380,
   pad: 16,
   hit: 48,
 };

@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import type { ArtefactState, ArtefactSummary, ChatMessage, RegeneratePreviewResponse } from "@chotu/shared";
+import type { ArtefactState, ArtefactSummary, ChatMessage, RegeneratePreviewResponse, VoicePreset } from "@chotu/shared";
+import type { MediaProgressEvent } from "../media-contract";
 import { PlayerCard } from "../screens/PlayerCard";
 import { colors } from "../theme";
 import { ApprovalCard } from "./ApprovalCard";
@@ -19,19 +20,25 @@ interface Actions {
   onNeedCredits: () => void;
 }
 
+interface RowProps {
+  message: ChatMessage;
+  open: boolean;
+  liveState?: ArtefactState;
+  artefact?: ArtefactSummary;
+  progress?: MediaProgressEvent;
+  voices: VoicePreset[];
+  actions: Actions;
+}
+
 const Row = memo(function Row({
   message,
   open,
   liveState,
   artefact,
+  progress,
+  voices,
   actions,
-}: {
-  message: ChatMessage;
-  open: boolean;
-  liveState?: ArtefactState;
-  artefact?: ArtefactSummary;
-  actions: Actions;
-}) {
+}: RowProps) {
   if (message.kind === "text") {
     const mine = message.role === "user";
     return (
@@ -59,6 +66,8 @@ const Row = memo(function Row({
         message={message}
         liveState={liveState ?? message.state}
         artefact={artefact}
+        progress={progress}
+        voices={voices}
         onApprove={() => actions.onApprove(message.artefactId)}
         onReject={(note) => actions.onReject(message.artefactId, note)}
         onPreviewRegenerate={() => actions.onPreviewRegenerate(message.artefactId)}
@@ -88,6 +97,8 @@ const Row = memo(function Row({
 export function MessageList({
   messages,
   artefacts,
+  progress,
+  voices,
   thinking,
   empty,
   pin,
@@ -95,6 +106,8 @@ export function MessageList({
 }: {
   messages: ChatMessage[];
   artefacts: Record<string, ArtefactSummary>;
+  progress: Record<string, MediaProgressEvent>;
+  voices: VoicePreset[];
   thinking: boolean;
   empty: boolean;
   pin: number;
@@ -139,6 +152,8 @@ export function MessageList({
           open={message.kind === "question" && message.id === active}
           liveState={message.kind === "approval" ? artefacts[message.artefactId]?.state : undefined}
           artefact={message.kind === "approval" ? artefacts[message.artefactId] : undefined}
+          progress={message.kind === "approval" ? progress[message.artefactId] : undefined}
+          voices={voices}
           actions={actions}
         />
       ))}

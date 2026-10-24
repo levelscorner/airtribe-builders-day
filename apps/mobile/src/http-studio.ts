@@ -21,8 +21,8 @@ import type {
   RegeneratePreviewResponse,
   RejectArtefactRequest,
   RejectArtefactResponse,
-  SseEvent,
 } from "@chotu/shared";
+import { parseMediaProgress, type StudioEvent } from "./media-contract";
 import type { StudioClient } from "./studio-client";
 
 export class StudioHttpError extends Error {
@@ -82,7 +82,7 @@ export function createHttpStudio(baseUrl = ""): StudioClient {
     return readJson<T>(response);
   }
 
-  async function hydrateChat(chatId: string, onEvent: (event: SseEvent) => void): Promise<void> {
+  async function hydrateChat(chatId: string, onEvent: (event: StudioEvent) => void): Promise<void> {
     try {
       const chat = await api<GetChatResponse>(ApiPaths.chat(chatId));
       onEvent({ type: "stage", videoId: chat.videoId, stage: chat.stage });
@@ -129,7 +129,7 @@ export function createHttpStudio(baseUrl = ""): StudioClient {
         body: JSON.stringify(body),
       });
     },
-    subscribe(chatId: string, onEvent: (event: SseEvent) => void) {
+    subscribe(chatId: string, onEvent: (event: StudioEvent) => void) {
       if (typeof EventSource === "undefined") {
         throw new StudioHttpError("sse", "EventSource unavailable in this runtime");
       }
@@ -146,7 +146,9 @@ export function createHttpStudio(baseUrl = ""): StudioClient {
       if (!openedOnce) void hydrateChat(chatId, onEvent);
       source.onmessage = (message) => {
         try {
-          onEvent(JSON.parse(message.data) as SseEvent);
+          const parsed: unknown = JSON.parse(message.data);
+          const progress = parseMediaProgress(parsed);
+          onEvent(progress ?? (parsed as StudioEvent));
         } catch {
           /* ignore malformed frames */
         }
