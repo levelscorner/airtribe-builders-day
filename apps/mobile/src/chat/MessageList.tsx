@@ -1,12 +1,13 @@
 import { memo, useEffect, useRef } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import type { ArtefactState, ArtefactSummary, ChatMessage, RegeneratePreviewResponse, VoicePreset } from "@chotu/shared";
-import type { MediaProgressEvent } from "../media-contract";
+import type { MediaProgressEvent, RegenerateSceneRequest } from "../media-contract";
 import { PlayerCard } from "../screens/PlayerCard";
 import { colors } from "../theme";
 import { ApprovalCard } from "./ApprovalCard";
 import { openQuestion } from "./open-question";
 import { QuestionCard } from "./QuestionCard";
+import { Storyboard } from "./Storyboard";
 
 interface Actions {
   onOption: (field: string, optionId: string) => void;
@@ -17,6 +18,8 @@ interface Actions {
   onReject: (artefactId: string, note: string) => void;
   onPreviewRegenerate: (artefactId: string) => Promise<RegeneratePreviewResponse>;
   onConfirmRegenerate: (artefactId: string, feedback?: string) => void;
+  onPreviewScene: (artefactId: string, scope: RegenerateSceneRequest) => Promise<RegeneratePreviewResponse>;
+  onConfirmScene: (artefactId: string, scope: RegenerateSceneRequest) => void;
   onNeedCredits: () => void;
 }
 
@@ -162,6 +165,14 @@ export function MessageList({
           Chotu soch raha hai…
         </Text>
       ) : null}
+      <Storyboard
+        artefacts={artefacts}
+        progress={progress}
+        voices={voices}
+        onApprove={actions.onApprove}
+        onPreview={actions.onPreviewScene}
+        onConfirm={actions.onConfirmScene}
+      />
       <View
         onLayout={() => {
           if (count > 0) listRef.current?.scrollToEnd({ animated: false });

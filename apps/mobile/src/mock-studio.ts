@@ -16,7 +16,14 @@ import type {
   VideoSummary,
 } from "@chotu/shared";
 import { readAgentReview, SAMPLE_SCRIPT_REVIEW } from "./agent-review";
-import type { KnownMediaProvider, MediaProgressEvent, MediaProgressStatus, StudioEvent } from "./media-contract";
+import type {
+  KnownMediaProvider,
+  MediaProgressEvent,
+  MediaProgressStatus,
+  RegenerateSceneRequest,
+  StoryboardScene,
+  StudioEvent,
+} from "./media-contract";
 import { readModel, readProvider } from "./media-contract";
 import { applyRejectNote } from "./reject-note";
 import type { StudioClient } from "./studio-client";
@@ -94,6 +101,12 @@ type Listener = (event: StudioEvent) => void;
 const MEDIA_DEFAULTS: Partial<Record<ArtefactKind, { provider: KnownMediaProvider; model: string }>> = {
   image: { provider: "openai", model: "gpt-image-2" },
   clip: { provider: "ark", model: "dreamina-seedance-2-5-260628" },
+};
+
+const SCENE_FACE: Record<"image" | "clip" | "audio", { provider: KnownMediaProvider; model: string; providerLabel: string }> = {
+  image: { provider: "openai", model: "gpt-image-2", providerLabel: "GPT Image 2" },
+  clip: { provider: "ark", model: "dreamina-seedance-2-5-260628", providerLabel: "Seedance 2.5" },
+  audio: { provider: "elevenlabs", model: "eleven_multilingual_v2", providerLabel: "ElevenLabs" },
 };
 
 const MEDIA_KIND: Partial<Record<ArtefactKind, MediaProgressEvent["kind"]>> = {
@@ -179,6 +192,7 @@ export function createMockStudio(options?: {
       type: "media.progress",
       jobId: `job_${artefact.id}`,
       artefactId: artefact.id,
+      sceneId: artefact.sceneId,
       kind,
       status,
       percent,
@@ -188,9 +202,36 @@ export function createMockStudio(options?: {
     };
   }
 
-  function emitMedia(chat: ChatRuntime, artefact: ArtefactSummary, status: MediaProgressStatus, percent?: number): void {
+  function emitMedia(
+    chat: ChatRuntime,
+    artefact: ArtefactSummary,
+    status: MediaProgressStatus,
+    percent?: number,
+    error?: string,
+  ): void {
     const event = mediaEvent(artefact, status, percent);
-    if (event) emit(chat, event);
+    if (!event) return;
+    if (error) event.error = error;
+    emit(chat, event);
+  }
+
+  function staggerMedia(chat: ChatRuntime, artefact: ArtefactSummary, sceneIndex: number, mode: "done" | "fail"): void {
+    const step = delayMs === 0 ? 0 : Math.max(220, Math.floor(delayMs / 2));
+    const start = Math.max(0, sceneIndex - 1) * step;
+    void (async () => {
+      await pause(start);
+      emitMedia(chat, artefact, "queued");
+      await pause(step);
+      emitMedia(chat, artefact, "generating", Math.min(90, 20 + sceneIndex * 10));
+      await pause(step);
+      if (mode === "fail") {
+        emitMedia(chat, artefact, "failed", undefined, "VO line drop");
+        return;
+      }
+      emitMedia(chat, artefact, "generating", 80);
+      await pause(step);
+      emitMedia(chat, artefact, "done");
+    })().catch((error: unknown) => emitError(chat, error));
   }
 
   function emit(chat: ChatRuntime, event: Parameters<Listener>[0]): void {
@@ -340,14 +381,15 @@ export function createMockStudio(options?: {
 
   async function maybeAdvance(chat: ChatRuntime): Promise<void> {
     const bundle = mustVideo(chat.videoId);
-    if (!stageSettled(bundle)) return;
-    const next = NEXT_STAGE[bundle.video.stage];
-    if (!next || next === bundle.video.stage) return;
-    if (next === "done") {
-      await complete(chat, bundle);
-      return;
+    while (stageSettled(bundle)) {
+      const next = NEXT_STAGE[bundle.video.stage];
+      if (!next || next === bundle.video.stage) return;
+      if (next === "done") {
+        await complete(chat, bundle);
+        return;
+      }
+      await beginStage(chat, bundle, next);
     }
-    await beginStage(chat, bundle, next);
   }
 
   async function complete(chat: ChatRuntime, bundle: VideoBundle): Promise<void> {
@@ -408,7 +450,8 @@ export function createMockStudio(options?: {
     });
     await wait();
     const cards = cardsForStage(bundle, stage);
-    for (const card of cards) {
+    for (let index = 0; index < cards.length; index += 1) {
+      const card = cards[index]!;
       const artefact = addArtefact(bundle, card);
       if (artefact.kind === "script") {
         const review = readAgentReview(artefact.payload);
@@ -417,11 +460,23 @@ export function createMockStudio(options?: {
           artefact.payload.agentReview = review;
         }
       }
-      emitMedia(chat, artefact, "queued");
-      emitMedia(chat, artefact, "generating", 40);
-      emitMedia(chat, artefact, "generating", 80);
-      emitMedia(chat, artefact, "done");
-      publishArtefact(chat, artefact, card.title);
+      const beat = artefact.kind === "image" || artefact.kind === "clip" || artefact.kind === "audio";
+      const sceneIndex = storyboardIndex(artefact) ?? index + 1;
+      if (beat && !(artefact.kind === "image" && sceneIndex === 1)) {
+        staggerMedia(chat, artefact, sceneIndex, "done");
+      } else {
+        emitMedia(chat, artefact, "queued");
+        emitMedia(chat, artefact, "generating", 40);
+        emitMedia(chat, artefact, "generating", 80);
+        emitMedia(chat, artefact, "done");
+      }
+      if (beat) emit(chat, { type: "artefact", artefact: { ...artefact, payload: { ...artefact.payload } } });
+      else publishArtefact(chat, artefact, card.title);
+    }
+    if (stage === "images") {
+      seedStoryboardMedia(chat, bundle);
+      const board = storyboardHost(bundle);
+      if (board) emit(chat, { type: "artefact", artefact: { ...board, payload: { ...board.payload } } });
     }
     emitText(chat, "assistant", "Dekho. Theek lage to Approve, note ke saath Reject, ya Regenerate.");
   }
@@ -534,14 +589,140 @@ export function createMockStudio(options?: {
             durationMs,
             caption: "Captions scene narration se aati hain. Yeh mock frame hai.",
             swatch: "clay",
+            url: `mock://final/${bundle.video.id}.mp4`,
+            downloadUrl: `mock://final/${bundle.video.id}.mp4`,
           },
         },
       ];
     }
-    if (stage === "prompts" || stage === "images" || stage === "clips" || stage === "audio") {
+    if (stage === "prompts") {
       return bundle.scenes.map((scene) => sceneCard(bundle, stage, scene));
     }
+    if (stage === "images" || stage === "clips" || stage === "audio") {
+      return storyboardCards(bundle, stage);
+    }
     return [];
+  }
+
+  function resolveSceneTarget(artefact: ArtefactSummary, scope?: RegenerateSceneRequest): ArtefactSummary {
+    if (!scope) return artefact;
+    const kind = scope.target === "voice" ? "audio" : scope.target;
+    const bundle = mustVideo(artefact.videoId);
+    const match = bundle.artefacts.find((item) => item.sceneId === scope.sceneId && item.kind === kind);
+    if (!match) throw new StudioMockError("no_scene", "Yeh scene nahi mila.");
+    return match;
+  }
+
+  function storyboardIndex(artefact: ArtefactSummary): number | undefined {
+    const scene = artefact.payload.scene;
+    if (!scene || typeof scene !== "object" || !("index" in scene)) return undefined;
+    const index = (scene as { index?: unknown }).index;
+    return typeof index === "number" ? index : undefined;
+  }
+
+  function storyboardHost(bundle: VideoBundle): ArtefactSummary | undefined {
+    return bundle.artefacts.find((item) => item.payload.storyboard === true);
+  }
+
+  function makeStoryboardScenes(topic: string): StoryboardScene[] {
+    const topicLine = topic.trim() || "aaj ka topic";
+    const drafts: Array<Omit<StoryboardScene, "id">> = [
+      {
+        index: 1,
+        durationSec: 5,
+        imagePrompt: `Wide shot of ${topicLine}. Bright 2D, no text.`,
+        motionPrompt: `Slow push-in. ${topicLine}.`,
+        vo: `${topicLine}? Ek sawal se shuru.`,
+        voiceId: VOICES[0]!.id,
+      },
+      {
+        index: 2,
+        durationSec: 10,
+        imagePrompt: `Detail of ${topicLine}. Same characters.`,
+        motionPrompt: "Hold, then a small nod. Same face.",
+        vo: "Teen baatein, chhote vakya.",
+        voiceId: VOICES[1]!.id,
+      },
+      {
+        index: 3,
+        durationSec: 5,
+        imagePrompt: `An example frame for ${topicLine}.`,
+        motionPrompt: "Cut to the example. Same clothes.",
+        vo: "Ek example, seedha.",
+        voiceId: VOICES[2]!.id,
+      },
+      {
+        index: 4,
+        durationSec: 10,
+        imagePrompt: `End frame for ${topicLine}. Empty background.`,
+        motionPrompt: "Pull back and hold.",
+        vo: "Ant mein ek sawal.",
+        voiceId: VOICES[3]!.id,
+      },
+    ];
+    return drafts.map((draft) => ({ ...draft, id: nid("sb") }));
+  }
+
+  function ensureStoryboard(bundle: VideoBundle): { id: string; scenes: StoryboardScene[] } {
+    const existing = storyboardHost(bundle);
+    if (existing && Array.isArray(existing.payload.scenes)) {
+      return { id: existing.id, scenes: existing.payload.scenes as StoryboardScene[] };
+    }
+    const scenes = makeStoryboardScenes(chatTopic(bundle));
+    const artefact = addArtefact(bundle, {
+      kind: "prompt",
+      state: "approved",
+      payload: { storyboard: true, scenes, title: "Storyboard" },
+    });
+    return { id: artefact.id, scenes };
+  }
+
+  function sceneMediaCard(
+    storyboardId: string,
+    kind: "image" | "clip" | "audio",
+    scene: StoryboardScene,
+  ): { kind: ArtefactKind; sceneId: string; title: string; payload: Record<string, unknown> } {
+    const swatches = ["marigold", "indigo", "sage", "clay"] as const;
+    const face = SCENE_FACE[kind];
+    return {
+      kind,
+      sceneId: scene.id,
+      title: `${kind === "audio" ? "VO" : kind} · Scene ${scene.index}`,
+      payload: {
+        ...face,
+        scene,
+        storyboardId,
+        idx: scene.index,
+        swatch: swatches[(scene.index - 1) % swatches.length] ?? "marigold",
+        caption: scene.vo,
+        line: scene.vo,
+        durationSec: scene.durationSec,
+        url: `mock://${kind}/${scene.index}`,
+      },
+    };
+  }
+
+  function storyboardCards(
+    bundle: VideoBundle,
+    stage: "images" | "clips" | "audio",
+  ): Array<{ kind: ArtefactKind; sceneId?: string; title: string; payload: Record<string, unknown> }> {
+    const board = ensureStoryboard(bundle);
+    const kind = stage === "images" ? "image" : stage === "clips" ? "clip" : "audio";
+    if (bundle.artefacts.some((item) => item.kind === kind && item.sceneId)) return [];
+    return board.scenes.map((scene) => sceneMediaCard(board.id, kind, scene));
+  }
+
+  function seedStoryboardMedia(chat: ChatRuntime, bundle: VideoBundle): void {
+    const board = ensureStoryboard(bundle);
+    for (const kind of ["clip", "audio"] as const) {
+      if (bundle.artefacts.some((item) => item.kind === kind && item.sceneId)) continue;
+      for (const scene of board.scenes) {
+        const artefact = addArtefact(bundle, sceneMediaCard(board.id, kind, scene));
+        emit(chat, { type: "artefact", artefact: { ...artefact, payload: { ...artefact.payload } } });
+        const fail = kind === "audio" && scene.index === 4;
+        staggerMedia(chat, artefact, scene.index, fail ? "fail" : "done");
+      }
+    }
   }
 
   function sceneCard(
@@ -1060,12 +1241,15 @@ export function createMockStudio(options?: {
       return { artefact: snapshot };
     },
 
-    async regenerateArtefact(artefactId, confirm, feedback) {
+    async regenerateArtefact(artefactId, confirm, feedback, scope) {
       const current = mustUser();
-      const { artefact, chat } = mustArtefact(artefactId);
+      const located = mustArtefact(artefactId);
+      const artefact = resolveSceneTarget(located.artefact, scope);
+      const chat = mustChat(mustVideo(artefact.videoId).video.chatId);
+      const note = scope?.feedback?.trim() || feedback?.trim();
       if (confirm === 0) {
         return {
-          artefactId,
+          artefactId: artefact.id,
           creditCost: artefact.creditCost,
           balance: current.creditBalance,
           canAfford: current.creditBalance >= artefact.creditCost,
@@ -1105,9 +1289,9 @@ export function createMockStudio(options?: {
         emitMedia(chat, artefact, "done");
         artefact.version += 1;
         artefact.state = "awaiting_approval";
-        artefact.payload = bumpPayload(artefact.kind, artefact.payload, artefact.version, feedback);
+        artefact.payload = bumpPayload(artefact.kind, artefact.payload, artefact.version, note);
         if (artefact.kind === "script") {
-          applyScriptFeedback(artefact.payload, feedback);
+          applyScriptFeedback(artefact.payload, note);
           syncScriptScenes(artefact);
         }
         artefact.updatedAt = now();
@@ -1115,7 +1299,7 @@ export function createMockStudio(options?: {
         emit(chat, { type: "artefact", artefact: { ...artefact, payload: { ...artefact.payload } } });
       })().catch((error: unknown) => emitError(chat, error));
       return {
-        artefactId,
+        artefactId: artefact.id,
         state: "generating" as const,
         charged,
         balance: current.creditBalance,
