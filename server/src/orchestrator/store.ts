@@ -513,6 +513,13 @@ export async function setVideoCast(
   }
 }
 
+export async function updateCastSheet(db: SqlClient, castId: string, sheetUrl: string): Promise<void> {
+  await db.query(
+    `UPDATE cast_members SET sheet_url = $2, updated_at = now() WHERE id = $1`,
+    [castId, sheetUrl],
+  );
+}
+
 export async function listCastMembers(db: SqlClient, ids?: string[]): Promise<CastMember[]> {
   const result = ids?.length
     ? await db.query("SELECT * FROM cast_members WHERE id = ANY($1::text[])", [ids])

@@ -108,11 +108,9 @@ const LABEL_RULES: ReadonlyArray<{
 }> = [
   { provider: "openai", modelIncludes: "gpt-image-2", label: "GPT Image 2" },
   { provider: "ark", modelIncludes: "seedance-2-5", label: "Seedance 2.5" },
-  { modelIncludes: "qwen-image", label: "Qwen Image" },
   { modelIncludes: "seedance-2.0", label: "Seedance 2.0" },
   { modelEquals: "eleven_multilingual_v2", label: "ElevenLabs" },
   { modelEquals: "eleven_flash_v2_5", label: "ElevenLabs" },
-  { provider: "higgsfield", providerOnly: true, label: "Higgsfield" },
   { provider: "elevenlabs", providerOnly: true, label: "ElevenLabs" },
   { provider: "mock", providerOnly: true, label: "Mock" },
   { provider: "kenburns", providerOnly: true, label: "Ken Burns" },
@@ -206,7 +204,21 @@ function matchLabel(
   return undefined;
 }
 
+const HIDDEN_PROVIDER = /higgsfield|qwen|seedream|openart/i;
+
+function hiddenProviderText(value: string | undefined): boolean {
+  return Boolean(value && HIDDEN_PROVIDER.test(value));
+}
+
 function labelFrom(fields: MediaFields): string | undefined {
+  const hidden =
+    hiddenProviderText(fields.provider) ||
+    hiddenProviderText(fields.model) ||
+    hiddenProviderText(fields.providerLabel);
+  if (hidden) {
+    if (fields.providerLabel && !hiddenProviderText(fields.providerLabel)) return fields.providerLabel;
+    return undefined;
+  }
   const mapped = matchLabel(fields.provider, fields.model);
   if (mapped) return mapped;
   if (fields.providerLabel) return fields.providerLabel;
@@ -222,9 +234,9 @@ export function providerChipLabel(source: unknown): string | undefined {
   const row = record(source);
   if (!row) return undefined;
   const top = fieldsAt(row);
-  if (top.providerLabel) return top.providerLabel;
-  if (top.provider || top.model)
-    return labelFrom({ provider: top.provider, model: top.model });
+  if (top.providerLabel && !hiddenProviderText(top.providerLabel)) return top.providerLabel;
+  if (hiddenProviderText(top.providerLabel) && !top.provider && !top.model) return undefined;
+  if (top.provider || top.model) return labelFrom({ provider: top.provider, model: top.model });
   return labelFrom(fieldsAt(record(row.payload)));
 }
 
@@ -331,7 +343,8 @@ function readSceneMedia(item: StoryboardRow): SceneMediaArtefact | undefined {
   const provider = knownProvider(textField(item.payload, "provider"));
   const model = textField(item.payload, "model");
   if (!provider || !model) return undefined;
-  const providerLabel = textField(item.payload, "providerLabel") ?? providerChipLabel(item) ?? model;
+  const chip = providerChipLabel(item);
+  const providerLabel = chip ?? (HIDDEN_PROVIDER.test(model) ? kind : model);
   if (!ARTEFACT_STATES.has(item.state as ArtefactState)) return undefined;
   return {
     id: item.id,

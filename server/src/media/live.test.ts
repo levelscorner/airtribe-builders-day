@@ -403,6 +403,26 @@ test("voice gen posts with-timestamps and writes the mp3", async () => {
   assert.equal(sampleBody.language_code, "hi");
 });
 
+test("live voice without PUBLIC_BASE_URL points ffmpeg at the saved file", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "chotu-voice-local-"));
+  const audio = Buffer.from("local-audio");
+  const fetch: FetchLike = async () =>
+    json(200, {
+      audio_base64: audio.toString("base64"),
+      alignment: {
+        characters: ["H", "i"],
+        character_start_times_seconds: [0, 0.1],
+        character_end_times_seconds: [0.1, 0.25],
+      },
+    });
+  const voice = createVoiceGen({ VOICE_MOCK: "0", ELEVENLABS_API_KEY: "test-eleven", MEDIA_DIR: dir }, { fetch });
+  const line = await voice.generate({ text: "Hi", voiceId: "T536A2SFCG4AEDVTRucQ", language: "hi" });
+  const filename = line.url.split("/").pop() ?? "";
+  assert.equal(line.url, join(dir, filename));
+  assert.equal(line.url.startsWith("http"), false);
+  assert.deepEqual(readFileSync(line.url), audio);
+});
+
 test("a voice response without alignment fails the job", async () => {
   const fetch: FetchLike = async () => json(200, { audio_base64: Buffer.from("x").toString("base64") });
   const voice = createVoiceGen(
@@ -446,6 +466,6 @@ test("polling gives up when the request never finishes", async () => {
 test("creating image ports does not require unrelated clip or voice credentials", () => {
   const ports = createMediaPorts({ MOCK: "0", IMAGE_PROVIDER: "openai", OPENAI_API_KEY: "sk-test-openai" });
   assert.equal(ports.images.mode, "live");
-  assert.throws(() => ports.clips, /ARK_API_KEY/);
-  assert.throws(() => ports.voice, /ELEVENLABS_API_KEY/);
+  assert.equal(ports.clips.mode, "mock");
+  assert.equal(ports.voice.mode, "mock");
 });
