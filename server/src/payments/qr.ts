@@ -149,6 +149,11 @@ export function createQrPayments(input: {
       return;
     }
     try {
+      const taken = await input.db.query<{ id: string }>(
+        `SELECT id FROM payments WHERE provider_ref = $1 AND id <> $2 LIMIT 1`,
+        [utr, row.id],
+      );
+      if (taken.rows[0]) throw new PaymentError("That UTR is already used", 409, "duplicate_utr");
       const updated = await input.db.query<{ id: string }>(
         `UPDATE payments
             SET provider_ref = $2, status = 'pending_verification', updated_at = now()
@@ -305,4 +310,7 @@ export async function widenPaymentStatus(db: Db): Promise<void> {
   await db.query(`ALTER TABLE payments ADD CONSTRAINT payments_status_check CHECK (status IN (
     'pending', 'paid', 'failed', 'mocked', 'pending_verification', 'rejected'
   ))`);
+  await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS payments_provider_ref_key
+    ON payments (provider_ref)
+    WHERE provider_ref IS NOT NULL`);
 }

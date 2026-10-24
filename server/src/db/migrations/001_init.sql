@@ -187,6 +187,10 @@ CREATE TABLE IF NOT EXISTS payments (
   updated_at      timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS payments_provider_ref_key
+  ON payments (provider_ref)
+  WHERE provider_ref IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS events (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id         uuid REFERENCES users(id),
