@@ -12,6 +12,7 @@
     "lint": "npm --prefix server run lint && npm --prefix app run lint",
     "test:mock": "npm --prefix server run test:mock",
     "test:creative": "npm --prefix server run test:creative",
+    "sample:creative": "npm --prefix server run sample:creative",
     "install:all": "npm --prefix server install && npm --prefix app install"
   }
 }
