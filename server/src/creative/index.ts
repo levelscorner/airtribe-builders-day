@@ -45,3 +45,21 @@ export {
   getPresetCast,
   getPresets,
 } from "./genres/load.js";
+export { stripBlockedNames, traitsFromArtText } from "./intake/art-style.js";
+export {
+  applyAnswer,
+  applyDefaults,
+  briefFromMessage,
+  guessGenre,
+  nextQuestion,
+  questionsFor,
+  toQuestionMessage,
+} from "./intake/intake.js";
+export type { IntakeAnswer } from "./intake/intake.js";
+export {
+  feedbackOf,
+  noteValue,
+  productOf,
+  topicOf,
+  withFeedback,
+} from "./intake/notes.js";
