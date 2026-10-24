@@ -65,10 +65,9 @@ async function withoutConsole<T>(run: () => Promise<T>): Promise<T> {
 }
 
 test("remote statuses are copied onto the review", async () => {
-  const cases: Array<{ status: "completed" | "hitl_triggered" | "budget_exceeded"; confidence: number; output: string | string[] }> = [
+  const cases: Array<{ status: "completed" | "hitl_triggered"; confidence: number; output: string | string[] }> = [
     { status: "completed", confidence: 0.91, output: ["Shorten the hook to one line."] },
     { status: "hitl_triggered", confidence: 0.4, output: "Check the claim." },
-    { status: "budget_exceeded", confidence: 0, output: "Stopped before scene 3.\nRetry the ending." },
   ];
   for (const item of cases) {
     const { fetch: fetchImpl, calls } = jsonFetch({
@@ -83,16 +82,29 @@ test("remote statuses are copied onto the review", async () => {
     assert.equal(review.status, item.status);
     assert.equal(review.confidence, item.confidence);
     assert.deepEqual(review.output, item.output);
+    assert.equal(review.warning, undefined);
     assert.equal(scriptArtefactState(review), "awaiting_approval");
-    if (item.status === "budget_exceeded") {
-      assert.equal(review.warning, "AgenticOrg review stopped because the budget was exceeded");
-    } else {
-      assert.equal(review.warning, undefined);
-    }
     const raw = JSON.stringify(review);
     assert.equal(raw.includes(KEY), false);
     assert.equal(raw.toLowerCase().includes("authorization"), false);
   }
+});
+
+test("budget exceeded falls back to the mock review", async () => {
+  const { fetch: fetchImpl, calls } = jsonFetch({
+    status: "budget_exceeded",
+    confidence: 0,
+    output: "Stopped before scene 3.\nRetry the ending.",
+  });
+  const review = await withoutConsole(() => runScriptReview({ ...base, env: liveEnv(), fetch: fetchImpl }));
+  const mock = await runScriptReview({ ...base, env: { MOCK: "1" } });
+  assert.equal(calls.length, 1);
+  assert.equal(review.status, "mocked");
+  assert.equal(review.confidence, mock.confidence);
+  assert.deepEqual(review.output, mock.output);
+  assert.equal(review.warning, "AgenticOrg review stopped because the budget was exceeded");
+  assert.equal(scriptArtefactState(review), "awaiting_approval");
+  assert.equal(JSON.stringify(review).includes(KEY), false);
 });
 
 test("http 200 status failed falls back to the mock review", async () => {
@@ -158,7 +170,7 @@ test("an error string that echoes the key is redacted", async () => {
   assert.equal(JSON.stringify(review.output).includes(KEY), false);
 });
 
-test("timeout and network errors are non-blocking failures", async () => {
+test("timeout and network errors fall back to the mock review", async () => {
   const hanging: FetchLike = (_url, init) =>
     new Promise((_resolve, reject) => {
       const signal = init?.signal;
@@ -174,8 +186,10 @@ test("timeout and network errors are non-blocking failures", async () => {
       if (signal.aborted) fail();
       else signal.addEventListener("abort", fail, { once: true });
     });
+  const mock = await runScriptReview({ ...base, env: { MOCK: "1" } });
   const timed = await runScriptReview({ ...base, env: liveEnv(), fetch: hanging, timeoutMs: 30 });
-  assert.equal(timed.status, "failed");
+  assert.equal(timed.status, "mocked");
+  assert.deepEqual(timed.output, mock.output);
   assert.equal(timed.warning, "AgenticOrg review timed out");
   assert.equal(scriptArtefactState(timed), "awaiting_approval");
 
@@ -183,7 +197,8 @@ test("timeout and network errors are non-blocking failures", async () => {
     throw new TypeError("network down");
   };
   const dropped = await runScriptReview({ ...base, env: liveEnv(), fetch: offline });
-  assert.equal(dropped.status, "failed");
+  assert.equal(dropped.status, "mocked");
+  assert.deepEqual(dropped.output, mock.output);
   assert.equal(dropped.warning, "AgenticOrg review could not be reached");
   assert.equal(dropped.warning?.includes(KEY), false);
 });
@@ -198,7 +213,9 @@ test("http failures and unreadable bodies do not throw", async () => {
       return new Response("not-json", { status: response.status });
     },
   });
-  assert.equal(http.status, "failed");
+  const mock = await runScriptReview({ ...base, env: { MOCK: "1" } });
+  assert.equal(http.status, "mocked");
+  assert.deepEqual(http.output, mock.output);
   assert.equal(http.warning, "AgenticOrg review failed");
 
   const { fetch: failedHttp } = jsonFetch(
@@ -206,12 +223,14 @@ test("http failures and unreadable bodies do not throw", async () => {
     500,
   );
   const httpFailed = await runScriptReview({ ...base, env: liveEnv(), fetch: failedHttp });
-  assert.equal(httpFailed.status, "failed");
+  assert.equal(httpFailed.status, "mocked");
+  assert.deepEqual(httpFailed.output, mock.output);
   assert.equal(httpFailed.warning, "OpenAIInvalidRequestError");
 
   const { fetch: weird } = jsonFetch({ status: "running" });
   const unknown = await runScriptReview({ ...base, env: liveEnv(), fetch: weird });
-  assert.equal(unknown.status, "failed");
+  assert.equal(unknown.status, "mocked");
+  assert.deepEqual(unknown.output, mock.output);
   assert.equal(unknown.warning, "AgenticOrg review returned an unreadable status");
 });
 

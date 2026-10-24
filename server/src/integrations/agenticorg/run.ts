@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { AgentReview, Brief } from "@chotu/shared";
-import { remoteStatus, reviewFromRemote } from "./parse.js";
+import { reviewFromRemote } from "./parse.js";
 
 export const AGENTICORG_ORIGIN = "https://agenticorg.hackathon.pinelabs.com";
 /** Spec: abort the run call after 120 seconds. */
@@ -50,9 +50,21 @@ export function mockAgentReview(task: string): AgentReview {
   };
 }
 
+/** `failed` and `budget_exceeded` stay non-blocking: mock review plus the warning. */
+function soften(task: string, review: AgentReview): AgentReview {
+  if (review.status !== "failed" && review.status !== "budget_exceeded") return review;
+  const warning =
+    review.warning?.trim() ||
+    (review.status === "budget_exceeded"
+      ? "AgenticOrg review stopped because the budget was exceeded"
+      : "AgenticOrg review failed");
+  return { ...mockAgentReview(task), warning };
+}
+
 /**
- * Review a script with AgenticOrg. Never throws: timeouts and network errors
- * come back as `failed` plus a warning. Does not log the request or the key.
+ * Review a script with AgenticOrg. Never throws. `failed` and `budget_exceeded`
+ * (HTTP 200 `status: failed` included, plus timeouts and network errors) come
+ * back as the mock review plus a warning. Does not log the request or the key.
  */
 export async function runScriptReview(input: ScriptReviewInput): Promise<AgentReview> {
   const env = input.env ?? process.env;
@@ -69,7 +81,7 @@ export async function runScriptReview(input: ScriptReviewInput): Promise<AgentRe
       timeoutMs: input.timeoutMs ?? AGENTICORG_TIMEOUT_MS,
     });
   } catch {
-    return { status: "failed", output: "", warning: "AgenticOrg review could not be reached" };
+    return soften(task, { status: "failed", output: "", warning: "AgenticOrg review could not be reached" });
   }
 }
 
@@ -98,29 +110,22 @@ async function postRun(input: {
     });
     const text = await response.text();
     const body = parseJson(text);
-    // A 200 whose agent status is failed still carries a provider error.
-    // Keep the pipeline moving and attach the deterministic mock instead.
-    if (response.ok && remoteStatus(body) === "failed") {
-      const parsed = reviewFromRemote(body, input.apiKey);
-      return {
-        ...mockAgentReview(input.task),
-        warning: parsed.warning?.trim() || "AgenticOrg review failed",
-      };
+    if (!response.ok && (body === undefined || typeof body !== "object")) {
+      return soften(input.task, { status: "failed", output: "", warning: "AgenticOrg review failed" });
     }
-    if (!response.ok) {
-      if (body && typeof body === "object") {
-        const parsed = reviewFromRemote(body, input.apiKey);
-        if (parsed.status !== "failed" || parsed.warning !== "AgenticOrg review returned an unreadable status") {
-          return parsed;
-        }
-      }
-      return { status: "failed", output: "", warning: "AgenticOrg review failed" };
+    if (body === undefined) {
+      return soften(input.task, {
+        status: "failed",
+        output: "",
+        warning: "AgenticOrg review returned an unreadable status",
+      });
     }
-    if (body === undefined) return { status: "failed", output: "", warning: "AgenticOrg review returned an unreadable status" };
-    return reviewFromRemote(body, input.apiKey);
+    // `failed` and `budget_exceeded`, including HTTP 200 `status: failed`,
+    // become the mock review plus a warning. The script stage still continues.
+    return soften(input.task, reviewFromRemote(body, input.apiKey));
   } catch (error) {
-    if (isAbort(error)) return { status: "failed", output: "", warning: "AgenticOrg review timed out" };
-    return { status: "failed", output: "", warning: "AgenticOrg review could not be reached" };
+    if (isAbort(error)) return soften(input.task, { status: "failed", output: "", warning: "AgenticOrg review timed out" });
+    return soften(input.task, { status: "failed", output: "", warning: "AgenticOrg review could not be reached" });
   } finally {
     clearTimeout(timer);
   }
