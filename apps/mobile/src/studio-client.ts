@@ -20,8 +20,8 @@ import type {
   RegeneratePreviewResponse,
   RejectArtefactRequest,
   RejectArtefactResponse,
-  SseEvent,
 } from "@chotu/shared";
+import type { StudioEvent } from "./media-contract";
 
 /**
  * Client surface for docs/14 REST + SSE.
@@ -35,12 +35,13 @@ export interface StudioClient {
   listMessages(chatId: string): Promise<ListMessagesResponse>;
   postMessage(chatId: string, body: PostMessageRequest): Promise<PostMessageResponse>;
   /** In-process stand-in for GET /v1/chats/:id/events. No socket is opened. */
-  subscribe(chatId: string, onEvent: (event: SseEvent) => void): () => void;
+  subscribe(chatId: string, onEvent: (event: StudioEvent) => void): () => void;
   approveArtefact(artefactId: string): Promise<ApproveArtefactResponse>;
   rejectArtefact(artefactId: string, body: RejectArtefactRequest): Promise<RejectArtefactResponse>;
   regenerateArtefact(
     artefactId: string,
     confirm: 0 | 1,
+    feedback?: string,
   ): Promise<RegeneratePreviewResponse | RegenerateConfirmResponse>;
   approveAllRemaining(videoId: string): Promise<ApproveAllRemainingResponse>;
   listCast(): Promise<ListCastResponse>;
