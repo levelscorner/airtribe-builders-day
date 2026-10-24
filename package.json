@@ -13,6 +13,7 @@
     "test:mock": "npm --prefix server run test:mock",
     "test:creative": "npm --prefix server run test:creative",
     "sample:creative": "npm --prefix server run sample:creative",
+    "test:media": "npm --prefix server run test:media",
     "install:all": "npm --prefix server install && npm --prefix app install"
   }
 }

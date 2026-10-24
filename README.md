@@ -4,6 +4,32 @@ Documentation for the ideas Abhinav is keeping in play for **Airtribe AI Builder
 
 Four ideas stay first-class in the portfolio. A short backlog records earlier demo shapes that are still available if a booth challenge or the team’s skills pull that way.
 
+## Chotu Studio media ports
+
+Neptune's adapters live in `server/src/media`. They implement `ImageGen`, `ClipGen`, and `VoiceGen` from [`packages/shared/types.ts`](packages/shared/types.ts). `createMediaPorts(env)` returns those ports plus a cast reference adapter. `MOCK=1` completes a job immediately with the same job fields the live adapters use (`jobId`, `provider`, `status`, `result`, `error`, `costCredits`, `idempotencyKey`) and a placeholder file under `server/public/mock/`.
+
+Cast stays REST-only. Higgsfield Reference Elements are not on the public REST API, so `higgsfieldElementId` is `ref:` plus the encoded face-anchor URL. Keyframes call `alibaba/qwen-image-3/edit` with that anchor and the identity text. A scene with no cast calls `alibaba/qwen-image-3/text-to-image`. One character clip calls `bytedance/seedance-2.0/image-to-video` from the approved keyframe. Two or more characters call `bytedance/seedance-2.0/reference-to-video`. `generate_audio` is false because ElevenLabs owns the soundtrack. An MCP Elements adapter can replace `createCastAdapter` later without renaming the field.
+
+Voice presets are provisional Hindi library ids (Mini, Chintu, Riya, Narrator). Final lines use `eleven_multilingual_v2`. Cast-gate samples use `eleven_flash_v2_5`. Both go through `/v1/text-to-speech/{voice_id}/with-timestamps`, and the result includes character alignment in milliseconds for captions. Replace the catalogue with `VOICE_PRESETS_JSON` after the voices are confirmed in the ElevenLabs account.
+
+`npm run test:media` runs the ports with `MOCK=1`.
+
+| Variable | Role |
+|---|---|
+| `MOCK` | `1` mocks ImageGen, ClipGen, VoiceGen, and the cast adapter. No provider calls. |
+| `IMAGE_MOCK`, `CLIP_MOCK`, `VOICE_MOCK`, `CAST_MOCK` | Per-port override. `1` forces mock, `0` forces the live adapter. |
+| `HIGGSFIELD_API_KEY` | Higgsfield REST credential as `KEY_ID:KEY_SECRET`. Server-side only. `HF_CREDENTIALS` or `HF_KEY` are the same shape. `HF_API_KEY_ID` and `HF_API_KEY_SECRET` are the split form. Sent as `Authorization: Key ID:SECRET`. |
+| `ELEVENLABS_API_KEY` | ElevenLabs `xi-api-key`. Server-side only. |
+| `VOICE_PRESETS_JSON` | JSON array that replaces the provisional presets. Each item needs `id` and `elevenlabsVoiceId`. |
+| `CLIP_RESOLUTION` | Seedance tier when the clip port has no resolution field. `480p`, `720p` (default), `1080p`, or `4k`. |
+| `PUBLIC_BASE_URL` | Prefix for mock and stored media URLs. |
+| `MEDIA_CONCURRENCY` | Higgsfield submit limit. Default `4`. Polling does not take a slot. |
+| `MEDIA_DIR` | Directory for live voice bytes. Mock mode does not write it. |
+
+Image credit placeholders on the job are 8 for a still, 40 for a clip, 5 for a final line, and 2 for a voice sample. They are not Higgsfield console prices. Mars replaces them with the ledger quote.
+
+The older `server/src/visuals` path still talks to Higgsfield over MCP for Chotu mini. New studio work should use `server/src/media` and the API key.
+
 ## Saturday primary build
 
 Today’s room demo is specified in **[docs/core](docs/core/CHECKLIST.md)**: a vernacular Learning coach. Five drills, tap-to-play voice, typing that always works, a scorecard in Replit DB. Public mobile URL by about 16:00 IST. About 20 users before 19:30. The Chotu kids version in [docs/04](docs/04-chotuchotu-studio.md) opens only if that main path is live by 14:00 IST.
