@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { ApprovalCardMessage, ArtefactState, RegeneratePreviewResponse } from "@chotu/shared";
 import { MockMeter } from "../screens/PlayerCard";
-import { colors, layout } from "../theme";
+import { colors, hitSlop, layout } from "../theme";
 import { KIND_LABEL, STAGE_LABEL } from "./labels";
 
 function str(value: unknown): string | undefined {
@@ -171,8 +171,8 @@ export function ApprovalCard({
   const version = num(message.preview.version) ?? 1;
   const rejectionNote = str(message.preview.rejectionNote);
   const generating = liveState === "generating";
-  const approved = liveState === "approved" || message.state === "approved";
-  const rejected = liveState === "rejected" || message.state === "rejected";
+  const approved = !generating && (liveState === "approved" || message.state === "approved");
+  const rejected = !generating && (liveState === "rejected" || message.state === "rejected");
   const waiting = !approved && !rejected && !generating;
   const stateWord = generating ? "generating" : approved ? "approved" : rejected ? "rejected" : "waiting";
 
@@ -194,7 +194,13 @@ export function ApprovalCard({
       {waiting || rejected ? (
         <View style={styles.actions} key={`actions-${version}`}>
           {waiting ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Approve" onPress={onApprove} style={styles.primary}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Approve ${message.title}`}
+              hitSlop={hitSlop}
+              onPress={onApprove}
+              style={styles.primary}
+            >
               <Text style={styles.primaryText}>Approve</Text>
             </Pressable>
           ) : null}
@@ -206,12 +212,14 @@ export function ApprovalCard({
                 placeholder="Kya badalna hai?"
                 placeholderTextColor={colors.inkSoft}
                 style={styles.input}
-                accessibilityLabel="Reject note"
+                accessibilityLabel={`Reject note for ${message.title}`}
               />
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Reject"
+                accessibilityLabel={`Reject ${message.title}`}
+                accessibilityState={{ disabled: !note.trim() }}
                 disabled={!note.trim()}
+                hitSlop={hitSlop}
                 onPress={() => {
                   if (!note.trim()) return;
                   onReject(note.trim());
@@ -224,7 +232,13 @@ export function ApprovalCard({
               </Pressable>
             </View>
           ) : waiting ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Reject" onPress={() => setRejecting(true)} style={styles.secondary}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Reject ${message.title}`}
+              hitSlop={hitSlop}
+              onPress={() => setRejecting(true)}
+              style={styles.secondary}
+            >
               <Text style={styles.secondaryText}>Reject</Text>
             </Pressable>
           ) : null}
@@ -237,24 +251,32 @@ export function ApprovalCard({
               {quote.canAfford ? (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Confirm regenerate"
+                  accessibilityLabel={`Haan, ${quote.creditCost} credits kaato, ${message.title}`}
+                  hitSlop={hitSlop}
                   onPress={() => {
                     setQuote(null);
                     onConfirmRegenerate();
                   }}
                   style={styles.primary}
                 >
-                  <Text style={styles.primaryText}>Regenerate</Text>
+                  <Text style={styles.primaryText}>Haan, {quote.creditCost} credits kaato</Text>
                 </Pressable>
               ) : null}
-              <Pressable accessibilityRole="button" accessibilityLabel="Cancel regenerate" onPress={() => setQuote(null)} style={styles.secondary}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Rehne do, ${message.title}`}
+                hitSlop={hitSlop}
+                onPress={() => setQuote(null)}
+                style={styles.secondary}
+              >
                 <Text style={styles.secondaryText}>Rehne do</Text>
               </Pressable>
             </View>
           ) : (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Regenerate, ${message.regenerateCreditCost} credits`}
+              accessibilityLabel={`Regenerate ${message.title}, ${message.regenerateCreditCost} credits, pehle cost dikhao`}
+              hitSlop={hitSlop}
               onPress={() => {
                 setQuoteError(null);
                 void onPreviewRegenerate()

@@ -12,11 +12,85 @@ async function pump(times = 8): Promise<void> {
   }
 }
 
-function isQuestion(message: ChatMessage): message is QuestionMessage {
-  return message.kind === "question";
+/** Composer text during a chip question must advance intake, not close the card. */
+async function composerDuringChipQuestions(): Promise<void> {
+  const api = createMockStudio({ delayMs: 0 });
+  await api.createUser({ displayName: "Asha", phoneOrEmail: "asha@example.com" });
+  const opened = await api.createChat({});
+  await pump();
+
+  let history = await api.listMessages(opened.chatId);
+  let question = openQuestion(history.messages);
+  assert(isQuestion(question) && question.field === "genre", "chat opens on the genre chips");
+
+  await api.postMessage(opened.chatId, { text: "barish kaise banti hai" });
+  await pump();
+  history = await api.listMessages(opened.chatId);
+  question = openQuestion(history.messages);
+  assert(isQuestion(question) && question.field === "aspect_ratio", "unmatched genre text should take the default and advance");
+  assert(
+    history.messages.some((item) => item.kind === "text" && item.role === "user" && item.text.includes("Kids")),
+    "unmatched genre text falls back to the kids default",
+  );
+
+  await api.postMessage(opened.chatId, { text: "wide" });
+  await pump();
+  history = await api.listMessages(opened.chatId);
+  question = openQuestion(history.messages);
+  assert(isQuestion(question) && question.field === "resolution", "fuzzy aspect text should advance");
+  assert(
+    history.messages.some((item) => item.kind === "text" && item.role === "user" && item.text.includes("16:9")),
+    "wide should match the 16:9 chip",
+  );
+
+  await api.postMessage(opened.chatId, { text: "full hd 1080" });
+  await pump();
+  history = await api.listMessages(opened.chatId);
+  question = openQuestion(history.messages);
+  assert(isQuestion(question) && question.field === "target_seconds", "resolution text should advance");
+  assert(
+    history.messages.some((item) => item.kind === "text" && item.role === "user" && item.text.includes("1080p")),
+    "1080 should match the 1080p chip",
+  );
+
+  await api.postMessage(opened.chatId, { text: "45" });
+  await pump();
+  await api.postMessage(opened.chatId, { text: "hinglish please" });
+  await pump();
+  history = await api.listMessages(opened.chatId);
+  question = openQuestion(history.messages);
+  assert(isQuestion(question) && question.field === "audience", "language text should advance");
+  assert(
+    history.messages.some((item) => item.kind === "text" && item.role === "user" && item.text.includes("Hinglish")),
+    "hinglish should match the language chip",
+  );
+
+  await api.postMessage(opened.chatId, { text: "bacche" });
+  await pump();
+  await api.postMessage(opened.chatId, { text: "bright cartoon" });
+  await pump();
+  history = await api.listMessages(opened.chatId);
+  question = openQuestion(history.messages);
+  assert(isQuestion(question) && question.field === "cast", "free-text questions should still reach cast");
+
+  await api.postMessage(opened.chatId, { text: "chintu aur mini" });
+  await pump(20);
+  history = await api.listMessages(opened.chatId);
+  assert(openQuestion(history.messages) === undefined, "cast text should finish intake");
+  const snap = await api.getVideo(opened.videoId);
+  assert(snap.video.stage !== "brief", `composer answers should leave brief, got ${snap.video.stage}`);
+  assert((snap.video.brief.castIds ?? []).join() === "cast_chintu,cast_mini", "typed cast names should stick");
+  assert(snap.video.brief.resolution === "1080p", "typed resolution should stick");
+  assert(snap.video.brief.language === "hinglish", "typed language should stick");
+}
+
+function isQuestion(message: ChatMessage | undefined): message is QuestionMessage {
+  return message?.kind === "question";
 }
 
 async function main(): Promise<void> {
+  await composerDuringChipQuestions();
+
   const api = createMockStudio({ delayMs: 0 });
   const user = await api.createUser({ displayName: "Asha", phoneOrEmail: "asha@example.com" });
   assert(user.creditBalance > 0, "starter credits missing");
@@ -28,6 +102,14 @@ async function main(): Promise<void> {
   assert(hydrated.stage === "brief", "GET chat returns stage");
   assert(hydrated.messages.length > 0, "GET chat returns messages");
   assert(Array.isArray(hydrated.artefacts), "GET chat returns artefacts");
+
+  let singleChoiceRejected = false;
+  try {
+    await api.postMessage(opened.chatId, { answer: { field: "genre", optionIds: ["kids"] } });
+  } catch (error) {
+    singleChoiceRejected = error instanceof Error && error.message.includes("optionIds");
+  }
+  assert(singleChoiceRejected, "optionIds is only valid on cast");
 
   let rejectedOnce = false;
   let regenerated = false;
@@ -44,6 +126,23 @@ async function main(): Promise<void> {
       const question = openQuestion(history.messages);
       if (!question || !isQuestion(question)) continue;
       if (question.field === "cast" && !castPicked) {
+        assert(!question.prompt.toLowerCase().includes("optionids"), "cast prompt stays user-facing");
+        let emptyCast = false;
+        try {
+          await api.postMessage(opened.chatId, { answer: { field: "cast", optionIds: [] } });
+        } catch {
+          emptyCast = true;
+        }
+        assert(emptyCast, "cast rejects an empty optionIds list");
+        let tooMany = false;
+        try {
+          await api.postMessage(opened.chatId, {
+            answer: { field: "cast", optionIds: ["cast_chintu", "cast_mini", "cast_riya"] },
+          });
+        } catch {
+          tooMany = true;
+        }
+        assert(tooMany, "cast rejects a third member");
         await api.postMessage(opened.chatId, {
           answer: { field: "cast", optionIds: ["cast_chintu", "cast_mini"] },
         });

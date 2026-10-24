@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colors, layout } from "../theme";
+import { colors, hitSlop, layout } from "../theme";
 
 function clock(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000));
@@ -40,7 +40,9 @@ export function MockMeter({
     <View style={styles.meter}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={playing ? `${label} pause` : `${label} play`}
+        accessibilityLabel={playing ? `Pause ${label}` : `Play ${label}`}
+        accessibilityState={{ selected: playing }}
+        hitSlop={hitSlop}
         onPress={() => {
           if (position >= safe) setPosition(0);
           setPlaying((value) => !value);

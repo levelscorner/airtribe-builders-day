@@ -797,6 +797,7 @@ export function createMockStudio(options?: {
     },
 
     async getChat(chatId) {
+      await wait();
       const chat = mustChat(chatId);
       const bundle = mustVideo(chat.videoId);
       return {
@@ -825,19 +826,6 @@ export function createMockStudio(options?: {
           throw new StudioMockError("stale_question", "Yeh sawal ab active nahi hai.");
         }
         let echo = body.text?.trim() || "";
-        const optionIds = body.answer.optionIds?.map((id) => id.trim()).filter(Boolean);
-        if (optionIds && optionIds.length > 0) {
-          if (optionIds.length > 2) {
-            throw new StudioMockError("cast", "Cast mein zyada se zyada 2 members.");
-          }
-          if (question.field !== "cast") {
-            throw new StudioMockError("answer", "optionIds sirf cast ke liye hain; single choice pe optionId use karo.");
-          }
-        }
-        let raw =
-          optionIds && optionIds.length > 0
-            ? optionIds.join(",")
-            : (body.answer.optionId ?? body.answer.freeText);
         if (body.answer.useDefaults) {
           echo = echo || "Use defaults";
           void continueBrief(chat, { field: question.field, usedDefaults: true, echo }).catch((error: unknown) =>
@@ -854,6 +842,19 @@ export function createMockStudio(options?: {
           const message = chat.messages[chat.messages.length - 1];
           return { accepted: true, message: message?.role === "user" ? message : undefined };
         }
+        let raw: string | undefined;
+        if (body.answer.optionIds !== undefined) {
+          if (question.field !== "cast") {
+            throw new StudioMockError("answer", "optionIds sirf cast ke liye hain; single choice pe optionId use karo.");
+          }
+          const optionIds = body.answer.optionIds.map((id) => id.trim()).filter(Boolean);
+          if (optionIds.length < 1 || optionIds.length > 2) {
+            throw new StudioMockError("cast", "Cast mein 1 ya 2 members chuno.");
+          }
+          raw = optionIds.join(",");
+        } else {
+          raw = body.answer.optionId ?? body.answer.freeText;
+        }
         if (!raw && body.text?.trim() && question.allowFreeText) raw = body.text.trim();
         echo = echo || (raw ? answerLabel(question, raw) : "…");
         void continueBrief(chat, { field: question.field, raw, echo }).catch((error: unknown) => emitError(chat, error));
@@ -868,7 +869,29 @@ export function createMockStudio(options?: {
         const message = chat.messages[chat.messages.length - 1];
         return { accepted: true, message: message?.role === "user" ? message : undefined };
       }
-      const message = emitText(chat, "user", text || "…");
+      if (text && isChipQuestion(question)) {
+        const picked = fuzzyOptionIds(question, text);
+        if (picked.length > 0) {
+          const raw = picked.join(",");
+          void continueBrief(chat, { field: question.field, raw, echo: answerLabel(question, raw) }).catch(
+            (error: unknown) => emitError(chat, error),
+          );
+        } else if (question.allowDefaults) {
+          void continueBrief(chat, { field: question.field, usedDefaults: true, echo: "Use defaults" }).catch(
+            (error: unknown) => emitError(chat, error),
+          );
+        } else {
+          emitText(chat, "assistant", "Neeche option chuno, ya Use defaults dabao.");
+          return { accepted: true, message: undefined };
+        }
+        const message = chat.messages[chat.messages.length - 1];
+        return { accepted: true, message: message?.role === "user" ? message : undefined };
+      }
+      if (!text) {
+        emitText(chat, "assistant", "Neeche option chuno, ya Use defaults dabao.");
+        return { accepted: true, message: undefined };
+      }
+      const message = emitText(chat, "user", text);
       emitText(chat, "assistant", "Neeche option chuno, ya Use defaults dabao.");
       return { accepted: true, message };
     },
@@ -1028,6 +1051,49 @@ export function createMockStudio(options?: {
   };
 
   return api;
+}
+
+const CHIP_FIELDS = new Set(["genre", "aspect_ratio", "resolution", "language", "cast"]);
+
+function normalizeChoice(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9:+]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function mentionsChoice(hay: string, needle: string): boolean {
+  if (!needle) return false;
+  return ` ${hay} `.includes(` ${needle} `);
+}
+
+function isChipQuestion(question: IntakeQuestion): boolean {
+  return CHIP_FIELDS.has(question.field) && Boolean(question.options?.length) && !question.allowFreeText;
+}
+
+/** Match typed composer text to chip ids. Cast may return two ids. */
+function fuzzyOptionIds(question: IntakeQuestion, text: string): string[] {
+  const hay = normalizeChoice(text);
+  if (!hay || !question.options?.length) return [];
+  const tokens = hay.split(" ").filter(Boolean);
+  const hits: string[] = [];
+  for (const option of question.options) {
+    const idNorm = normalizeChoice(option.id);
+    const labelNorm = normalizeChoice(option.label);
+    const idStem = idNorm.replace(/p$/, "");
+    const labelTokens = labelNorm.split(" ").filter((token) => token.length > 2);
+    const matched =
+      hay === idNorm ||
+      hay === labelNorm ||
+      mentionsChoice(hay, idNorm) ||
+      mentionsChoice(hay, labelNorm) ||
+      tokens.some((token) => token === idNorm || (idStem.length >= 3 && token === idStem) || token === labelNorm) ||
+      labelTokens.some((token) => mentionsChoice(hay, token));
+    if (matched) hits.push(option.id);
+  }
+  return question.field === "cast" ? hits.slice(0, 2) : hits.slice(0, 1);
 }
 
 function asGenre(value: string | undefined): Genre | undefined {
