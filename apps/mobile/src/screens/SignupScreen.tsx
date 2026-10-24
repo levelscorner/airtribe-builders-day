@@ -4,12 +4,14 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getStudioClient } from "../api";
 import { scrollFocusedField, useKeyboardInset } from "../chat/useKeyboardInset";
+import { useWideLayout } from "../shell";
 import { colors, hitSlop, layout } from "../theme";
 
 export function SignupScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboardInset();
+  const wide = useWideLayout();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +46,11 @@ export function SignupScreen() {
   return (
     <View style={styles.screen}>
       <KeyboardAvoidingView
-        style={[styles.column, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 16 + keyboard }]}
+        style={[
+          styles.column,
+          wide ? styles.columnWide : null,
+          { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 16 + keyboard },
+        ]}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <View style={styles.stripe} />
@@ -102,6 +108,10 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.paper,
+    alignItems: "center",
+  },
+  columnWide: {
+    maxWidth: 720,
   },
   column: {
     flex: 1,
