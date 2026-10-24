@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import test from "node:test";
 import sharp from "sharp";
-import { probeVideo, renderOutputPath } from "./ffmpeg.js";
+import { captionFont, probeVideo, renderOutputPath, wrapCaption } from "./ffmpeg.js";
 import { createRenderer } from "./index.js";
 import type { RendererInput } from "./types.js";
 
@@ -39,6 +39,16 @@ async function fixtures(): Promise<{
   ]);
   return { dir, image, audio, clip, cleanup: () => rm(dir, { recursive: true, force: true }) };
 }
+
+test("captions use Devanagari and wrap inside the frame", () => {
+  assert.match(captionFont(), /NotoSansDevanagari/);
+  assert.doesNotMatch(captionFont(), /DejaVu|Liberation/);
+  const wrapped = wrapCaption("एक लम्बी लाइन जो फ्रेम के बाहर चली जाती अगर हम उसे एक ही पंक्ति में रखते", 18);
+  assert.ok(wrapped.includes("\n"));
+  for (const line of wrapped.split("\n")) {
+    assert.ok(line.length <= 18 || !line.includes(" "), line);
+  }
+});
 
 test("ffmpeg burns captions into a 1080x1920 cut", async () => {
   const files = await fixtures();
@@ -159,6 +169,30 @@ test("a Render workflow result is used, and a failed run falls back to ffmpeg", 
     assert.equal(probed.width, 1080);
     assert.equal(probed.height, 1920);
   } finally {
+    await files.cleanup();
+  }
+});
+
+test("a relative workDir still writes final.mp4", async () => {
+  const files = await fixtures();
+  const rel = join("tmp-chotu-rel", `run-${Date.now()}`);
+  try {
+    const rendered = await createRenderer({
+      mock: false,
+      publicBaseUrl: "http://localhost:8787",
+      workDir: rel,
+    }).render({
+      videoId: "rel1",
+      aspectRatio: "9:16",
+      resolution: "720p",
+      scenes: [{ idx: 0, imageUrl: files.image, audioUrl: files.audio, narration: "short line", durationMs: 400 }],
+    });
+    assert.equal(rendered.provider, "ffmpeg");
+    const { existsSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    assert.equal(existsSync(resolve(rel, "rel1", "final.mp4")), true);
+  } finally {
+    await rm(rel, { recursive: true, force: true });
     await files.cleanup();
   }
 });
