@@ -16,6 +16,7 @@ import type {
   VideoSummary,
   VoicePreset,
 } from "@chotu/shared";
+import { isEmail } from "@chotu/shared";
 import type { SqlClient } from "../db/client.js";
 import { readAgentReview } from "../integrations/agenticorg/parse.js";
 
@@ -25,76 +26,62 @@ function asJson(value: unknown): string {
   return JSON.stringify(value ?? {});
 }
 
-export async function insertUser(
-  db: SqlClient,
-  input: { displayName: string; phoneOrEmail?: string },
-): Promise<User> {
-  const result = await db.query<{
-    id: string;
-    display_name: string;
-    phone_or_email: string | null;
-    credit_balance: number;
-    created_at: Date | string;
-  }>(
-    `INSERT INTO users (display_name, phone_or_email, credit_balance)
-     VALUES ($1, $2, 0)
-     RETURNING id, display_name, phone_or_email, credit_balance, created_at`,
-    [input.displayName, input.phoneOrEmail ?? null],
-  );
-  const row = result.rows[0]!;
+const USER_COLUMNS = "id, display_name, phone_or_email, email, phone, credit_balance, created_at";
+
+type UserRow = {
+  id: string;
+  display_name: string;
+  phone_or_email: string | null;
+  email: string | null;
+  phone: string | null;
+  credit_balance: number;
+  created_at: Date | string;
+};
+
+function toApiUser(row: UserRow): User {
   return {
     id: row.id,
     displayName: row.display_name,
     phoneOrEmail: row.phone_or_email ?? undefined,
+    email: row.email ?? undefined,
+    phone: row.phone ?? undefined,
     creditBalance: row.credit_balance,
     createdAt: new Date(row.created_at).toISOString(),
   };
+}
+
+export async function insertUser(
+  db: SqlClient,
+  input: { displayName: string; phoneOrEmail?: string; email?: string; phone?: string },
+): Promise<User> {
+  const email =
+    input.email?.trim() ||
+    (input.phoneOrEmail && isEmail(input.phoneOrEmail) ? input.phoneOrEmail.trim() : "");
+  const result = await db.query<UserRow>(
+    `INSERT INTO users (display_name, phone_or_email, email, phone, credit_balance)
+     VALUES ($1, $2, $3, $4, 0)
+     RETURNING ${USER_COLUMNS}`,
+    [input.displayName, email || input.phoneOrEmail || null, email || null, input.phone?.trim() || null],
+  );
+  return toApiUser(result.rows[0]!);
 }
 
 /** Look up a demo profile by the email or phone stored on the user. */
 export async function findUserByContact(db: SqlClient, phoneOrEmail: string): Promise<User | null> {
   const contact = phoneOrEmail.trim();
   if (!contact) return null;
-  const result = await db.query<{
-    id: string;
-    display_name: string;
-    phone_or_email: string | null;
-    credit_balance: number;
-    created_at: Date | string;
-  }>(
-    "SELECT id, display_name, phone_or_email, credit_balance, created_at FROM users WHERE phone_or_email = $1",
+  const result = await db.query<UserRow>(
+    `SELECT ${USER_COLUMNS} FROM users WHERE phone_or_email = $1 OR email = $1 LIMIT 1`,
     [contact],
   );
   const row = result.rows[0];
-  if (!row) return null;
-  return {
-    id: row.id,
-    displayName: row.display_name,
-    phoneOrEmail: row.phone_or_email ?? undefined,
-    creditBalance: row.credit_balance,
-    createdAt: new Date(row.created_at).toISOString(),
-  };
+  return row ? toApiUser(row) : null;
 }
 
 export async function getUser(db: SqlClient, userId: string): Promise<User | null> {
-  const result = await db.query<{
-    id: string;
-    display_name: string;
-    phone_or_email: string | null;
-    credit_balance: number;
-    created_at: Date | string;
-  }>("SELECT id, display_name, phone_or_email, credit_balance, created_at FROM users WHERE id = $1", [
-    userId,
-  ]);
+  const result = await db.query<UserRow>(`SELECT ${USER_COLUMNS} FROM users WHERE id = $1`, [userId]);
   const row = result.rows[0];
-  if (!row) return null;
-  return {
-    id: row.id,
-    displayName: row.display_name,
-    phoneOrEmail: row.phone_or_email ?? undefined,
-    creditBalance: row.credit_balance,
-    createdAt: new Date(row.created_at).toISOString(),
-  };
+  return row ? toApiUser(row) : null;
 }
 
 /** Videos owned by this user. Contact details of other accounts are not selected. */

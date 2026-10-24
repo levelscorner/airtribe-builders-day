@@ -4,6 +4,7 @@ import type { OwnVideoSummary, User } from "@chotu/shared";
 import { getStudioClient } from "../api";
 import { colors, hitSlop, layout } from "../theme";
 import { loadOwnProfile } from "./load";
+import { profileLines } from "./lines";
 
 /** Avatar and name. The sheet is filled from this session only. */
 export function OwnProfileButton() {
@@ -56,9 +57,10 @@ export function OwnProfileButton() {
       <Modal visible={open} animationType="fade" transparent onRequestClose={() => setOpen(false)}>
         <View style={styles.backdrop}>
           <View accessibilityLabel="Your profile" style={styles.sheet}>
-            <Text style={styles.title}>{user.displayName}</Text>
-            <Text style={styles.line}>Email or phone: {user.phoneOrEmail || "—"}</Text>
-            <Text style={styles.line}>Signed up: {user.createdAt}</Text>
+            <Text style={styles.title}>{profileLines(user).name}</Text>
+            <Text style={styles.line}>Email: {profileLines(user).email}</Text>
+            <Text style={styles.line}>Phone: {profileLines(user).phone}</Text>
+            <Text style={styles.line}>Signed up: {profileLines(user).createdAt}</Text>
             <Text style={styles.heading}>Videos</Text>
             {videos.length ? (
               videos.map((video) => (

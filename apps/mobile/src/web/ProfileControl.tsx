@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { OwnVideoSummary, User } from "@chotu/shared";
 import { getStudioClient } from "../api";
 import { loadOwnProfile } from "../profile/load";
+import { profileLines } from "../profile/lines";
 
 /** Avatar and name in the top bar. Opens only this browser session's profile. */
 export function ProfileControl() {
@@ -48,10 +49,11 @@ export function ProfileControl() {
       {open ? (
         <div className="profile-sheet" role="dialog" aria-label="Your profile">
           <p>
-            <strong>{user.displayName}</strong>
+            <strong>{profileLines(user).name}</strong>
           </p>
-          <p>Email or phone: {user.phoneOrEmail || "—"}</p>
-          <p>Signed up: {user.createdAt}</p>
+          <p>Email: {profileLines(user).email}</p>
+          <p>Phone: {profileLines(user).phone}</p>
+          <p>Signed up: {profileLines(user).createdAt}</p>
           <h2>Videos</h2>
           {videos.length ? (
             <ul>

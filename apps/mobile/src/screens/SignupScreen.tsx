@@ -2,6 +2,7 @@ import { useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { isEmail } from "@chotu/shared";
 import { getStudioClient } from "../api";
 import { scrollFocusedField, useKeyboardInset } from "../chat/useKeyboardInset";
 import { useWideLayout } from "../shell";
@@ -14,17 +15,23 @@ export function SignupScreen() {
   const wide = useWideLayout();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function submit() {
     const displayName = name.trim();
-    const phoneOrEmail = email.trim();
+    const address = email.trim();
+    const mobile = phone.trim();
     if (!displayName) {
       setError("Naam likho.");
       return;
     }
-    if (!phoneOrEmail.includes("@")) {
+    if (!address) {
+      setError("Email likho.");
+      return;
+    }
+    if (!isEmail(address)) {
       setError("Email mein @ hona chahiye.");
       return;
     }
@@ -32,7 +39,12 @@ export function SignupScreen() {
     setError(null);
     try {
       const client = getStudioClient();
-      await client.createUser({ displayName, phoneOrEmail });
+      await client.createUser({
+        displayName,
+        email: address,
+        phone: mobile || undefined,
+        phoneOrEmail: address,
+      });
       const chat = await client.createChat({
         initialMessage: "Why do bees make honey — kids explainer",
       });
@@ -78,6 +90,18 @@ export function SignupScreen() {
           accessibilityLabel="Email"
           onFocus={scrollFocusedField}
           placeholder="asha@email.com"
+          placeholderTextColor={colors.inkSoft}
+          style={styles.input}
+        />
+        <Text style={styles.label}>Phone</Text>
+        <TextInput
+          value={phone}
+          onChangeText={setPhone}
+          autoComplete="tel"
+          keyboardType="phone-pad"
+          accessibilityLabel="Phone"
+          onFocus={scrollFocusedField}
+          placeholder="Optional"
           placeholderTextColor={colors.inkSoft}
           style={styles.input}
         />
