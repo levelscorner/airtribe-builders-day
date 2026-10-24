@@ -150,6 +150,12 @@ export interface IntakeQuestion {
 
 export const INTAKE: IntakeQuestion[] = [
   {
+    field: "topic",
+    prompt: "Video kis baare mein hai? Ek seedhi line.",
+    allowFreeText: true,
+    allowDefaults: true,
+  },
+  {
     field: "genre",
     prompt: "Kis tarah ka video banana hai?",
     options: [
