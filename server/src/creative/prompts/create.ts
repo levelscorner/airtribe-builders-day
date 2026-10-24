@@ -26,6 +26,7 @@ function userPrompt(input: PromptGenInput): string {
       identityText: member.identityText,
       higgsfieldElementId: member.higgsfieldElementId,
     })),
+    feedback: input.feedback?.trim() ?? "",
   });
 }
 
