@@ -73,10 +73,11 @@ test("usage metrics skip test accounts until the toggle is off", async () => {
       createdAt: at(14 * 60 * 60 * 1000),
     });
 
+    const stageVideo: Record<string, string> = {};
     for (const stage of ["brief", "cast", "script", "clips", "audio", "final", "done"]) {
-      await insertVideo(pg.db, asha, stage, past);
+      stageVideo[stage] = await insertVideo(pg.db, asha, stage, past);
     }
-    await insertVideo(pg.db, marsqa, "done", past);
+    const marsqaVideo = await insertVideo(pg.db, marsqa, "done", past);
     const patChat = crypto.randomUUID();
     await pg.db.query("INSERT INTO chats (id, user_id, title, created_at) VALUES ($1, $2, 'pat', $3)", [patChat, pat, past]);
 
@@ -116,6 +117,9 @@ test("usage metrics skip test accounts until the toggle is off", async () => {
     assert.equal(hidden.videosFinished, 1);
     assert.deepEqual(hidden.credits, { granted: 540, spent: 26, refunded: 8 });
     assert.deepEqual(hidden.qrPayments, { pending: 1, approved: 1, revenueInr: 199 });
+    assert.equal(hidden.failures.groups.length, 0);
+    assert.equal(hidden.failures.stuck.length, 6);
+    assert.deepEqual(hidden.failures.errorRate.lastHour, { failed: 0, total: 0, rate: 0 });
     assert.deepEqual(
       hidden.recentUsers.map((user) => user.name),
       ["Asha", "Pat & Co", "Old Creator"],
@@ -145,6 +149,45 @@ test("usage metrics skip test accounts until the toggle is off", async () => {
     const withMessage = await loadUsage(pg.db, { excludeTestAccounts: true, now });
     assert.equal(withMessage.dailyActiveUsers, 2);
 
+    await pg.db.query(
+      `CREATE TABLE IF NOT EXISTS artefacts (
+         id uuid PRIMARY KEY,
+         video_id uuid NOT NULL,
+         kind text NOT NULL,
+         state text NOT NULL,
+         payload jsonb NOT NULL DEFAULT '{}',
+         updated_at timestamptz NOT NULL DEFAULT now()
+       )`,
+    );
+    const tenMin = new Date(now.getTime() - 10 * 60 * 1000).toISOString();
+    const twoMin = new Date(now.getTime() - 2 * 60 * 1000).toISOString();
+    const threeHours = new Date(now.getTime() - 3 * 60 * 60 * 1000).toISOString();
+    const exactlyFive = new Date(now.getTime() - 5 * 60 * 1000).toISOString();
+    await pg.db.query("UPDATE videos SET updated_at = $2 WHERE id = $1", [stageVideo.brief, exactlyFive]);
+    await pg.db.query("UPDATE videos SET status = 'failed', updated_at = $2 WHERE id = $1", [stageVideo.clips, twoMin]);
+    await artefact(pg.db, stageVideo.cast!, "image", "failed", { error: "anchor <url> rejected", provider: "openai", failedStage: "cast" }, tenMin);
+    await artefact(pg.db, stageVideo.cast!, "image", "approved", { provider: "openai" }, twoMin);
+    await artefact(pg.db, stageVideo.clips!, "clip", "failed", { error: { message: "seedance timed out" }, provider: "higgsfield" }, threeHours);
+    await artefact(pg.db, marsqaVideo, "image", "failed", { error: "qa-only failure", provider: "openai" }, tenMin);
+
+    const watched = await loadUsage(pg.db, { excludeTestAccounts: true, now });
+    assert.equal(watched.failures.stuck.length, 4);
+    assert.equal(watched.failures.stuck.some((row) => row.stage === "brief"), false);
+    assert.equal(watched.failures.stuck.every((row) => row.minutes > 5), true);
+    assert.deepEqual(
+      watched.failures.groups.map((group) => [group.stage, group.provider, group.failedArtefacts, group.failedJobs]),
+      [
+        ["cast", "openai", 1, 0],
+        ["clips", "higgsfield", 1, 1],
+      ],
+    );
+    assert.equal(watched.failures.latest[0]?.message, "anchor <url> rejected");
+    assert.equal(watched.failures.latest.some((row) => row.message === "seedance timed out"), true);
+    assert.equal(watched.failures.latest.some((row) => row.message === "qa-only failure"), false);
+    assert.deepEqual(watched.failures.errorRate.lastHour, { failed: 1, total: 2, rate: 0.5 });
+    assert.deepEqual(watched.failures.errorRate.last24Hours, { failed: 2, total: 3, rate: 0.6667 });
+    await pg.db.query("UPDATE videos SET updated_at = $2 WHERE id = $1", [stageVideo.brief, new Date().toISOString()]);
+
     const shown = await loadUsage(pg.db, { excludeTestAccounts: false, now });
     assert.deepEqual(shown.signups, { total: 5, today: 3, last7Days: 4 });
     assert.equal(shown.dailyActiveUsers, 3);
@@ -154,6 +197,8 @@ test("usage metrics skip test accounts until the toggle is off", async () => {
     assert.equal(shown.funnel.brief, 8);
     assert.equal(shown.credits.granted, 640);
     assert.deepEqual(shown.qrPayments, { pending: 1, approved: 2, revenueInr: 1199 });
+    assert.equal(shown.failures.errorRate.lastHour.failed, 2);
+    assert.equal(shown.failures.latest.some((row) => row.message === "qa-only failure"), true);
     assert.equal(shown.recentUsers[0]?.name, "Example Person");
     assert.equal(shown.recentUsers[0]?.email, "s***@e***.com");
     assert.equal(JSON.stringify(shown).includes("someone@example.com"), false);
@@ -175,6 +220,10 @@ test("usage metrics skip test accounts until the toggle is off", async () => {
       assert.match(html, /Signups total: 3/);
       assert.match(html, /Daily active users: 2/);
       assert.match(html, /QR revenue: ₹199/);
+      assert.match(html, /Error rate last hour: 50%/);
+      assert.match(html, /anchor &lt;url&gt; rejected/);
+      assert.match(html, /Stuck more than 5 minutes/);
+      assert.equal(html.includes("qa-only failure"), false);
       assert.match(html, /a\*\*\*@g\*\*\*\.com/);
       assert.match(html, /Show test accounts/);
       assert.equal(html.includes("asha@gmail.com"), false);
@@ -197,6 +246,11 @@ test("usage metrics skip test accounts until the toggle is off", async () => {
       assert.match(csvRes.headers.get("content-disposition") ?? "", /usage\.csv/);
       assert.match(csv, /"signups_total","3"/);
       assert.match(csv, /"qr_revenue_inr","199"/);
+      assert.match(csv, /"error_failed_hour","1"/);
+      assert.match(csv, /"error_rate_hour","0.5"/);
+      assert.match(csv, /"stuck_jobs","4"/);
+      assert.equal(csv.includes("qa-only failure"), false);
+      assert.match(csv, /anchor <url> rejected/);
       assert.match(csv, /"Asha","a\*\*\*@g\*\*\*\.com"/);
       assert.equal(csv.includes("asha@gmail.com"), false);
 
@@ -255,6 +309,12 @@ function zeros(excludeTestAccounts: boolean): UsageReport {
     videosFinished: 0,
     credits: { granted: 0, spent: 0, refunded: 0 },
     qrPayments: { pending: 0, approved: 0, revenueInr: 0 },
+    failures: {
+      groups: [],
+      latest: [],
+      stuck: [],
+      errorRate: { lastHour: { failed: 0, total: 0, rate: 0 }, last24Hours: { failed: 0, total: 0, rate: 0 } },
+    },
     recentUsers: [],
   };
 }
@@ -271,7 +331,7 @@ async function insertUser(
   return id;
 }
 
-async function insertVideo(db: Db, userId: string, stage: string, createdAt: string): Promise<void> {
+async function insertVideo(db: Db, userId: string, stage: string, createdAt: string): Promise<string> {
   const chatId = crypto.randomUUID();
   const videoId = crypto.randomUUID();
   await db.query("INSERT INTO chats (id, user_id, title, created_at) VALUES ($1, $2, 'chat', $3)", [
@@ -284,6 +344,7 @@ async function insertVideo(db: Db, userId: string, stage: string, createdAt: str
      VALUES ($1, $2, $3, 'kids', 'hi', $4, $5, $5)`,
     [videoId, userId, chatId, stage, createdAt],
   );
+  return videoId;
 }
 
 async function ledger(db: Db, userId: string, ref: string, delta: number, reason: string): Promise<void> {
@@ -293,6 +354,21 @@ async function ledger(db: Db, userId: string, ref: string, delta: number, reason
     delta,
     reason,
   ]);
+}
+
+async function artefact(
+  db: Db,
+  videoId: string,
+  kind: string,
+  state: string,
+  payload: Record<string, unknown>,
+  updatedAt: string,
+): Promise<void> {
+  await db.query(
+    `INSERT INTO artefacts (id, video_id, kind, state, payload, updated_at)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6)`,
+    [crypto.randomUUID(), videoId, kind, state, JSON.stringify(payload), updatedAt],
+  );
 }
 
 async function payment(db: Db, userId: string, amountInr: number, provider: string, status: string): Promise<void> {
