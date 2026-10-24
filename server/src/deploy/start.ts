@@ -13,6 +13,7 @@ import { dbFromSql } from "../admin/sql-db.js";
 import { createCredits } from "../credits/index.js";
 import { getDb, migrate } from "../db/client.js";
 import { resolveLlmProvider } from "../llm/provider.js";
+import { mediaRoot } from "../media/files.js";
 import { createPayments, paymentsModeFrom, paymentsRouter } from "../payments/index.js";
 import { createV1Router } from "../routes/v1.js";
 import { createSessionMiddleware, createSessionStore } from "../sessions.js";
@@ -84,7 +85,7 @@ export async function startServer(options?: { port?: number; listen?: boolean })
   if (existsSync(publicDir)) {
     app.use(express.static(publicDir, { fallthrough: true }));
   }
-  const mediaDir = process.env.MEDIA_ROOT?.trim() || resolve(__dirname, "../../data/media");
+  const mediaDir = mediaRoot(process.env);
   app.use("/media", express.static(mediaDir, { fallthrough: true }));
 
   const expoWeb =
