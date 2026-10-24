@@ -154,9 +154,12 @@ async function postImage(
     form.set("model", model);
     form.set("prompt", prompt);
     form.set("size", size);
+    // One reference stays `image`. Two or more must be `image[]` or OpenAI
+    // rejects the multipart body as a duplicate `image` parameter.
+    const imageField = anchorUrls.length > 1 ? "image[]" : "image";
     for (const [index, url] of anchorUrls.entries()) {
       const image = await readImageBytes(env, url, fetchImpl);
-      form.append("image", new Blob([new Uint8Array(image.bytes)], { type: image.type }), `anchor-${index}.png`);
+      form.append(imageField, new Blob([new Uint8Array(image.bytes)], { type: image.type }), `anchor-${index}.png`);
     }
     response = await fetchImpl(`${base}/images/edits`, {
       method: "POST",

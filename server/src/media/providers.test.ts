@@ -165,9 +165,13 @@ test("two failed gpt-image-2 frames fall back to a 1440x2560 Seedream still stor
   assert.match(image.url, /^http:\/\/studio\.test\/media\/images\/.+\.png$/);
   const edits = calls.filter((call) => call.url.endsWith("/images/edits"));
   assert.equal(edits.length, 2);
-  const form = edits[0]?.init?.body as FormData;
-  assert.equal(form.get("model"), "gpt-image-2");
-  assert.equal(form.get("size"), "1024x1536");
+  for (const edit of edits) {
+    const form = edit.init?.body as FormData;
+    assert.equal(form.get("model"), "gpt-image-2");
+    assert.equal(form.get("size"), "1024x1536");
+    assert.equal(form.getAll("image").length, 1);
+    assert.equal(form.getAll("image[]").length, 0);
+  }
   const ark = calls.find((call) => call.url.includes("bytepluses.com"));
   assert.ok(ark);
   const body = JSON.parse(String(ark.init?.body));
