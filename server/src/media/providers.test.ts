@@ -10,6 +10,7 @@ import { SCRIPT_TASK } from "../creative/skills/rules.js";
 import { savePng } from "./files.js";
 import { createCastAdapter } from "./cast/reference.js";
 import { createMediaPorts } from "./index.js";
+import { createVoiceGen } from "./elevenlabs/voice-gen.js";
 import { createStudioClipGen, createStudioImageGen } from "./studio.js";
 import type { FetchLike } from "./ark/client.js";
 
@@ -67,7 +68,7 @@ test("IMAGE_PROVIDER=openai calls gpt-image-2 generations and stores the crop", 
   assert.equal(meta.height, 1280);
 });
 
-test("a cast anchor uses image edits and a failed OpenAI call falls back to Seedream", async () => {
+test("a cast anchor uses image edits and a failed OpenAI call stays on OpenAI", async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   const fetch: FetchLike = async (url, init) => {
     calls.push({ url: String(url), init });
@@ -88,16 +89,17 @@ test("a cast anchor uses image edits and a failed OpenAI call falls back to Seed
     { IMAGE_PROVIDER: "openai", OPENAI_API_KEY: "sk-test-openai", ARK_API_KEY: "ark-test-key" },
     { cast, fetch },
   );
-  const image = await images.generate({
+  const job = await images.submit({
     prompt: "waves",
     elementIds: [ref.higgsfieldElementId],
     aspectRatio: "9:16",
     resolution: "720p",
   });
-  assert.equal(image.provider, "ark");
-  assert.equal(image.model, "seedream-5-0-260128");
-  assert.equal(image.providerLabel, "Seedream 5.0 · BytePlus");
-  assert.equal(image.url, "https://cdn.example/seedream.png");
+  assert.equal(job.status, "failed");
+  assert.equal(job.provider, "openai");
+  assert.equal((job.error ?? "").includes("sk-test-openai"), false);
+  assert.equal((job.error ?? "").includes("ark-test-key"), false);
+  assert.equal(calls.length, 2);
   assert.match(calls[1]?.url ?? "", /\/images\/edits$/);
   assert.ok(calls[1]?.init?.body instanceof FormData);
   const form = calls[1]?.init?.body as FormData;
@@ -105,15 +107,8 @@ test("a cast anchor uses image edits and a failed OpenAI call falls back to Seed
   assert.equal(form.get("size"), "1024x1536");
   assert.equal(form.get("output_format"), null);
   assert.ok(form.get("image"));
-  assert.match(calls[2]?.url ?? "", /\/images\/generations$/);
-  assert.equal(new Headers(calls[2]?.init?.headers).get("authorization"), "Bearer ark-test-key");
-  const body = JSON.parse(String(calls[2]?.init?.body));
-  assert.equal(body.model, "seedream-5-0-260128");
-  assert.deepEqual(body.image, ["https://cdn.example/mini.png"]);
-  assert.equal(body.watermark, false);
-  assert.equal(String(body.prompt).includes("--ratio"), false);
-  assert.equal((image.url + JSON.stringify(body)).includes("ark-test-key"), false);
-  assert.equal(JSON.stringify(calls).includes("sk-test-openai") && calls[1]?.init?.body instanceof FormData, true);
+  assert.equal(calls.some((call) => call.url.includes("bytepluses.com")), false);
+  assert.equal(new Headers(calls[1]?.init?.headers).get("authorization"), "Bearer sk-test-openai");
 });
 
 test("an OpenAI error does not echo the key when Seedream is unavailable", async () => {
@@ -221,11 +216,16 @@ test("model JSON fences are stripped and a 5s line stays near 15 words", () => {
   assert.match(SCRIPT_TASK, /15 words/);
 });
 
-test("a blank IMAGE_PROVIDER stays on Seedream even when an OpenAI key is set", async () => {
+test("a blank IMAGE_PROVIDER calls gpt-image-2 even when an Ark key is set", async () => {
+  const png = await sharp({
+    create: { width: 1024, height: 1536, channels: 3, background: { r: 20, g: 40, b: 60 } },
+  })
+    .png()
+    .toBuffer();
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   const fetch: FetchLike = async (url, init) => {
     calls.push({ url: String(url), init });
-    return json(200, { data: [{ url: "https://cdn.example/seedream.png" }] });
+    return json(200, { data: [{ b64_json: png.toString("base64") }] });
   };
   const images = createStudioImageGen(
     { OPENAI_API_KEY: "sk-test-openai", ARK_API_KEY: "ark-test-key" },
@@ -237,12 +237,17 @@ test("a blank IMAGE_PROVIDER stays on Seedream even when an OpenAI key is set", 
     aspectRatio: "9:16",
     resolution: "720p",
   });
-  assert.equal(image.provider, "ark");
-  assert.equal(image.model, "seedream-5-0-260128");
+  assert.equal(image.provider, "openai");
+  assert.equal(image.model, "gpt-image-2");
   assert.equal(calls.length, 1);
-  assert.match(calls[0]?.url ?? "", /bytepluses\.com\/api\/v3\/images\/generations$/);
-  assert.equal(new Headers(calls[0]?.init?.headers).get("authorization"), "Bearer ark-test-key");
-  assert.equal(JSON.stringify(calls).includes("sk-test-openai"), false);
+  assert.equal(calls[0]?.url, "https://api.openai.com/v1/images/generations");
+  assert.equal(new Headers(calls[0]?.init?.headers).get("authorization"), "Bearer sk-test-openai");
+  const body = JSON.parse(String(calls[0]?.init?.body));
+  assert.equal(body.model, "gpt-image-2");
+  assert.equal(body.size, "1024x1536");
+  assert.equal(body.n, 1);
+  assert.equal(calls.some((call) => call.url.includes("bytepluses.com")), false);
+  assert.equal(JSON.stringify(body).includes("ark-test-key"), false);
 });
 
 test("MOCK=1 and missing keys stay on the mock ports", () => {
@@ -251,7 +256,10 @@ test("MOCK=1 and missing keys stay on the mock ports", () => {
   assert.equal(mocked.clips.mode, "mock");
   assert.equal(mocked.voice.mode, "mock");
   assert.equal(createStudioImageGen({}).mode, "mock");
+  assert.equal(createStudioImageGen({ ARK_API_KEY: "ark-test-key" }).mode, "mock");
   assert.equal(createStudioClipGen({ OPENAI_API_KEY: "sk-test-openai" }).mode, "mock");
+  assert.equal(createStudioClipGen({ ARK_API_KEY: "ark-test-key" }).mode, "live");
+  assert.equal(createVoiceGen({ ELEVENLABS_API_KEY: "el-test" }).mode, "live");
   assert.equal(VOICE_PRESETS.length, 11);
   assert.equal(VOICE_PRESETS.every((preset) => preset.model === "eleven_multilingual_v2"), true);
   assert.equal(VOICE_PRESETS[0]?.voiceId, "FZkK3TvQ0pjyDmT8fzIW");

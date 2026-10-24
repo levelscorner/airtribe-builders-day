@@ -101,9 +101,9 @@ export function concatArgs(listPath: string, output: string): string[] {
 /** Duck the bed under the voice, then keep a quiet floor with volume. */
 export function musicDuckFilter(): string {
   return [
-    "[0:a]aformat=sample_fmts=fltp:channel_layouts=stereo,apad[vo]",
+    "[0:a]aformat=sample_fmts=fltp:channel_layouts=stereo,apad,asplit=2[vo][vosc]",
     "[1:a]aformat=sample_fmts=fltp:channel_layouts=stereo,volume=0.18[bgm]",
-    "[bgm][vo]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=300[ducked]",
+    "[bgm][vosc]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=300[ducked]",
     "[vo][ducked]amix=inputs=2:duration=first:dropout_transition=0[a]",
   ].join(";");
 }

@@ -45,11 +45,11 @@ import { claudeIntakeEnabled, claudeOpeningBrief, claudeParseFreeText, claudeQue
 import { PROMPT_JSON_HINT, SCENE_PLAN_HINT, SCRIPT_JSON_HINT, creativeGenEnv } from "../llm/wire.js";
 import { artefactCreditCost, debitRegenerate } from "../credits/stub.js";
 import type { SqlClient } from "../db/client.js";
+import { sceneCastReference, ensureCharacterSheet } from "../media/cast/sheet.js";
 import { createMediaPorts } from "../media/index.js";
 import { mediaRoot } from "../media/files.js";
 import { mockAssets, publicUrl } from "../media/placeholders.js";
 import {
-  castAnchorIds,
   mapWithConcurrency,
   regenScope,
   sceneConcurrency,
@@ -314,12 +314,15 @@ async function beginCast(ctx: OrchestratorContext, chatId: string, videoId: stri
     await approvalCard(ctx, chatId, "cast", identity, `${member.name} · identity`);
 
     if (member.role !== "narrator") {
+      const sheetUrl = await ensureCharacterSheet(imageMediaEnv(ctx), member, {
+        saveSheet: (castId, url) => store.updateCastSheet(ctx.db, castId, url),
+      });
       const sheet = await store.insertArtefact(ctx.db, {
         videoId,
         kind: "sheet",
         state: "awaiting_approval",
         creditCost: artefactCreditCost("sheet"),
-        payload: { castId: member.id, url: mockAssets.keyframe, note: "Multi-angle sheet (mock)" },
+        payload: { castId: member.id, url: sheetUrl, note: "Character sheet" },
       });
       await approvalCard(ctx, chatId, "cast", sheet, `${member.name} · sheet`);
 
@@ -457,14 +460,10 @@ async function beginPrompts(ctx: OrchestratorContext, chatId: string, videoId: s
 }
 
 function mediaEnv(ctx: OrchestratorContext): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env, MOCK: ctx.mock ? "1" : "0" };
-  // Seedance is not verified. Unset CLIP_MOCK stays on mock clips (slideshow).
-  // CLIP_MOCK=0 opts into the live video call.
-  if (!env.CLIP_MOCK?.trim()) env.CLIP_MOCK = "1";
-  return env;
+  return { ...process.env, MOCK: ctx.mock ? "1" : "0" };
 }
 
-/** The scene pipeline opts into gpt-image-2. A blank IMAGE_PROVIDER elsewhere stays on Ark. */
+/** Scene stills and character sheets use gpt-image-2. MOCK and IMAGE_PROVIDER=mock stay on placeholders. */
 function imageMediaEnv(ctx: OrchestratorContext): NodeJS.ProcessEnv {
   const env = mediaEnv(ctx);
   if (env.MOCK === "1" || env.IMAGE_PROVIDER?.trim().toLowerCase() === "mock") return env;
@@ -512,8 +511,11 @@ async function beginImages(ctx: OrchestratorContext, chatId: string, videoId: st
       .trim();
     const rawIds = Array.isArray(prompt.payload.elementIds) ? prompt.payload.elementIds : [];
     const sceneCast = cast.filter((member) => scene?.castIds.includes(member.id));
-    const elementIds = castAnchorIds(
+    const referenced = await sceneCastReference(
+      imageMediaEnv(ctx),
       sceneCast,
+      imagePrompt,
+      { saveSheet: (castId, url) => store.updateCastSheet(ctx.db, castId, url) },
       rawIds.filter((id): id is string => typeof id === "string"),
     );
     const pending = await store.insertArtefact(ctx.db, {
@@ -536,8 +538,8 @@ async function beginImages(ctx: OrchestratorContext, chatId: string, videoId: st
     });
     try {
       const generated = await media.images.generate({
-        prompt: imagePrompt,
-        elementIds,
+        prompt: referenced.prompt,
+        elementIds: referenced.elementIds,
         aspectRatio: video.aspectRatio,
         resolution: video.resolution,
       });
@@ -1447,10 +1449,15 @@ export async function regenerateScene(
       const imagePrompt = `${plan?.imagePrompt || textOf(prompt?.payload.imagePrompt) || textOf(current.payload.prompt)}${feedback ? `\n${feedback}` : ""}`
         .replace(/<<<[^>]+>>>/g, " ")
         .trim();
-      const cast = await store.listCastMembers(ctx.db, scene.castIds);
+      const cast = scene.castIds.length
+        ? (await store.listCastMembers(ctx.db, scene.castIds)).filter((member) => scene.castIds.includes(member.id))
+        : [];
+      const referenced = await sceneCastReference(imageMediaEnv(ctx), cast, imagePrompt || "scene", {
+        saveSheet: (castId, url) => store.updateCastSheet(ctx.db, castId, url),
+      });
       const generated = await media.images.generate({
-        prompt: imagePrompt || "scene",
-        elementIds: castAnchorIds(cast.filter((member) => scene.castIds.includes(member.id))),
+        prompt: referenced.prompt,
+        elementIds: referenced.elementIds,
         aspectRatio: video.aspectRatio,
         resolution: video.resolution,
       });

@@ -26,7 +26,7 @@ function imageProvider(env: EnvLike): "openai" | "ark" | "mock" {
   const explicit = env.IMAGE_PROVIDER?.trim().toLowerCase() ?? "";
   if (explicit === "mock" || explicit === "ark" || explicit === "openai") return explicit;
   if (explicit) throw new Error("IMAGE_PROVIDER must be openai, ark, or mock");
-  return "ark";
+  return "openai";
 }
 
 class StudioImageGen implements ImageGenPort {
@@ -47,48 +47,41 @@ class StudioImageGen implements ImageGenPort {
       const resolved = this.cast.resolvePrompt(input.prompt, input.elementIds ?? []);
       requirePrompt(resolved);
       const choice = imageProvider(this.env);
-      const openaiKey = Boolean(this.env.OPENAI_API_KEY?.trim());
-      const tryOpenAi = choice === "openai" && openaiKey;
-      if (tryOpenAi) {
-        try {
-          const url = await generateOpenAiImage(this.env, input, resolved, this.deps.fetch ?? fetch);
-          return this.store.insert({
-            jobId: newJobId(),
-            provider: "openai",
-            status: "completed",
-            result: {
-              url,
-              provider: "openai",
-              model: openaiImageModel(this.env),
-              providerLabel: OPENAI_LABEL,
-            },
-            costCredits: PROVISIONAL_CREDITS.image,
-            idempotencyKey,
-          });
-        } catch (error) {
-          if (error instanceof MediaInputError || !this.env.ARK_API_KEY?.trim()) throw error;
-        }
+      if (choice === "ark") {
+        if (!this.env.ARK_API_KEY?.trim()) throw new Error("ARK_API_KEY is not set");
+        const client = createArkClient(this.env, this.deps);
+        const url = await client.image(buildSeedreamBody(input, resolved, this.env));
+        return this.store.insert({
+          jobId: newJobId(),
+          provider: "ark",
+          status: "completed",
+          result: {
+            url,
+            provider: "ark",
+            model: seedreamModel(this.env),
+            providerLabel: SEEDREAM_LABEL,
+          },
+          costCredits: PROVISIONAL_CREDITS.image,
+          idempotencyKey,
+        });
       }
-      if (!this.env.ARK_API_KEY?.trim()) {
-        throw new Error(choice === "ark" ? "ARK_API_KEY is not set" : "OPENAI_API_KEY is not set");
-      }
-      const client = createArkClient(this.env, this.deps);
-      const url = await client.image(buildSeedreamBody(input, resolved, this.env));
+      if (!this.env.OPENAI_API_KEY?.trim()) throw new Error("OPENAI_API_KEY is not set");
+      const url = await generateOpenAiImage(this.env, input, resolved, this.deps.fetch ?? fetch);
       return this.store.insert({
         jobId: newJobId(),
-        provider: "ark",
+        provider: "openai",
         status: "completed",
         result: {
           url,
-          provider: "ark",
-          model: seedreamModel(this.env),
-          providerLabel: SEEDREAM_LABEL,
+          provider: "openai",
+          model: openaiImageModel(this.env),
+          providerLabel: OPENAI_LABEL,
         },
         costCredits: PROVISIONAL_CREDITS.image,
         idempotencyKey,
       });
     } catch (error) {
-      const provider = imageProvider(this.env) === "ark" || !this.env.OPENAI_API_KEY?.trim() ? "ark" : "openai";
+      const provider = imageProvider(this.env) === "ark" ? "ark" : "openai";
       return this.store.insert(failedJob(idempotencyKey, error, provider));
     }
   }
@@ -171,16 +164,14 @@ function mockClips(env: EnvLike, cast: CastReferenceAdapter): ClipGenPort {
   return createClipGen({ ...env, CLIP_MOCK: "1" }, { cast });
 }
 
-/** Blank IMAGE_PROVIDER stays on Seedream. IMAGE_PROVIDER=openai uses gpt-image-2, then Seedream if that call fails. */
+/** Blank IMAGE_PROVIDER is gpt-image-2. Seedream runs only when IMAGE_PROVIDER=ark. A failed OpenAI call stays failed. */
 export function createStudioImageGen(env: EnvLike = process.env, deps: StudioDeps = {}): ImageGenPort {
   const cast = deps.cast ?? createCastAdapter(env);
   if (moduleMock(env, "IMAGE_MOCK")) return mockImages(env, cast);
   const provider = imageProvider(env);
   if (provider === "mock") return mockImages(env, cast);
-  const openai = Boolean(env.OPENAI_API_KEY?.trim());
-  const ark = Boolean(env.ARK_API_KEY?.trim());
-  if (provider === "openai" && !openai && !ark) return mockImages(env, cast);
-  if (provider === "ark" && !ark) return mockImages(env, cast);
+  if (provider === "openai" && !env.OPENAI_API_KEY?.trim()) return mockImages(env, cast);
+  if (provider === "ark" && !env.ARK_API_KEY?.trim()) return mockImages(env, cast);
   return new StudioImageGen(env, cast, deps);
 }
 

@@ -24,27 +24,18 @@ const elevenVoice = process.env.ELEVENLABS_VOICE_ID?.trim() || "";
 
 const explicitMock = process.env.MOCK_MODE !== undefined ? truthy(process.env.MOCK_MODE) : null;
 
-const visualsRaw = (process.env.VISUALS_PROVIDER || "mock").toLowerCase();
-const visualsProvider: VisualsProviderId =
-  visualsRaw === "higgsfield" || visualsRaw === "openart" || visualsRaw === "mock"
-    ? visualsRaw
-    : "mock";
+/** Higgsfield and OpenArt stay in the type union. The running server always uses mock visuals. */
+const visualsProvider = "mock" as VisualsProviderId;
 
-/** Mock when explicitly set, or when required live keys for the selected path are missing. */
+/** Mock when explicitly set, or when the legacy booth keys are missing. Visuals stay on mock. */
 export const MOCK_MODE =
-  explicitMock === true ||
-  (explicitMock !== false &&
-    (!openaiKey ||
-      !elevenKey ||
-      !elevenVoice ||
-      (visualsProvider === "higgsfield" && !process.env.HIGGSFIELD_MCP_TOKEN?.trim()) ||
-      (visualsProvider === "openart" && !process.env.OPENART_MCP_TOKEN?.trim())));
+  explicitMock === true || (explicitMock !== false && (!openaiKey || !elevenKey || !elevenVoice));
 
 export const env = {
   port: Number(process.env.PORT || 8787),
   mockMode: MOCK_MODE,
   openaiApiKey: openaiKey,
-  visualsProvider: MOCK_MODE ? ("mock" as VisualsProviderId) : visualsProvider,
+  visualsProvider,
   mockVisualsClips: truthy(process.env.MOCK_VISUALS_CLIPS),
 
   // --- Higgsfield MCP ---

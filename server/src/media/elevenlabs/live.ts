@@ -101,10 +101,11 @@ export class LiveVoiceGen implements VoiceGenPort {
       const alignment = requireAlignment(speech.alignment);
       const jobId = newJobId();
       const filename = `${jobId}.mp3`;
+      const filePath = join(this.dir, filename);
       await mkdir(this.dir, { recursive: true });
-      await writeFile(join(this.dir, filename), Buffer.from(speech.audio_base64 ?? "", "base64"));
+      await writeFile(filePath, Buffer.from(speech.audio_base64 ?? "", "base64"));
       const result: VoiceLineOutput = {
-        url: publicUrl(this.env, `/media/voice/${filename}`),
+        url: this.env.PUBLIC_BASE_URL?.trim() ? publicUrl(this.env, `/media/voice/${filename}`) : filePath,
         durationMs: alignmentDurationMs(alignment),
         provider: "elevenlabs",
         model: request.modelId,
