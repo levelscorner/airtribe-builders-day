@@ -8,6 +8,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getDb, migrate } from "../db/client.js";
+import { resolveLlmProvider } from "../llm/provider.js";
 import { createV1Router } from "../routes/v1.js";
 import { createSessionMiddleware, createSessionStore } from "../sessions.js";
 
@@ -20,7 +21,10 @@ function truthy(v: string | undefined): boolean {
 }
 
 export async function startServer(options?: { port?: number; listen?: boolean }) {
-  const mock = truthy(process.env.MOCK) || truthy(process.env.MOCK_MODE) || !process.env.DATABASE_URL;
+  const explicitOff = ["0", "false", "off", "no"].includes((process.env.MOCK ?? "").trim().toLowerCase());
+  const mock =
+    !explicitOff &&
+    (truthy(process.env.MOCK) || truthy(process.env.MOCK_MODE) || !process.env.DATABASE_URL);
   if (mock) process.env.MOCK = process.env.MOCK || "1";
 
   const db = await getDb();
@@ -79,7 +83,9 @@ export async function startServer(options?: { port?: number; listen?: boolean })
     return { app, db, sessions, port, mock };
   }
   const server = app.listen(port, () => {
-    console.log(`Chotu Studio on http://localhost:${port} (mock=${mock}, memory=${db.memory})`);
+    console.log(
+      `Chotu Studio on http://localhost:${port} (mock=${mock}, llm=${resolveLlmProvider()}, memory=${db.memory})`,
+    );
   });
   return { app, db, sessions, port, mock, server };
 }

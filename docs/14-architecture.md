@@ -393,6 +393,8 @@ Source of truth: [`packages/shared/types.ts`](../packages/shared/types.ts). Summ
 
 Factories: `createX(env) → X`. When `process.env.MOCK === '1'`, return the mock implementation (deterministic, offline, no network).
 
+Claude (`server/src/llm/claude.ts`) is the live model for brief questions, free-text brief parsing, ScriptGen, PromptGen, and regenerate feedback. Chat still emits the same SSE `question`, `progress`, and `approval` messages, so Expo web and mobile stay on the existing stream. The script artefact payload remains `{ scenes, sceneIds }` so a script critic can attach `agentReview` beside those fields. `MOCK=1` keeps the sample generators and never calls Anthropic.
+
 ---
 
 ## 5. Env vars and Replit handoff
@@ -404,9 +406,12 @@ Factories: `createX(env) → X`. When `process.env.MOCK === '1'`, return the moc
 | `DATABASE_URL` | yes (prod) | Saturn | Postgres connection string |
 | `HIGGSFIELD_API_KEY` | yes (live) | Neptune | Images, clips, Reference Elements (**API key, not MCP**) |
 | `ELEVENLABS_API_KEY` | yes (live) | Neptune | TTS |
-| `LLM_API_KEY` | yes (live) | Venus/Saturn | Orchestrator + ScriptGen + PromptGen |
+| `LLM_API_KEY` | yes (live) | Venus/Saturn | OpenAI-compatible fallback still used by the creative factory when no Claude `complete` is injected |
 | `LLM_BASE_URL` | no | Venus/Saturn | OpenAI-compatible base |
 | `LLM_MODEL` | no | Venus/Saturn | Default model id |
+| `ANTHROPIC_API_KEY` | live Claude | Saturn | Messages API key for brief intake, ScriptGen, PromptGen, regenerate. Never log or commit the value |
+| `CLAUDE_MODEL` | no | Saturn | Default `claude-sonnet-4-5` |
+| `LLM_PROVIDER` | no | Saturn | `claude` or `mock`. Default is `claude` when `ANTHROPIC_API_KEY` is set and `MOCK` is not `1`; otherwise the existing mock samples |
 | `PINE_LABS_MERCHANT_ID` | live pay | Mars | Checkout |
 | `PINE_LABS_API_KEY` | live pay | Mars | Checkout |
 | `PINE_LABS_WEBHOOK_SECRET` | live pay | Mars | Verify webhook |

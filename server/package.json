@@ -9,7 +9,7 @@
     "start:legacy": "tsx src/index.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.contract.json",
     "lint": "tsc --noEmit && tsc --noEmit -p tsconfig.contract.json",
-    "test": "tsx --test src/credits/*.test.ts src/payments/*.test.ts src/render/*.test.ts src/admin/*.test.ts",
+    "test": "tsx --test src/credits/*.test.ts src/payments/*.test.ts src/render/*.test.ts src/admin/*.test.ts src/llm/*.test.ts",
     "test:mock": "tsx src/scripts/smoke-mock.ts",
     "test:creative": "tsx --test src/creative/*.test.ts src/creative/**/*.test.ts",
     "sample:creative": "tsx src/creative/sample.ts",

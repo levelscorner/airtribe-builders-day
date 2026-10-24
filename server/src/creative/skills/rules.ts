@@ -14,6 +14,7 @@ export const SCRIPT_TASK = [
   "Write a short video script for an Indian creator.",
   "Follow the genre beats in order, one scene each.",
   "Narration language is Hindi in Devanagari, Hinglish in Latin script, or English, as requested.",
+  "Each scene narration includes the narrator line and spoken lines for on-screen cast, each prefixed with the character name.",
   "castIds may only use ids from the cast you were given.",
   "Put real doubts in the doubts array. Use an empty array when a scene is clear.",
   "durationMs values are positive integers and sum to targetSeconds * 1000.",
@@ -23,6 +24,7 @@ export const SCRIPT_TASK = [
 export const PROMPT_TASK = [
   "Write one image prompt and one video prompt for a single scene.",
   "Repeat each on-screen character's identityText exactly in both prompts.",
+  "Repeat each on-screen character's dnaChips in both prompts so the face and costume stay consistent.",
   "Embed each on-screen higgsfieldElementId as <<<id>>> in both prompts.",
   "Do not embed an element for a narrator. Keep narrators off screen.",
   "The image has no text, letters, logos, or watermarks.",

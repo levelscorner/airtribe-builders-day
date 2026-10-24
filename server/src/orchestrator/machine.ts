@@ -26,9 +26,13 @@ import {
   getGenre,
   getPresetCast,
   nextQuestion,
+  PromptGenOutputSchema,
+  ScriptGenOutputSchema,
   toQuestionMessage,
 } from "../creative/index.js";
 import type { IntakeAnswer } from "../creative/index.js";
+import { claudeIntakeEnabled, claudeOpeningBrief, claudeParseFreeText, claudeQuestion } from "../llm/intake.js";
+import { PROMPT_JSON_HINT, SCRIPT_JSON_HINT, creativeGenEnv } from "../llm/wire.js";
 import { artefactCreditCost, debitRegenerate } from "../credits/stub.js";
 import type { SqlClient } from "../db/client.js";
 import { createMediaPorts } from "../media/index.js";
@@ -116,8 +120,15 @@ async function progress(
 }
 
 async function askQuestion(ctx: OrchestratorContext, chatId: string, brief: Brief): Promise<QuestionMessage | null> {
-  const q = nextQuestion(brief);
+  let q = nextQuestion(brief);
   if (!q) return null;
+  if (claudeIntakeEnabled()) {
+    try {
+      q = await claudeQuestion(brief, q);
+    } catch {
+      // Fixed question list still streams over SSE.
+    }
+  }
   const message = toQuestionMessage(q, {
     id: nid("msg"),
     chatId,
@@ -316,7 +327,8 @@ async function beginScript(ctx: OrchestratorContext, chatId: string, videoId: st
   const castIds = video.brief.castIds ?? [];
   const cast = await attachCast(ctx, videoId, castIds);
   await progress(ctx, chatId, "script", "Script likh rahe hain…", "Script");
-  const gen = createScriptGen({ mock: ctx.mock });
+  // Payload stays { scenes, sceneIds } so a script critic can add agentReview beside it.
+  const gen = createScriptGen(creativeGenEnv(ScriptGenOutputSchema, SCRIPT_JSON_HINT));
   const output = await gen.generate({
     videoId,
     brief: video.brief,
@@ -342,7 +354,7 @@ async function beginPrompts(ctx: OrchestratorContext, chatId: string, videoId: s
   const cast = await store.listCastMembers(ctx.db, video.brief.castIds);
   const members = cast.length ? cast : getPresetCast().filter((m) => (video.brief.castIds ?? []).includes(m.id));
   await progress(ctx, chatId, "prompts", "Image/video prompts…", "Prompts");
-  const gen = createPromptGen({ mock: ctx.mock });
+  const gen = createPromptGen(creativeGenEnv(PromptGenOutputSchema, PROMPT_JSON_HINT));
   for (const scene of scenes) {
     const sceneCast = members.filter((m) => scene.castIds.includes(m.id));
     const output = await gen.generate({
@@ -601,8 +613,16 @@ export async function startChat(
 
   let brief: Brief = {};
   if (input.initialMessage?.trim()) {
-    brief = briefFromMessage(input.initialMessage.trim());
-    await text(ctx, chatId, "user", input.initialMessage.trim());
+    const opening = input.initialMessage.trim();
+    brief = briefFromMessage(opening);
+    if (claudeIntakeEnabled()) {
+      try {
+        brief = await claudeOpeningBrief(opening, brief);
+      } catch {
+        // Keep the heuristic topic and genre guess.
+      }
+    }
+    await text(ctx, chatId, "user", opening);
   }
   ctx.briefs.set(chatId, brief);
   chatBus.publish(chatId, { type: "stage", videoId, stage: "brief" });
@@ -627,7 +647,22 @@ export async function handleAnswer(
   }
 
   const brief = ctx.briefs.get(chatId) ?? {};
-  const result = applyAnswer(brief, answer);
+  const freeText =
+    Boolean(answer.freeText?.trim()) &&
+    !answer.optionId &&
+    !(answer.optionIds && answer.optionIds.length > 0) &&
+    !answer.skip &&
+    !answer.useDefaults;
+  let result: { brief: Brief; error?: string };
+  if (freeText && claudeIntakeEnabled()) {
+    try {
+      result = await claudeParseFreeText(brief, answer);
+    } catch {
+      result = applyAnswer(brief, answer);
+    }
+  } else {
+    result = applyAnswer(brief, answer);
+  }
   if (result.error) {
     await text(ctx, chatId, "assistant", result.error);
     throw new Error(result.error);
@@ -725,6 +760,69 @@ export async function rejectArtefact(
   return updated;
 }
 
+async function buildRegenPayload(
+  ctx: OrchestratorContext,
+  video: NonNullable<Awaited<ReturnType<typeof store.getVideoRow>>>,
+  artefact: ArtefactSummary,
+  feedback: string | undefined,
+  current: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  if (artefact.kind === "script") {
+    const cast = await attachCast(ctx, video.id, video.brief.castIds ?? []);
+    const output = await createScriptGen(creativeGenEnv(ScriptGenOutputSchema, SCRIPT_JSON_HINT)).generate({
+      videoId: video.id,
+      brief: video.brief,
+      cast,
+      genre: video.genre,
+      language: video.language,
+      targetSeconds: video.targetSeconds,
+      feedback,
+    });
+    const scenes = await store.replaceScenes(ctx.db, video.id, output.scenes);
+    return {
+      ...current,
+      scenes: output.scenes,
+      sceneIds: scenes.map((scene) => scene.id),
+      feedback,
+      regenerated: true,
+      generationFailed: false,
+      error: undefined,
+    };
+  }
+  if (artefact.kind === "prompt" && artefact.sceneId) {
+    const scene = (await store.listScenes(ctx.db, video.id)).find((item) => item.id === artefact.sceneId);
+    if (scene) {
+      const cast = await store.listCastMembers(ctx.db, video.brief.castIds);
+      const members = cast.length
+        ? cast
+        : getPresetCast().filter((member) => (video.brief.castIds ?? []).includes(member.id));
+      const output = await createPromptGen(creativeGenEnv(PromptGenOutputSchema, PROMPT_JSON_HINT)).generate({
+        videoId: video.id,
+        scene,
+        brief: video.brief,
+        cast: members.filter((member) => scene.castIds.includes(member.id)),
+        artStyle: video.artStyle,
+        feedback,
+      });
+      return {
+        ...current,
+        ...output,
+        sceneIdx: scene.idx,
+        title: scene.title,
+        feedback,
+        regenerated: true,
+        generationFailed: false,
+        error: undefined,
+      };
+    }
+  }
+  return {
+    ...current,
+    regenerated: true,
+    url: typeof current.url === "string" ? current.url : mockAssets.keyframe,
+  };
+}
+
 export async function regenerateArtefact(
   ctx: OrchestratorContext,
   input: { artefactId: string; userId: string; confirm: boolean; feedback?: string },
@@ -788,11 +886,7 @@ export async function regenerateArtefact(
   try {
     updated = await store.updateArtefact(ctx.db, artefact.id, {
       state: "awaiting_approval",
-      payload: {
-        ...updated.payload,
-        regenerated: true,
-        url: typeof artefact.payload.url === "string" ? artefact.payload.url : mockAssets.keyframe,
-      },
+      payload: await buildRegenPayload(ctx, video, artefact, input.feedback, updated.payload),
     });
   } catch (error) {
     updated = await store.updateArtefact(ctx.db, artefact.id, {
