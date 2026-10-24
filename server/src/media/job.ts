@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-export type MediaProvider = "higgsfield" | "elevenlabs" | "mock";
+export type MediaProvider = "openai" | "ark" | "higgsfield" | "elevenlabs" | "mock";
 
 export type MediaJobStatus =
   | "queued"

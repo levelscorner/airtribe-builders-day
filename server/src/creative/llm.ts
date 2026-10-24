@@ -22,6 +22,17 @@ export function readApiKey(env: { [key: string]: unknown }): string {
   return process.env.LLM_API_KEY?.trim() ?? "";
 }
 
+/** Claude sometimes wraps JSON in ```json fences. Strip those before JSON.parse. */
+export function stripJsonFences(text: string): string {
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return (fenced?.[1] ?? trimmed).trim();
+}
+
+export function parseModelJson(text: string): unknown {
+  return JSON.parse(stripJsonFences(text));
+}
+
 export async function completeWithModel(
   request: CompleteRequest,
   schema: z.ZodTypeAny,
@@ -39,6 +50,7 @@ export async function completeWithModel(
     schema,
     system: request.system,
     prompt: request.prompt,
+    experimental_repairText: async ({ text }) => stripJsonFences(text),
   });
   return object;
 }

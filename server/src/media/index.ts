@@ -1,11 +1,10 @@
 import { createCastAdapter, type CastAdapterDeps, type CastReferenceAdapter } from "./cast/reference.js";
-import { createClipGen } from "./higgsfield/clip-gen.js";
-import { createImageGen } from "./higgsfield/image-gen.js";
-import { createHiggsfieldClient, type HiggsfieldClient, type HiggsfieldClientDeps } from "./higgsfield/client.js";
+import type { HiggsfieldClient, HiggsfieldClientDeps } from "./higgsfield/client.js";
 import { createVoiceGen, type VoiceGenDeps } from "./elevenlabs/voice-gen.js";
 import type { EnvLike } from "./flags.js";
 import { moduleMock } from "./flags.js";
 import type { ClipGenPort, ImageGenPort, VoiceGenPort } from "./ports.js";
+import { createStudioClipGen, createStudioImageGen, type StudioDeps } from "./studio.js";
 
 export interface MediaPorts {
   cast: CastReferenceAdapter;
@@ -14,30 +13,32 @@ export interface MediaPorts {
   voice: VoiceGenPort;
 }
 
-export interface MediaPortDeps extends CastAdapterDeps {
+export interface MediaPortDeps extends CastAdapterDeps, StudioDeps {
   higgsfield?: HiggsfieldClient;
   higgsfieldDeps?: HiggsfieldClientDeps;
   voice?: VoiceGenDeps;
 }
 
-/** One cast registry shared by keyframes and clips. */
+/**
+ * Images: OpenAI gpt-image-2, Seedream if that key is missing or the call fails.
+ * Clips: Seedance 2.5 from the approved still. Samples require explicit mock mode.
+ * A Higgsfield client is used only when the caller passes one (cast byte upload).
+ */
 export function createMediaPorts(env: EnvLike = process.env, deps: MediaPortDeps = {}): MediaPorts {
-  const needsHiggsfield =
-    !moduleMock(env, "IMAGE_MOCK") || !moduleMock(env, "CLIP_MOCK") || !moduleMock(env, "CAST_MOCK");
-  const higgsfield = needsHiggsfield
-    ? (deps.higgsfield ?? createHiggsfieldClient(env, deps.higgsfieldDeps))
-    : undefined;
   const uploadAnchor =
     deps.uploadAnchor ??
-    (higgsfield && !moduleMock(env, "CAST_MOCK")
-      ? (bytes: Uint8Array, contentType: string) => higgsfield.upload(bytes, contentType)
+    (deps.higgsfield && !moduleMock(env, "CAST_MOCK")
+      ? (bytes: Uint8Array, contentType: string) => deps.higgsfield!.upload(bytes, contentType)
       : undefined);
   const cast = createCastAdapter(env, { uploadAnchor });
+  let images: ImageGenPort | undefined;
+  let clips: ClipGenPort | undefined;
+  let voice: VoiceGenPort | undefined;
   return {
     cast,
-    images: createImageGen(env, { cast, higgsfield }),
-    clips: createClipGen(env, { cast, higgsfield }),
-    get voice() { return createVoiceGen(env, deps.voice); },
+    get images() { return images ??= createStudioImageGen(env, { ...deps, cast }); },
+    get clips() { return clips ??= createStudioClipGen(env, { ...deps, cast }); },
+    get voice() { return voice ??= createVoiceGen(env, deps.voice); },
   };
 }
 

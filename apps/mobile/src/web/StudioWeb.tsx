@@ -1778,7 +1778,7 @@ export function WebConversation({
                       />
                       <MediaPlayer
                         kind={
-                          message.artefactKind === "audio" ? "audio" : "video"
+                          ["audio", "voice"].includes(message.artefactKind) ? "audio" : "video"
                         }
                         name={message.title}
                         url={str((art?.payload ?? message.preview).url)}

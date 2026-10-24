@@ -12,6 +12,7 @@ const COST: Record<string, number> = {
   image: 8,
   clip: 40,
   audio: 5,
+  voice: 5,
   final: 5,
   identity: 2,
   sheet: 6,

@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Router, type Request, type Response } from "express";
 import type {
   CreateChatRequest,
@@ -6,6 +9,7 @@ import type {
   PostMessageRequest,
   RejectArtefactRequest,
   RegenerateRequest,
+  SceneRegenerateRequest,
 } from "@chotu/shared";
 import { grantSignupCredits } from "../credits/stub.js";
 import type { SqlClient } from "../db/client.js";
@@ -16,12 +20,28 @@ import {
   createOrchestratorContext,
   handleAnswer,
   regenerateArtefact,
+  regenerateScene,
   rejectArtefact,
   startChat,
   type OrchestratorContext,
 } from "../orchestrator/machine.js";
+import { buildScenePlan } from "../orchestrator/storyboard.js";
 import * as store from "../orchestrator/store.js";
+import { renderOutputPath } from "../render/ffmpeg.js";
 import { bindSessionUser, requireSessionUser } from "../sessions.js";
+
+const routesDir = dirname(fileURLToPath(import.meta.url));
+const mockClip = join(routesDir, "../../public/mock/clip.mp4");
+
+function renderedFile(videoId: string): string | undefined {
+  const workDir = process.env.RENDER_WORK_DIR?.trim() || join(routesDir, "../../data/renders");
+  try {
+    const rendered = renderOutputPath(workDir, videoId);
+    return existsSync(rendered) ? rendered : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export type V1Deps = {
   db: SqlClient;
@@ -288,11 +308,59 @@ export function createV1Router(deps: V1Deps): Router {
       res.status(404).json({ error: "not_found" });
       return;
     }
+    const scenes = await store.listScenes(deps.db, video.id);
+    const artefacts = await store.listArtefacts(deps.db, video.id);
+    const castIds = [...new Set(scenes.flatMap((scene) => scene.castIds))];
+    const cast = castIds.length ? await store.listCastMembers(deps.db, castIds) : [];
     res.json({
       video,
-      scenes: await store.listScenes(deps.db, video.id),
-      artefacts: await store.listArtefacts(deps.db, video.id),
+      scenes,
+      artefacts,
+      scenePlan: buildScenePlan({ scenes, artefacts, cast }),
     });
+  });
+
+  router.post("/videos/:id/regenerate", async (req, res) => {
+    const userId = requireSessionUser(req, res);
+    if (!userId) return;
+    const body = (req.body ?? {}) as SceneRegenerateRequest;
+    if (!body.sceneId?.trim() || (body.target !== "image" && body.target !== "clip" && body.target !== "voice")) {
+      res.status(400).json({ error: "sceneId and target are required" });
+      return;
+    }
+    try {
+      const artefact = await regenerateScene(ctx, {
+        videoId: req.params.id,
+        userId,
+        sceneId: body.sceneId.trim(),
+        target: body.target,
+        feedback: body.feedback,
+      });
+      res.json({ artefact });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "regenerate_failed";
+      const status = message === "forbidden" ? 403 : 400;
+      res.status(status).json({ error: message });
+    }
+  });
+
+  router.get("/videos/:id/download", async (req, res) => {
+    const userId = requireSessionUser(req, res);
+    if (!userId) return;
+    const video = await store.getVideoRow(deps.db, req.params.id);
+    if (!video || video.userId !== userId) {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const rendered = renderedFile(req.params.id);
+    const allowMock = deps.mock || String(video.outputUrl ?? "").startsWith("mock:");
+    const send = rendered ?? (allowMock && existsSync(mockClip) ? mockClip : undefined);
+    if (!send) {
+      res.status(404).json({ error: "not_ready" });
+      return;
+    }
+    res.setHeader("Content-Disposition", `attachment; filename="${req.params.id}.mp4"`);
+    res.download(send, `${req.params.id}.mp4`);
   });
 
   router.get("/cast", async (req, res) => {

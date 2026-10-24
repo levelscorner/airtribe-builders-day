@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { concatArgs, encodeSceneArgs, musicDuckArgs } from "./commands.js";
 import { frameSize, type RendererInput, type RendererOutput } from "./types.js";
 
 const bundledFont = join(dirname(fileURLToPath(import.meta.url)), "fonts", "NotoSansDevanagari-Regular.ttf");
@@ -100,7 +101,13 @@ export async function assembleWithFfmpeg(input: RendererInput, options: Assemble
   const listPath = join(dir, "concat.txt");
   await writeFile(listPath, segments.map((path) => `file '${path.replace(/'/g, "'\\''")}'`).join("\n"));
   const output = renderOutputPath(workDir, videoId);
-  await run("ffmpeg", ["-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", "-movflags", "+faststart", output]);
+  await run("ffmpeg", concatArgs(listPath, output));
+  if (input.musicUrl) {
+    const music = await materialize(input.musicUrl, join(dir, "music"), options.fetchImpl);
+    const ducked = join(dir, "ducked.mp4");
+    await run("ffmpeg", musicDuckArgs(output, music, ducked));
+    await rename(ducked, output);
+  }
   const probed = await probeVideo(output);
   const base = options.publicBaseUrl.replace(/\/$/, "");
   return {
@@ -131,46 +138,22 @@ async function encodeScene(input: {
   font: string;
   fontSize: number;
 }): Promise<void> {
-  const videoInput = input.clip
-    ? ["-stream_loop", "-1", "-i", input.clip]
-    : input.image
-      ? ["-loop", "1", "-i", input.image]
-      : ["-f", "lavfi", "-i", `color=c=0x1a1a2e:s=${input.width}x${input.height}:r=25`];
-  const draw = input.captionFile
-    ? `drawtext=fontfile='${filterPath(input.font)}':textfile='${filterPath(input.captionFile)}':text_shaping=1:fontsize=${input.fontSize}:fontcolor=white:borderw=4:bordercolor=black:line_spacing=8:x=(w-text_w)/2:y=h-text_h-96,`
-    : "";
-  const duration = input.durationSec.toFixed(3);
-  const filter =
-    `[0:v]scale=${input.width}:${input.height}:force_original_aspect_ratio=increase,crop=${input.width}:${input.height},fps=25,${draw}format=yuv420p[v];` +
-    `[1:a]aformat=sample_fmts=fltp:channel_layouts=stereo,apad,atrim=0:${duration}[a]`;
-  await run("ffmpeg", [
-    "-y",
-    "-hide_banner",
-    "-loglevel",
-    "error",
-    ...videoInput,
-    "-i",
-    input.audio,
-    "-filter_complex",
-    filter,
-    "-map",
-    "[v]",
-    "-map",
-    "[a]",
-    "-t",
-    duration,
-    "-c:v",
-    "libx264",
-    "-preset",
-    "ultrafast",
-    "-pix_fmt",
-    "yuv420p",
-    "-c:a",
-    "aac",
-    "-b:a",
-    "96k",
-    input.segment,
-  ]);
+  const voDur = await probeDuration(input.audio).catch(() => input.durationSec);
+  const clipSec = input.clip ? await probeDuration(input.clip).catch(() => undefined) : undefined;
+  const drawtext = input.captionFile
+    ? `drawtext=fontfile='${filterPath(input.font)}':textfile='${filterPath(input.captionFile)}':text_shaping=1:fontsize=${input.fontSize}:fontcolor=white:borderw=4:bordercolor=black:line_spacing=8:x=(w-text_w)/2:y=h-text_h-96`
+    : undefined;
+  await run("ffmpeg", encodeSceneArgs({
+    clip: input.clip,
+    image: input.image,
+    audio: input.audio,
+    width: input.width,
+    height: input.height,
+    voSec: voDur,
+    clipSec,
+    segment: input.segment,
+    drawtext,
+  }));
 }
 
 function filterPath(path: string): string {
@@ -205,6 +188,16 @@ export interface Probe {
   width: number;
   height: number;
   durationSec: number;
+}
+
+async function probeDuration(path: string): Promise<number> {
+  const duration = Number(await runCapture("ffprobe", [
+    "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path,
+  ]));
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw new Error(`ffprobe could not read duration ${path}`);
+  }
+  return duration;
 }
 
 export async function probeVideo(path: string): Promise<Probe> {

@@ -443,8 +443,9 @@ test("polling gives up when the request never finishes", async () => {
   assert.match(job.error ?? "", /timed out/);
 });
 
-test("creating image ports does not require an unrelated voice credential", () => {
-  const ports = createMediaPorts({ MOCK: "0", HIGGSFIELD_API_KEY: "id:secret" });
+test("creating image ports does not require unrelated clip or voice credentials", () => {
+  const ports = createMediaPorts({ MOCK: "0", IMAGE_PROVIDER: "openai", OPENAI_API_KEY: "sk-test-openai" });
   assert.equal(ports.images.mode, "live");
+  assert.throws(() => ports.clips, /ARK_API_KEY/);
   assert.throws(() => ports.voice, /ELEVENLABS_API_KEY/);
 });

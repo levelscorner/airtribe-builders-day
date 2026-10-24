@@ -15,6 +15,8 @@ export interface RendererInput {
   resolution: Resolution;
   scenes: RenderSceneInput[];
   captionStyle?: string;
+  /** Optional bed. Mixed under the voiceover with sidechaincompress. */
+  musicUrl?: string;
 }
 
 export interface RendererOutput {

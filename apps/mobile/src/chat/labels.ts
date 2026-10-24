@@ -34,6 +34,7 @@ export const KIND_LABEL: Record<ArtefactKind, string> = {
   image: "Image",
   clip: "Clip",
   audio: "Audio",
+  voice: "Voice",
   final: "Final cut",
 };
 
