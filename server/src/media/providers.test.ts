@@ -20,7 +20,7 @@ function json(status: number, body: unknown): Response {
   });
 }
 
-test("gpt-image-2 is the default still and the bytes are stored for the clip", async () => {
+test("IMAGE_PROVIDER=openai calls gpt-image-2 generations and stores the crop", async () => {
   const png = await sharp({
     create: { width: 1024, height: 1536, channels: 3, background: { r: 20, g: 40, b: 60 } },
   })
@@ -34,6 +34,7 @@ test("gpt-image-2 is the default still and the bytes are stored for the clip", a
   const root = mkdtempSync(join(tmpdir(), "chotu-img-"));
   const images = createStudioImageGen(
     {
+      IMAGE_PROVIDER: "openai",
       OPENAI_API_KEY: "sk-test-openai",
       PUBLIC_BASE_URL: "http://studio.test",
       MEDIA_ROOT: root,
@@ -84,7 +85,7 @@ test("a cast anchor uses image edits and a failed OpenAI call falls back to Seed
     anchorUrl: "https://cdn.example/mini.png",
   });
   const images = createStudioImageGen(
-    { OPENAI_API_KEY: "sk-test-openai", ARK_API_KEY: "ark-test-key" },
+    { IMAGE_PROVIDER: "openai", OPENAI_API_KEY: "sk-test-openai", ARK_API_KEY: "ark-test-key" },
     { cast, fetch },
   );
   const image = await images.generate({
@@ -117,7 +118,7 @@ test("a cast anchor uses image edits and a failed OpenAI call falls back to Seed
 
 test("an OpenAI error does not echo the key when Seedream is unavailable", async () => {
   const fetch: FetchLike = async () => json(401, { error: { message: "rejected sk-test-openai" } });
-  const images = createStudioImageGen({ OPENAI_API_KEY: "sk-test-openai" }, { fetch });
+  const images = createStudioImageGen({ IMAGE_PROVIDER: "openai", OPENAI_API_KEY: "sk-test-openai" }, { fetch });
   const job = await images.submit({
     prompt: "rooftop",
     elementIds: [],
@@ -218,6 +219,30 @@ test("model JSON fences are stripped and a 5s line stays near 15 words", () => {
     voiceover: "hi",
   });
   assert.match(SCRIPT_TASK, /15 words/);
+});
+
+test("a blank IMAGE_PROVIDER stays on Seedream even when an OpenAI key is set", async () => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const fetch: FetchLike = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return json(200, { data: [{ url: "https://cdn.example/seedream.png" }] });
+  };
+  const images = createStudioImageGen(
+    { OPENAI_API_KEY: "sk-test-openai", ARK_API_KEY: "ark-test-key" },
+    { fetch },
+  );
+  const image = await images.generate({
+    prompt: "rooftop",
+    elementIds: [],
+    aspectRatio: "9:16",
+    resolution: "720p",
+  });
+  assert.equal(image.provider, "ark");
+  assert.equal(image.model, "seedream-5-0-260128");
+  assert.equal(calls.length, 1);
+  assert.match(calls[0]?.url ?? "", /bytepluses\.com\/api\/v3\/images\/generations$/);
+  assert.equal(new Headers(calls[0]?.init?.headers).get("authorization"), "Bearer ark-test-key");
+  assert.equal(JSON.stringify(calls).includes("sk-test-openai"), false);
 });
 
 test("MOCK=1 and missing keys stay on the mock ports", () => {

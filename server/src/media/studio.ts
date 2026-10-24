@@ -26,7 +26,7 @@ function imageProvider(env: EnvLike): "openai" | "ark" | "mock" {
   const explicit = env.IMAGE_PROVIDER?.trim().toLowerCase() ?? "";
   if (explicit === "mock" || explicit === "ark" || explicit === "openai") return explicit;
   if (explicit) throw new Error("IMAGE_PROVIDER must be openai, ark, or mock");
-  return "openai";
+  return "ark";
 }
 
 class StudioImageGen implements ImageGenPort {
@@ -171,7 +171,7 @@ function mockClips(env: EnvLike, cast: CastReferenceAdapter): ClipGenPort {
   return createClipGen({ ...env, CLIP_MOCK: "1" }, { cast });
 }
 
-/** OpenAI gpt-image-2, then Seedream when the OpenAI key is missing or the call fails. */
+/** Blank IMAGE_PROVIDER stays on Seedream. IMAGE_PROVIDER=openai uses gpt-image-2, then Seedream if that call fails. */
 export function createStudioImageGen(env: EnvLike = process.env, deps: StudioDeps = {}): ImageGenPort {
   const cast = deps.cast ?? createCastAdapter(env);
   if (moduleMock(env, "IMAGE_MOCK")) return mockImages(env, cast);

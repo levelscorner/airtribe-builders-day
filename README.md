@@ -27,7 +27,7 @@ Four ideas stay first-class in the portfolio. A short backlog records earlier de
 
 Adapters live in `server/src/media`. `createMediaPorts(env)` returns `ImageGen`, `ClipGen`, and `VoiceGen`. `MOCK=1` (or a missing key) returns placeholder files under `server/public/mock/` and does not call a provider.
 
-Live images default to OpenAI `gpt-image-2` (`POST /v1/images/generations`, body `model`, `prompt`, `size: 1024x1536`, `n: 1`). The response is `data[0].b64_json`. The server decodes it, center-crops 1024×1536 to 864×1536 (9:16), and serves the PNG at `/media/images/{id}.png`. A cast anchor uses `/v1/images/edits` at the same size, then the same crop. If the OpenAI key is missing or the call fails, images fall back to BytePlus Seedream (`seedream-5-0-260128`).
+Live images stay on BytePlus Seedream unless `IMAGE_PROVIDER=openai`. That switch calls `gpt-image-2` (`POST /v1/images/generations`, body `model`, `prompt`, `size: 1024x1536`, `n: 1`, `Authorization: Bearer OPENAI_API_KEY`). The response is `data[0].b64_json` (GPT image models do not return a URL). The server decodes it, center-crops 1024×1536 to 864×1536 (9:16), and serves the PNG at `/media/images/{id}.png`. A cast anchor uses `POST /v1/images/edits` with the anchor file, the same model and size, then the same crop. If that call fails and an Ark key is set, images fall back to Seedream (`seedream-5-0-260128`).
 
 Live clips are Seedance 2.5 (`dreamina-seedance-2-5-260628`) image-to-video. The first frame is `role: first_frame`. A still stored on this server is sent as `data:image/png;base64,...` so BytePlus does not have to fetch localhost. Do not send `ratio` or `--ratio` with a first frame (400 `TaskTypeConstraint`); the clip follows the image. The body sets `duration`, `resolution` (default `720p`), and `generate_audio: false`. Poll `GET /contents/generations/tasks/{id}` about every 8 seconds until `succeeded`, then read `content.video_url`.
 
@@ -43,7 +43,7 @@ Voice is the ElevenLabs bank in `packages/shared/voicePresets.ts` (`VOICE_PRESET
 | `IMAGE_MOCK`, `CLIP_MOCK`, `VOICE_MOCK`, `CAST_MOCK` | Per-port override. `1` forces mock, `0` forces the live adapter. |
 | `OPENAI_API_KEY` | Bearer token for gpt-image-2. Server-side only. |
 | `ARK_API_KEY` | Bearer token for Seedance and Seedream. Server-side only. |
-| `IMAGE_PROVIDER` | `openai` (default), `ark`, or `mock`. |
+| `IMAGE_PROVIDER` | Blank stays on Ark Seedream. `openai` selects gpt-image-2. `mock` forces placeholders. |
 | `SEEDREAM_MODEL` | Seedream model id. Default `seedream-5-0-260128`. |
 | `SEEDANCE_MODEL` | Seedance model id. Default `dreamina-seedance-2-5-260628`. |
 | `ELEVENLABS_API_KEY` | ElevenLabs `xi-api-key`. Server-side only. |
