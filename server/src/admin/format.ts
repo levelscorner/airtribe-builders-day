@@ -46,7 +46,7 @@ export function renderAdminHtml(input: {
 <h1>Traction</h1>
 <p>${total} events. Mock ${input.mock ? "on" : "off"}. Database ${input.database ? "connected" : "in memory"}.</p>
 <ul>${counts || "<li>No events yet.</li>"}</ul>
-<p><a href="/admin/payments">Payments</a> · <a href="/admin/export.csv">Download CSV</a></p>
+<p><a href="/admin/usage">Usage</a> · <a href="/admin/payments">Payments</a> · <a href="/admin/export.csv">Download CSV</a></p>
 <table>
 <thead><tr><th>When</th><th>Kind</th><th>User</th><th>Video</th><th>Payload</th></tr></thead>
 <tbody>${body}</tbody>
