@@ -18,7 +18,6 @@ export type SqlClient = {
 };
 
 let singleton: SqlClient | null = null;
-let memDb: IMemoryDb | null = null;
 
 function truthy(v: string | undefined): boolean {
   if (!v) return false;
@@ -34,6 +33,8 @@ function patchGenRandomUuid(db: IMemoryDb): void {
   db.public.registerFunction({
     name: "gen_random_uuid",
     returns: "uuid" as never,
+    // pg-mem caches pure defaults; uuid must be impure or every DEFAULT collapses to one value.
+    impure: true,
     implementation: () => randomUUID(),
   });
 }
@@ -45,7 +46,6 @@ async function openMemory(): Promise<SqlClient> {
     noAstCoverageCheck: true,
   });
   patchGenRandomUuid(db);
-  memDb = db;
   const { Pool } = db.adapters.createPg();
   const pool = new Pool() as unknown as pg.Pool;
   return {
@@ -79,7 +79,6 @@ export async function getDb(): Promise<SqlClient> {
 export async function resetDbForTests(): Promise<void> {
   if (singleton) await singleton.close();
   singleton = null;
-  memDb = null;
 }
 
 function migrationFiles(): string[] {
