@@ -63,8 +63,8 @@ test("IMAGE_PROVIDER=openai calls gpt-image-2 generations and stores the crop", 
   const id = image.url.split("/").pop()?.replace(/\.png$/, "");
   const stored = sharp(readFileSync(join(root, "images", `${id}.png`)));
   const meta = await stored.metadata();
-  assert.equal(meta.width, 864);
-  assert.equal(meta.height, 1536);
+  assert.equal(meta.width, 720);
+  assert.equal(meta.height, 1280);
 });
 
 test("a cast anchor uses image edits and a failed OpenAI call falls back to Seedream", async () => {

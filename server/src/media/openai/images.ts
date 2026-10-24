@@ -15,7 +15,14 @@ export function openaiImageModel(env: EnvLike): string {
   return env.OPENAI_IMAGE_MODEL?.trim() || OPENAI_IMAGE_MODEL;
 }
 
-/** Center-crop a 1024x1536 still to 864x1536 so Seedance follows a 9:16 frame. */
+/** Portrait frame Seedance follows. 720x1280 is 9:16 at 720p. */
+export const PORTRAIT_WIDTH = 720;
+export const PORTRAIT_HEIGHT = 1280;
+
+/**
+ * Center-crop a 1024x1536 still onto 9:16, then scale to 720x1280.
+ * A 2:3 first frame makes Seedance emit a non-9:16 clip.
+ */
 export async function cropToNineSixteen(bytes: Buffer): Promise<Buffer> {
   const meta = await sharp(bytes).metadata();
   const width = meta.width ?? 0;
@@ -40,7 +47,11 @@ export async function cropToNineSixteen(bytes: Buffer): Promise<Buffer> {
   }
   if (left + cropW > width) cropW = width - left;
   if (top + cropH > height) cropH = height - top;
-  return sharp(bytes).extract({ left, top, width: cropW, height: cropH }).png().toBuffer();
+  return sharp(bytes)
+    .extract({ left, top, width: cropW, height: cropH })
+    .resize(PORTRAIT_WIDTH, PORTRAIT_HEIGHT, { fit: "fill" })
+    .png()
+    .toBuffer();
 }
 
 function scrub(message: string, secret: string): string {
