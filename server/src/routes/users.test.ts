@@ -32,6 +32,7 @@ test("a new email creates a profile and an existing email signs that user in", a
   assert.equal(created.body.displayName, "Asha");
   assert.equal(created.body.phoneOrEmail, "asha-return@example.com");
   assert.equal(created.body.creditBalance, store.STARTER_CREDITS);
+  assert.equal(created.body.creditsEnabled, false);
   assert.equal(typeof created.body.id, "string");
 
   const first = request.agent(app);

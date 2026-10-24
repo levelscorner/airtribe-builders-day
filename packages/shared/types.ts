@@ -162,6 +162,8 @@ export interface User {
   displayName: string;
   phoneOrEmail?: string;
   creditBalance: number;
+  /** False unless the server set CREDITS_ENABLED. Omitted means off. */
+  creditsEnabled?: boolean;
   createdAt: string;
 }
 

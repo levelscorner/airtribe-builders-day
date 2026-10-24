@@ -43,6 +43,7 @@ import {
 import type { IntakeAnswer } from "../creative/index.js";
 import { claudeIntakeEnabled, claudeOpeningBrief, claudeParseFreeText, claudeQuestion } from "../llm/intake.js";
 import { PROMPT_JSON_HINT, SCENE_PLAN_HINT, SCRIPT_JSON_HINT, creativeGenEnv } from "../llm/wire.js";
+import { creditsEnabled } from "../credits/flag.js";
 import { artefactCreditCost, debitRegenerate } from "../credits/stub.js";
 import type { SqlClient } from "../db/client.js";
 import { sceneCastReference, ensureCharacterSheet } from "../media/cast/sheet.js";
@@ -1748,12 +1749,13 @@ export async function regenerateArtefact(
     throw new Error(
       "This review is already complete. Refresh to see the current step.",
     );
+  const charging = creditsEnabled();
   if (!input.confirm) {
     return {
       artefactId: artefact.id,
       creditCost: cost,
       balance: user.creditBalance,
-      canAfford: user.creditBalance >= cost,
+      canAfford: !charging || user.creditBalance >= cost,
     };
   }
   if (
@@ -1806,12 +1808,15 @@ export async function regenerateArtefact(
     };
   }
   const nextVersion = artefact.version + 1;
-  const balance = await debitRegenerate(ctx.db, {
-    userId: input.userId,
-    videoId: artefact.videoId,
-    amount: cost,
-    ref: `regen:${artefact.id}:v${nextVersion}`,
-  });
+  const balance = charging
+    ? await debitRegenerate(ctx.db, {
+        userId: input.userId,
+        videoId: artefact.videoId,
+        amount: cost,
+        ref: `regen:${artefact.id}:v${nextVersion}`,
+      })
+    : user.creditBalance;
+  const charged = charging ? cost : 0;
   let updated = await store.updateArtefact(ctx.db, artefact.id, {
     state: "generating",
     version: nextVersion,
@@ -1828,20 +1833,20 @@ export async function regenerateArtefact(
     userId: input.userId,
     action: "regenerate",
     note: feedback,
-    creditCharged: cost,
+    creditCharged: charged,
   });
   await store.logEvent(ctx.db, {
     userId: input.userId,
     videoId: artefact.videoId,
     kind: "regenerate",
-    payload: { artefactId: artefact.id, charged: cost },
+    payload: { artefactId: artefact.id, charged },
   });
   await publishArtefact(video.chatId, updated);
   await progress(
     ctx,
     video.chatId,
     video.stage,
-    `Dobara bana rahe hain · ${cost} credits.`,
+    charging ? `Dobara bana rahe hain · ${cost} credits.` : "Dobara bana rahe hain.",
     "Regen",
   );
 
@@ -2006,7 +2011,7 @@ export async function regenerateArtefact(
   return {
     artefactId: artefact.id,
     state: updated.state,
-    charged: cost,
+    charged,
     balance,
     artefact: updated,
   };
@@ -2043,13 +2048,14 @@ export async function regenerateScene(
   const feedback = input.feedback?.trim();
   const cost = current.creditCost;
   const nextVersion = current.version + 1;
-  const balance = await debitRegenerate(ctx.db, {
-    userId: input.userId,
-    videoId: input.videoId,
-    amount: cost,
-    ref: `regen:${current.id}:v${nextVersion}`,
-  });
-  void balance;
+  if (creditsEnabled()) {
+    await debitRegenerate(ctx.db, {
+      userId: input.userId,
+      videoId: input.videoId,
+      amount: cost,
+      ref: `regen:${current.id}:v${nextVersion}`,
+    });
+  }
   let updated = await store.updateArtefact(ctx.db, current.id, {
     state: "generating",
     version: nextVersion,

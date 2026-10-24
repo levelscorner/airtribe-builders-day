@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { createPostgresEventLog } from "../admin/log.js";
 import { adminRouter, type PaymentReview } from "../admin/routes.js";
 import { dbFromSql } from "../admin/sql-db.js";
+import { creditsEnabled } from "../credits/flag.js";
 import { createCredits } from "../credits/index.js";
 import { getDb, migrate } from "../db/client.js";
 import { resolveLlmProvider } from "../llm/provider.js";
@@ -77,7 +78,14 @@ export async function startServer(options?: { port?: number; listen?: boolean })
   app.use(adminRouter(events, { mock, database: !db.memory }, review));
 
   app.get("/api/health", (_req, res) => {
-    res.json({ ok: true, mock, memory: db.memory, llm: resolveLlmProvider(), payments: payMode });
+    res.json({
+      ok: true,
+      mock,
+      memory: db.memory,
+      llm: resolveLlmProvider(),
+      payments: payMode,
+      creditsEnabled: creditsEnabled(),
+    });
   });
 
   app.use("/v1", createV1Router({ db, mock }));

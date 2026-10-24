@@ -20,6 +20,7 @@ export function useWebChat(chatId: string) {
   const [artefacts, setArtefacts] = useState<ArtefactSummary[]>([]);
   const [stage, setStage] = useState<Stage>("brief");
   const [credits, setCredits] = useState<number | null>(null);
+  const [creditsEnabled, setCreditsEnabled] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -63,13 +64,16 @@ export function useWebChat(chatId: string) {
             : [...prev, event.artefact],
         );
       if (event.type === "stage") setStage(event.stage);
-      if (event.type === "error") setError(event.message);
+      if (event.type === "error" && !/live updates ruk gayi/i.test(event.message)) {
+        setError(event.message);
+      }
     });
     void Promise.all([client.getChat(chatId), client.getMe()])
       .then(([chat, me]) => {
         if (alive) {
           hydrate(chat);
           setCredits(me.creditBalance);
+          setCreditsEnabled(me.creditsEnabled === true);
         }
       })
       .catch((e) => {
@@ -109,6 +113,7 @@ export function useWebChat(chatId: string) {
       ]);
       hydrate(chat);
       setCredits(me.creditBalance);
+      setCreditsEnabled(me.creditsEnabled === true);
       return true;
     } catch (e) {
       setError(
@@ -131,6 +136,7 @@ export function useWebChat(chatId: string) {
     artefacts,
     stage,
     credits,
+    creditsEnabled,
     error,
     setError,
     busy,

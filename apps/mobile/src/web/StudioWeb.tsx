@@ -1474,7 +1474,7 @@ export function WebConversation({
             ...previews[0]!,
             creditCost,
             balance,
-            canAfford: balance >= creditCost,
+            canAfford: chat.creditsEnabled ? balance >= creditCost : true,
           },
         });
       } catch (e) {
@@ -1560,7 +1560,7 @@ export function WebConversation({
   return (
     <Shell
       chatId={chatId}
-      credits={chat.credits}
+      credits={chat.creditsEnabled ? chat.credits : undefined}
       canvasOpen={canvasOpen}
       hasCanvas={hasCanvas}
       onCanvas={() => toggleCanvas(!canvasOpen)}
@@ -1901,20 +1901,26 @@ export function WebConversation({
                   </h3>
                   <p>“{revision.note}”</p>
                   <p className="muted">
-                    {revision.quote.creditCost} sample credits ·{" "}
-                    {revision.quote.balance} available.{" "}
+                    {chat.creditsEnabled ? (
+                      <>
+                        {revision.quote.creditCost} sample credits ·{" "}
+                        {revision.quote.balance} available.{" "}
+                      </>
+                    ) : null}
                     {revision.targets[0]?.kind === "script"
                       ? "You’ll review the new script before any visuals are created."
                       : "You’ll review this item again before continuing."}
                   </p>
-                  {revision.quote.canAfford ? (
+                  {!chat.creditsEnabled || revision.quote.canAfford ? (
                     <button
                       className="primary-button"
                       disabled={chat.busy}
                       onClick={() => void confirmRevision()}
                     >
                       <RotateCcw size={15} />
-                      Regenerate · {revision.quote.creditCost} credits
+                      {chat.creditsEnabled
+                        ? `Regenerate · ${revision.quote.creditCost} credits`
+                        : "Regenerate"}
                     </button>
                   ) : (
                     <p role="alert">

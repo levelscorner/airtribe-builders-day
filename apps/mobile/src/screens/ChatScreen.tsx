@@ -106,18 +106,20 @@ export function ChatScreen({ chatId }: { chatId: string }) {
             <Text style={styles.brand}>Chotu Studio</Text>
             <Text style={styles.sub}>Orchestrator chat</Text>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={
-              stream.credits === null ? "Credits, open packs" : `${stream.credits} credits, open packs`
-            }
-            hitSlop={hitSlop}
-            onPress={() => router.push(`/packs?from=${encodeURIComponent(`/chat/${chatId}`)}`)}
-            style={styles.creditsBtn}
-          >
-            <Text style={styles.credits}>{stream.credits === null ? "— credits" : `${stream.credits} credits`}</Text>
-            <Text style={styles.creditsHint}>Packs</Text>
-          </Pressable>
+          {stream.creditsEnabled ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                stream.credits === null ? "Credits, open packs" : `${stream.credits} credits, open packs`
+              }
+              hitSlop={hitSlop}
+              onPress={() => router.push(`/packs?from=${encodeURIComponent(`/chat/${chatId}`)}`)}
+              style={styles.creditsBtn}
+            >
+              <Text style={styles.credits}>{stream.credits === null ? "— credits" : `${stream.credits} credits`}</Text>
+              <Text style={styles.creditsHint}>Packs</Text>
+            </Pressable>
+          ) : null}
         </View>
         {wide ? null : <ProgressStrip stage={stream.stage} />}
         {showApproveAll ? (
@@ -148,7 +150,7 @@ export function ChatScreen({ chatId }: { chatId: string }) {
             {stream.error}
           </Text>
         ) : null}
-        {stream.error && /credit/i.test(stream.error) ? (
+        {stream.creditsEnabled && stream.error && /credit/i.test(stream.error) ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Credits kam hain, packs dekho"
