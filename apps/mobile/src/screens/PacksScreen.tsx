@@ -341,7 +341,7 @@ const styles = StyleSheet.create({
   qr: {
     width: "100%",
     maxWidth: 320,
-    height: 320,
+    aspectRatio: 1080 / 1860,
     alignSelf: "center",
   },
   input: {
