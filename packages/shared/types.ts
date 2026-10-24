@@ -177,6 +177,8 @@ export interface Brief {
   aspectRatio?: string;
   resolution?: Resolution;
   targetSeconds?: number;
+  /** How many scenes the script must contain. Omitted means 2. */
+  sceneCount?: number;
   audience?: string;
   artStyle?: string;
   artStyleTraits?: string[];

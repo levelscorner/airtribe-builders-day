@@ -48,6 +48,7 @@ import {
   GenerationProgress,
 } from "./GenerationUI";
 import { getStudioClient } from "../api";
+import { rememberBrowserSession } from "./session-notice";
 import { openQuestion } from "../chat/open-question";
 import { useWebChat } from "./useWebChat";
 import {
@@ -500,6 +501,7 @@ export function WebHome() {
         }
         throw e;
       }
+      rememberBrowserSession();
       await create();
     } catch (e) {
       setError(
@@ -519,6 +521,7 @@ export function WebHome() {
           displayName: name.trim(),
           phoneOrEmail: email.trim(),
         });
+        rememberBrowserSession();
         profileCreated.current = true;
       }
       await create();
@@ -1961,12 +1964,22 @@ export function WebConversation({
             </div>
           </div>
           <div className="conversation-bottom">
+            {chat.sessionNotice && (
+              <div role="alert" className="error-note">
+                Sign up required
+                <button type="button" onClick={() => chat.dismissSessionNotice()}>
+                  Dismiss
+                </button>
+              </div>
+            )}
             {chat.error && (
               <div role="alert" className="error-note">
                 {chat.error === "not_found" || chat.error === "unauthorized"
                   ? "This session has expired. Start a new video to continue."
                   : chat.error}
-                <button onClick={() => chat.setError("")}>Dismiss</button>
+                <button type="button" onClick={() => chat.setError("")}>
+                  Dismiss
+                </button>
               </div>
             )}
             {feedbackTarget && (

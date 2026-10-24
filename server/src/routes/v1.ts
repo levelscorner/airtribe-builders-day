@@ -34,6 +34,38 @@ import { bindSessionUser, requireSessionUser } from "../sessions.js";
 
 const routesDir = dirname(fileURLToPath(import.meta.url));
 const mockClip = join(routesDir, "../../public/mock/clip.mp4");
+const DUPLICATE_EMAIL = "This email is already used in the demo. Try a different email.";
+
+/** Off unless explicitly enabled. There is no password or OTP on this route. */
+export function demoEmailLoginEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const value = env.DEMO_EMAIL_LOGIN?.trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes" || value === "on";
+}
+
+/** Studio emails that must never be signed in by knowing the address. */
+export function isAdminContact(contact: string | undefined, env: NodeJS.ProcessEnv = process.env): boolean {
+  const key = contact?.trim().toLowerCase() ?? "";
+  if (!key) return false;
+  const listed = (env.ADMIN_EMAILS ?? "")
+    .split(/[,;\s]+/)
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+  return listed.includes(key);
+}
+
+async function signInExistingEmail(
+  req: Request,
+  res: Response,
+  db: SqlClient,
+  phoneOrEmail: string,
+): Promise<boolean> {
+  if (!demoEmailLoginEnabled() || isAdminContact(phoneOrEmail)) return false;
+  const existing = await store.findUserByContact(db, phoneOrEmail);
+  if (!existing || isAdminContact(existing.phoneOrEmail)) return false;
+  bindSessionUser(req, existing.id);
+  res.status(200).json(presentUser(existing));
+  return true;
+}
 
 function renderedFile(videoId: string): string | undefined {
   const workDir = process.env.RENDER_WORK_DIR?.trim() || join(routesDir, "../../data/renders");
@@ -78,15 +110,7 @@ export function createV1Router(deps: V1Deps): Router {
         res.status(400).json({ error: "displayName required" });
         return;
       }
-      // Demo only: there is no password or OTP, so anyone with the email gets in.
-      if (phoneOrEmail) {
-        const existing = await store.findUserByContact(deps.db, phoneOrEmail);
-        if (existing) {
-          bindSessionUser(req, existing.id);
-          res.status(200).json(presentUser(existing));
-          return;
-        }
-      }
+      if (phoneOrEmail && (await signInExistingEmail(req, res, deps.db, phoneOrEmail))) return;
       const user = await store.insertUser(deps.db, {
         displayName: body.displayName.trim(),
         phoneOrEmail,
@@ -103,13 +127,10 @@ export function createV1Router(deps: V1Deps): Router {
     } catch (error) {
       const message = error instanceof Error ? error.message : "";
       const duplicate = (error as { code?: string })?.code === "23505" || /duplicate key/i.test(message);
-      if (duplicate && phoneOrEmail) {
-        const existing = await store.findUserByContact(deps.db, phoneOrEmail);
-        if (existing) {
-          bindSessionUser(req, existing.id);
-          res.status(200).json(presentUser(existing));
-          return;
-        }
+      if (duplicate && phoneOrEmail && (await signInExistingEmail(req, res, deps.db, phoneOrEmail))) return;
+      if (duplicate) {
+        res.status(409).json({ error: DUPLICATE_EMAIL });
+        return;
       }
       res.status(500).json({ error: "Could not create your demo profile. Please try again." });
     }

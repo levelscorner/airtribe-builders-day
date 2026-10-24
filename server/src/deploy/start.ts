@@ -14,7 +14,11 @@ import { dbFromSql } from "../admin/sql-db.js";
 import { creditsEnabled } from "../credits/flag.js";
 import { createCredits } from "../credits/index.js";
 import { getDb, migrate } from "../db/client.js";
+import { apiHealthBody } from "../health.js";
 import { resolveLlmProvider } from "../llm/provider.js";
+import { createMcpRouter } from "../mcp/http.js";
+import { warnIfMcpOpen } from "../mcp/auth.js";
+import { createVideoBrief, getJobStatus } from "../mcp/jobs.js";
 import { mediaRoot } from "../media/files.js";
 import { createPayments, paymentsModeFrom, paymentsRouter } from "../payments/index.js";
 import { createV1Router } from "../routes/v1.js";
@@ -77,16 +81,20 @@ export async function startServer(options?: { port?: number; listen?: boolean })
   app.use(paymentsRouter(payments));
   app.use(adminRouter(events, { mock, database: !db.memory }, review));
 
+  const health = () =>
+    apiHealthBody({ mock, memory: db.memory, llm: resolveLlmProvider(), payments: payMode });
   app.get("/api/health", (_req, res) => {
-    res.json({
-      ok: true,
-      mock,
-      memory: db.memory,
-      llm: resolveLlmProvider(),
-      payments: payMode,
-      creditsEnabled: creditsEnabled(),
-    });
+    res.json({ ...health(), creditsEnabled: creditsEnabled() });
   });
+  warnIfMcpOpen(process.env);
+  app.use(
+    "/mcp",
+    createMcpRouter({
+      health,
+      createBrief: (input) => createVideoBrief({ db, mock }, input),
+      jobStatus: (jobId) => getJobStatus(db, jobId),
+    }),
+  );
 
   app.use("/v1", createV1Router({ db, mock }));
 
@@ -108,7 +116,8 @@ export async function startServer(options?: { port?: number; listen?: boolean })
         req.path.startsWith("/api") ||
         req.path.startsWith("/mock") ||
         req.path.startsWith("/admin") ||
-        req.path.startsWith("/payments")
+        req.path.startsWith("/payments") ||
+        req.path.startsWith("/mcp")
       ) {
         next();
         return;
