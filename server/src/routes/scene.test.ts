@@ -121,3 +121,73 @@ test("storyboard, scene regenerate, and final download use the shared contract",
   assert.match(String(download.headers["content-disposition"]), /attachment/);
   assert.match(String(download.headers["content-disposition"]), new RegExp(videoId));
 });
+
+test("regenerating one scene image rebuilds only that clip and leaves the other scene cached", async () => {
+  const agent = request.agent(app);
+  await agent.post("/v1/users").send({ displayName: "Ravi" }).expect(201);
+  const opened = await agent.post("/v1/chats").send({ title: "monsoon" }).expect(201);
+  const videoId = opened.body.videoId as string;
+  const scenes = await store.replaceScenes(db, videoId, [
+    { idx: 0, title: "a", narration: "Wind from the sea.", durationMs: 5000, doubts: [], castIds: [] },
+    { idx: 1, title: "b", narration: "Rain on the coast.", durationMs: 10000, doubts: [], castIds: [] },
+  ]);
+  const sceneA = scenes[0]!.id;
+  const sceneB = scenes[1]!.id;
+  const row = async (sceneId: string, kind: string, payload: Record<string, unknown>) =>
+    store.insertArtefact(db, {
+      videoId,
+      sceneId,
+      kind: kind as "image",
+      state: "approved",
+      creditCost: kind === "clip" ? 40 : kind === "voice" ? 5 : 8,
+      payload,
+    });
+  await row(sceneA, "image", { url: "/mock/a.png", provider: "mock", model: "mock", providerLabel: "Mock" });
+  const clipA = await row(sceneA, "clip", { url: "/mock/a.mp4", provider: "mock", model: "seedance", providerLabel: "Seedance 2.5 · BytePlus" });
+  const voiceA = await row(sceneA, "voice", {
+    url: "/mock/a.mp3",
+    voiceId: "FZkK3TvQ0pjyDmT8fzIW",
+    narration: "Wind from the sea.",
+    provider: "elevenlabs",
+    model: "eleven_multilingual_v2",
+    providerLabel: "ElevenLabs",
+  });
+  const imageB = await row(sceneB, "image", { url: "/mock/b.png", provider: "mock", model: "mock", providerLabel: "Mock" });
+  const clipB = await row(sceneB, "clip", { url: "/mock/b.mp4", provider: "mock", model: "seedance", providerLabel: "Seedance 2.5 · BytePlus" });
+  const voiceB = await row(sceneB, "voice", {
+    url: "/mock/b.mp3",
+    voiceId: "RABOvaPec1ymXz02oDQi",
+    narration: "Rain on the coast.",
+    provider: "elevenlabs",
+    model: "eleven_multilingual_v2",
+    providerLabel: "ElevenLabs",
+  });
+  await store.insertArtefact(db, {
+    videoId,
+    kind: "final",
+    state: "awaiting_approval",
+    creditCost: 5,
+    payload: { url: `mock://videos/${videoId}.mp4`, downloadUrl: `/v1/videos/${videoId}/download` },
+  });
+
+  const regenerated = await agent
+    .post(`/v1/videos/${videoId}/regenerate`)
+    .send({ sceneId: sceneA, target: "image", feedback: "darker clouds" })
+    .expect(200);
+  assert.equal(regenerated.body.artefact.kind, "image");
+  assert.equal(regenerated.body.artefact.sceneId, sceneA);
+  assert.equal(regenerated.body.artefact.provider, "mock");
+
+  const after = await agent.get(`/v1/videos/${videoId}`).expect(200);
+  const items = after.body.artefacts as Array<{ id: string; sceneId?: string; kind: string; version: number; payload: Record<string, unknown> }>;
+  const clip = items.find((item) => item.id === clipA.id);
+  assert.equal(clip?.version, clipA.version + 1);
+  assert.equal(clip?.payload.regeneratedFrom, "image");
+  assert.equal(clip?.payload.provider, "mock");
+  assert.ok(clip?.payload.providerLabel);
+  assert.equal(items.find((item) => item.id === voiceA.id)?.version, voiceA.version);
+  assert.equal(items.find((item) => item.id === imageB.id)?.version, imageB.version);
+  assert.equal(items.find((item) => item.id === clipB.id)?.version, clipB.version);
+  assert.equal(items.find((item) => item.id === voiceB.id)?.version, voiceB.version);
+  assert.equal(items.find((item) => item.kind === "final")?.payload.reconcat, true);
+});

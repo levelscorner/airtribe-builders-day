@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { copyFile, mkdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type {
   AgentReview,
   ApprovalCardMessage,
@@ -43,11 +46,20 @@ import { PROMPT_JSON_HINT, SCENE_PLAN_HINT, SCRIPT_JSON_HINT, creativeGenEnv } f
 import { artefactCreditCost, debitRegenerate } from "../credits/stub.js";
 import type { SqlClient } from "../db/client.js";
 import { createMediaPorts } from "../media/index.js";
+import { mediaRoot } from "../media/files.js";
 import { mockAssets, publicUrl } from "../media/placeholders.js";
+import {
+  castAnchorIds,
+  mapWithConcurrency,
+  regenScope,
+  sceneConcurrency,
+  sceneDurationSec,
+} from "../media/scenes.js";
+import { assembleWithFfmpeg, renderOutputPath } from "../render/ffmpeg.js";
+import type { RendererInput } from "../render/types.js";
 import { ensureBlockingWarning, scriptArtefactState } from "../integrations/agenticorg/parse.js";
 import { runScriptReview, type ScriptReviewInput } from "../integrations/agenticorg/run.js";
 import { chatBus } from "./bus.js";
-import { clipDurationMs } from "./storyboard.js";
 import * as store from "./store.js";
 
 const STAGE_ORDER: Stage[] = [
@@ -448,6 +460,25 @@ function mediaEnv(ctx: OrchestratorContext): NodeJS.ProcessEnv {
   return { ...process.env, MOCK: ctx.mock ? "1" : "0" };
 }
 
+/** The scene pipeline opts into gpt-image-2. A blank IMAGE_PROVIDER elsewhere stays on Ark. */
+function imageMediaEnv(ctx: OrchestratorContext): NodeJS.ProcessEnv {
+  const env = mediaEnv(ctx);
+  if (env.MOCK === "1" || env.IMAGE_PROVIDER?.trim().toLowerCase() === "mock") return env;
+  return { ...env, IMAGE_PROVIDER: "openai" };
+}
+
+function sceneLimit(): number {
+  return sceneConcurrency(process.env);
+}
+
+function renderWorkDir(): string {
+  return process.env.RENDER_WORK_DIR?.trim() || join(dirname(fileURLToPath(import.meta.url)), "../../data/renders");
+}
+
+function latestOf(artefacts: ArtefactSummary[], sceneId: string, kinds: string[]): ArtefactSummary | undefined {
+  return [...artefacts].reverse().find((item) => item.sceneId === sceneId && kinds.includes(item.kind));
+}
+
 function asMediaProvider(value: string | undefined): MediaProviderName {
   if (value === "openai" || value === "ark" || value === "higgsfield" || value === "elevenlabs" || value === "mock") {
     return value;
@@ -461,18 +492,25 @@ function publishMedia(chatId: string, event: Omit<MediaProgressEvent, "type">): 
 
 async function beginImages(ctx: OrchestratorContext, chatId: string, videoId: string): Promise<void> {
   const video = (await store.getVideoRow(ctx.db, videoId))!;
-  const media = createMediaPorts(mediaEnv(ctx));
-  const prompts = (await store.listArtefacts(ctx.db, videoId)).filter(
-    (a) => a.kind === "prompt" && a.state === "approved",
-  );
+  const media = createMediaPorts(imageMediaEnv(ctx));
+  const artefacts = await store.listArtefacts(ctx.db, videoId);
+  const prompts = artefacts.filter((a) => a.kind === "prompt" && a.state === "approved");
+  const planned = readScenePlan(artefacts.find((item) => item.kind === "script")?.payload);
+  const scenes = await store.listScenes(ctx.db, videoId);
+  const cast = await store.listCastMembers(ctx.db, video.brief.castIds);
   await progress(ctx, chatId, "images", "Keyframes…", "Images");
-  for (const prompt of prompts) {
+  await mapWithConcurrency(prompts, sceneLimit(), async (prompt) => {
+    const scene = scenes.find((item) => item.id === prompt.sceneId);
+    const plan = scene ? planned[scene.idx] : undefined;
     // Venus embeds <<<el_*>>> tokens. Only http(s) and ref: anchors go to edits.
-    const imagePrompt = String(prompt.payload.imagePrompt ?? "").replace(/<<<[^>]+>>>/g, " ").trim();
+    const imagePrompt = String(plan?.imagePrompt ?? prompt.payload.imagePrompt ?? "")
+      .replace(/<<<[^>]+>>>/g, " ")
+      .trim();
     const rawIds = Array.isArray(prompt.payload.elementIds) ? prompt.payload.elementIds : [];
-    const elementIds = rawIds.filter(
-      (id): id is string =>
-        typeof id === "string" && (id.startsWith("ref:") || id.startsWith("http://") || id.startsWith("https://")),
+    const sceneCast = cast.filter((member) => scene?.castIds.includes(member.id));
+    const elementIds = castAnchorIds(
+      sceneCast,
+      rawIds.filter((id): id is string => typeof id === "string"),
     );
     const pending = await store.insertArtefact(ctx.db, {
       videoId,
@@ -536,25 +574,26 @@ async function beginImages(ctx: OrchestratorContext, chatId: string, videoId: st
       });
       throw error;
     }
-  }
+  });
 }
 
 async function beginClips(ctx: OrchestratorContext, chatId: string, videoId: string): Promise<void> {
   const video = (await store.getVideoRow(ctx.db, videoId))!;
   const media = createMediaPorts(mediaEnv(ctx));
-  const images = (await store.listArtefacts(ctx.db, videoId)).filter(
-    (a) => a.kind === "image" && a.state === "approved",
-  );
-  const prompts = (await store.listArtefacts(ctx.db, videoId)).filter((a) => a.kind === "prompt");
+  const artefacts = await store.listArtefacts(ctx.db, videoId);
+  const images = artefacts.filter((a) => a.kind === "image" && a.state === "approved");
+  const prompts = artefacts.filter((a) => a.kind === "prompt");
+  const planned = readScenePlan(artefacts.find((item) => item.kind === "script")?.payload);
+  const scenes = await store.listScenes(ctx.db, videoId);
   await progress(ctx, chatId, "clips", "Clips…", "Clips");
-  for (const image of images) {
+  await mapWithConcurrency(images, sceneLimit(), async (image) => {
+    const scene = image.sceneId ? scenes.find((item) => item.id === image.sceneId) : undefined;
+    const plan = scene ? planned[scene.idx] : undefined;
     const prompt = prompts.find((p) => p.id === image.payload.promptId || p.sceneId === image.sceneId);
-    const videoPrompt = String(prompt?.payload.videoPrompt ?? "gentle motion")
+    const videoPrompt = String(plan?.motionPrompt ?? prompt?.payload.motionPrompt ?? prompt?.payload.videoPrompt ?? "gentle motion")
       .replace(/<<<[^>]+>>>/g, " ")
       .trim();
-    const scene = image.sceneId
-      ? (await store.listScenes(ctx.db, videoId)).find((s) => s.id === image.sceneId)
-      : undefined;
+    const durationMs = sceneDurationSec(plan?.durationSec ?? prompt?.payload.durationSec, scene?.durationMs) * 1000;
     const pending = await store.insertArtefact(ctx.db, {
       videoId,
       sceneId: image.sceneId,
@@ -577,7 +616,7 @@ async function beginClips(ctx: OrchestratorContext, chatId: string, videoId: str
       imageUrl: String(image.payload.url ?? mockAssets.keyframe),
       videoPrompt,
       elementIds: [],
-      durationMs: clipDurationMs(scene?.durationMs),
+      durationMs,
       aspectRatio: video.aspectRatio,
     });
     const provider = asMediaProvider(generated.provider);
@@ -599,25 +638,31 @@ async function beginClips(ctx: OrchestratorContext, chatId: string, videoId: str
       model,
     });
     await approvalCard(ctx, chatId, "clips", artefact, `Clip · scene`);
-  }
+  });
 }
 
 async function beginAudio(ctx: OrchestratorContext, chatId: string, videoId: string): Promise<void> {
   const video = (await store.getVideoRow(ctx.db, videoId))!;
   const scenes = await store.listScenes(ctx.db, videoId);
   const cast = await store.listCastMembers(ctx.db, video.brief.castIds);
+  const artefacts = await store.listArtefacts(ctx.db, videoId);
+  const planned = readScenePlan(artefacts.find((item) => item.kind === "script")?.payload);
+  const prompts = artefacts.filter((item) => item.kind === "prompt");
   const media = createMediaPorts(mediaEnv(ctx));
   await progress(ctx, chatId, "audio", "Voice lines…", "Voice");
-  for (const scene of scenes) {
+  await mapWithConcurrency(scenes, sceneLimit(), async (scene) => {
+    const plan = planned[scene.idx];
+    const prompt = prompts.find((item) => item.sceneId === scene.id);
     const speaker = cast.find((m) => scene.castIds.includes(m.id)) ?? cast[0];
-    const voiceId = speaker?.voiceId ?? "deep_storyteller_male";
+    const voiceId = plan?.voiceId || textOf(prompt?.payload.voiceId) || speaker?.voiceId || "deep_storyteller_male";
+    const spoken = plan?.vo || textOf(prompt?.payload.vo) || scene.narration || "";
     const pending = await store.insertArtefact(ctx.db, {
       videoId,
       sceneId: scene.id,
       kind: "voice",
       state: "generating",
       creditCost: artefactCreditCost("voice"),
-      payload: { voiceId, narration: scene.narration },
+      payload: { voiceId, narration: spoken },
     });
     publishMedia(chatId, {
       jobId: pending.id,
@@ -630,7 +675,7 @@ async function beginAudio(ctx: OrchestratorContext, chatId: string, videoId: str
       model: "",
     });
     const generated = await media.voice.generate({
-      text: scene.narration ?? "",
+      text: spoken,
       voiceId,
       language: video.language,
     });
@@ -646,7 +691,7 @@ async function beginAudio(ctx: OrchestratorContext, chatId: string, videoId: str
         model,
         providerLabel,
         voiceId,
-        narration: scene.narration,
+        narration: spoken,
       },
     });
     publishMedia(chatId, {
@@ -661,24 +706,202 @@ async function beginAudio(ctx: OrchestratorContext, chatId: string, videoId: str
       model,
     });
     await approvalCard(ctx, chatId, "audio", artefact, `Voice · ${scene.title ?? scene.idx}`);
-  }
+  });
+}
+
+function textOf(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 async function beginFinal(ctx: OrchestratorContext, chatId: string, videoId: string): Promise<void> {
-  await progress(ctx, chatId, "final", "Final cut assemble (mock)…", "Render");
+  await progress(ctx, chatId, "final", ctx.mock ? "Final cut assemble (mock)…" : "Final cut…", "Render");
   const scenes = await store.listScenes(ctx.db, videoId);
   const durationMs = scenes.reduce((sum, scene) => sum + (scene.durationMs ?? 0), 0);
-  const url = `mock://videos/${videoId}.mp4`;
   const downloadUrl = publicUrl(process.env, `/v1/videos/${videoId}/download`);
+  if (!ctx.mock) {
+    const rendered = await renderCut(ctx, videoId);
+    const artefact = await store.insertArtefact(ctx.db, {
+      videoId,
+      kind: "final",
+      state: "awaiting_approval",
+      creditCost: artefactCreditCost("final"),
+      payload: {
+        url: rendered.url,
+        downloadUrl,
+        durationMs: rendered.durationMs || durationMs,
+        captions: true,
+        provider: "ffmpeg",
+        model: "libx264",
+        providerLabel: "ffmpeg",
+      },
+    });
+    await store.updateVideo(ctx.db, videoId, { outputUrl: rendered.url });
+    await approvalCard(ctx, chatId, "final", artefact, "Final cut");
+    return;
+  }
+  const url = `mock://videos/${videoId}.mp4`;
   const artefact = await store.insertArtefact(ctx.db, {
     videoId,
     kind: "final",
     state: "awaiting_approval",
     creditCost: artefactCreditCost("final"),
-    payload: { url, downloadUrl, durationMs, captions: true },
+    payload: { url, downloadUrl, durationMs, captions: true, provider: "mock", model: "concat", providerLabel: "Mock" },
   });
   await store.updateVideo(ctx.db, videoId, { outputUrl: url });
   await approvalCard(ctx, chatId, "final", artefact, "Final cut");
+}
+
+async function renderCut(ctx: OrchestratorContext, videoId: string): Promise<{ url: string; durationMs: number }> {
+  const video = (await store.getVideoRow(ctx.db, videoId))!;
+  const scenes = await store.listScenes(ctx.db, videoId);
+  const artefacts = await store.listArtefacts(ctx.db, videoId);
+  const input: RendererInput = {
+    videoId,
+    aspectRatio: video.aspectRatio || "9:16",
+    resolution: video.resolution === "1080p" ? "1080p" : "720p",
+    musicUrl: process.env.BACKGROUND_MUSIC_URL?.trim() || undefined,
+    scenes: scenes.map((scene) => {
+      const clip = latestOf(artefacts, scene.id, ["clip"]);
+      const image = latestOf(artefacts, scene.id, ["image"]);
+      const voice = latestOf(artefacts, scene.id, ["voice", "audio"]);
+      const durationMs = typeof voice?.payload.durationMs === "number" ? voice.payload.durationMs : scene.durationMs ?? 5000;
+      return {
+        idx: scene.idx,
+        clipUrl: textOf(clip?.payload.url) || undefined,
+        imageUrl: textOf(image?.payload.url) || undefined,
+        audioUrl: textOf(voice?.payload.url),
+        narration: textOf(voice?.payload.narration) || scene.narration || "",
+        durationMs,
+      };
+    }),
+  };
+  const workDir = renderWorkDir();
+  const rendered = await assembleWithFfmpeg(input, {
+    workDir,
+    publicBaseUrl: process.env.PUBLIC_BASE_URL?.trim() || "http://localhost:8787",
+  });
+  const destDir = join(mediaRoot(process.env), videoId);
+  await mkdir(destDir, { recursive: true });
+  await copyFile(renderOutputPath(workDir, videoId), join(destDir, "final.mp4"));
+  return { url: publicUrl(process.env, `/media/${videoId}/final.mp4`), durationMs: rendered.durationMs };
+}
+
+async function reconcatIfPresent(ctx: OrchestratorContext, videoId: string): Promise<void> {
+  const artefacts = await store.listArtefacts(ctx.db, videoId);
+  const final = [...artefacts].reverse().find((item) => item.kind === "final");
+  if (!final) return;
+  if (ctx.mock) {
+    await store.updateArtefact(ctx.db, final.id, {
+      payload: {
+        ...final.payload,
+        url: textOf(final.payload.url) || `mock://videos/${videoId}.mp4`,
+        downloadUrl: textOf(final.payload.downloadUrl) || publicUrl(process.env, `/v1/videos/${videoId}/download`),
+        provider: "mock",
+        model: "concat",
+        providerLabel: "Mock",
+        reconcat: true,
+      },
+    });
+    return;
+  }
+  const rendered = await renderCut(ctx, videoId);
+  const downloadUrl = publicUrl(process.env, `/v1/videos/${videoId}/download`);
+  await store.updateArtefact(ctx.db, final.id, {
+    payload: {
+      ...final.payload,
+      url: rendered.url,
+      downloadUrl,
+      durationMs: rendered.durationMs,
+      provider: "ffmpeg",
+      model: "libx264",
+      providerLabel: "ffmpeg",
+      reconcat: true,
+    },
+  });
+  await store.updateVideo(ctx.db, videoId, { outputUrl: rendered.url });
+}
+
+/** Image regen invalidates that scene's clip. Other scenes stay cached. */
+async function rerunDownstreamClip(
+  ctx: OrchestratorContext,
+  video: { id: string; chatId: string; aspectRatio: string },
+  scene: Scene,
+  image: ArtefactSummary,
+): Promise<void> {
+  const scope = regenScope("image");
+  if (!scope.rerun.includes("clip")) return;
+  const artefacts = await store.listArtefacts(ctx.db, video.id);
+  const clip = latestOf(artefacts, scene.id, ["clip"]);
+  if (!clip) return;
+  const planned = readScenePlan(artefacts.find((item) => item.kind === "script")?.payload);
+  const prompt = artefacts.find((item) => item.kind === "prompt" && item.sceneId === scene.id);
+  const plan = planned[scene.idx];
+  const motion = String(plan?.motionPrompt ?? prompt?.payload.motionPrompt ?? prompt?.payload.videoPrompt ?? "gentle motion")
+    .replace(/<<<[^>]+>>>/g, " ")
+    .trim();
+  publishMedia(video.chatId, {
+    jobId: clip.id,
+    artefactId: clip.id,
+    kind: "clip",
+    status: "generating",
+    percent: 10,
+    sceneId: scene.id,
+    provider: "mock",
+    model: "",
+  });
+  try {
+    const generated = await createMediaPorts(mediaEnv(ctx)).clips.generate({
+      imageUrl: textOf(image.payload.url) || mockAssets.keyframe,
+      videoPrompt: motion || "gentle motion",
+      elementIds: [],
+      durationMs: sceneDurationSec(plan?.durationSec ?? prompt?.payload.durationSec, scene.durationMs) * 1000,
+      aspectRatio: video.aspectRatio,
+    });
+    const provider = asMediaProvider(generated.provider);
+    const model = generated.model ?? "";
+    const providerLabel = generated.providerLabel ?? (provider === "mock" ? "Mock" : provider);
+    const updated = await store.updateArtefact(ctx.db, clip.id, {
+      state: "awaiting_approval",
+      version: clip.version + 1,
+      payload: {
+        ...clip.payload,
+        url: generated.url,
+        provider,
+        model,
+        providerLabel,
+        imageId: image.id,
+        regeneratedFrom: "image",
+      },
+    });
+    publishMedia(video.chatId, {
+      jobId: clip.id,
+      artefactId: clip.id,
+      kind: "clip",
+      status: "done",
+      percent: 100,
+      url: generated.url,
+      sceneId: scene.id,
+      provider,
+      model,
+    });
+    await publishArtefact(video.chatId, updated);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "clip regen failed";
+    await store.updateArtefact(ctx.db, clip.id, {
+      state: "failed",
+      payload: { ...clip.payload, error: message, stale: true },
+    });
+    publishMedia(video.chatId, {
+      jobId: clip.id,
+      artefactId: clip.id,
+      kind: "clip",
+      status: "failed",
+      error: message,
+      sceneId: scene.id,
+      provider: "mock",
+      model: "",
+    });
+  }
 }
 
 async function runStageWork(
@@ -1168,19 +1391,22 @@ export async function regenerateScene(
   });
 
   try {
-    const media = createMediaPorts(mediaEnv(ctx));
+    const planned = readScenePlan(artefacts.find((item) => item.kind === "script")?.payload);
+    const plan = planned[scene.idx];
+    const media = createMediaPorts(input.target === "image" ? imageMediaEnv(ctx) : mediaEnv(ctx));
     const prompt = artefacts.find((item) => item.kind === "prompt" && item.sceneId === scene.id);
     let generatedUrl = "";
     let provider: MediaProviderName = "mock";
     let model = "";
     let providerLabel = "Mock";
     if (input.target === "image") {
-      const imagePrompt = `${String(prompt?.payload.imagePrompt ?? current.payload.prompt ?? "")}${feedback ? `\n${feedback}` : ""}`
+      const imagePrompt = `${plan?.imagePrompt || textOf(prompt?.payload.imagePrompt) || textOf(current.payload.prompt)}${feedback ? `\n${feedback}` : ""}`
         .replace(/<<<[^>]+>>>/g, " ")
         .trim();
+      const cast = await store.listCastMembers(ctx.db, scene.castIds);
       const generated = await media.images.generate({
         prompt: imagePrompt || "scene",
-        elementIds: [],
+        elementIds: castAnchorIds(cast.filter((member) => scene.castIds.includes(member.id))),
         aspectRatio: video.aspectRatio,
         resolution: video.resolution,
       });
@@ -1190,14 +1416,14 @@ export async function regenerateScene(
       providerLabel = generated.providerLabel ?? providerLabel;
     } else if (input.target === "clip") {
       const image = [...artefacts].reverse().find((item) => item.kind === "image" && item.sceneId === scene.id);
-      const motion = `${String(prompt?.payload.videoPrompt ?? "gentle motion")}${feedback ? `\n${feedback}` : ""}`
+      const motion = `${plan?.motionPrompt || textOf(prompt?.payload.motionPrompt) || textOf(prompt?.payload.videoPrompt) || "gentle motion"}${feedback ? `\n${feedback}` : ""}`
         .replace(/<<<[^>]+>>>/g, " ")
         .trim();
       const generated = await media.clips.generate({
         imageUrl: String(image?.payload.url ?? current.payload.imageUrl ?? mockAssets.keyframe),
         videoPrompt: motion || "gentle motion",
         elementIds: [],
-        durationMs: clipDurationMs(scene.durationMs),
+        durationMs: sceneDurationSec(plan?.durationSec ?? prompt?.payload.durationSec, scene.durationMs) * 1000,
         aspectRatio: video.aspectRatio,
       });
       generatedUrl = generated.url;
@@ -1207,8 +1433,8 @@ export async function regenerateScene(
     } else {
       const cast = await store.listCastMembers(ctx.db, scene.castIds);
       const speaker = cast.find((member) => member.voiceId) ?? cast[0];
-      const voiceId = String(current.payload.voiceId ?? speaker?.voiceId ?? "deep_storyteller_male");
-      const text = feedback || scene.narration || String(current.payload.narration ?? "");
+      const voiceId = plan?.voiceId || textOf(current.payload.voiceId) || speaker?.voiceId || "deep_storyteller_male";
+      const text = feedback || plan?.vo || scene.narration || textOf(current.payload.narration);
       const generated = await media.voice.generate({
         text,
         voiceId,
@@ -1244,6 +1470,7 @@ export async function regenerateScene(
       });
       await patchApprovalCard(ctx, video.chatId, updated);
       await publishArtefact(video.chatId, updated);
+      await reconcatIfPresent(ctx, input.videoId);
       return updated;
     }
     updated = await store.updateArtefact(ctx.db, current.id, {
@@ -1268,6 +1495,8 @@ export async function regenerateScene(
       provider,
       model,
     });
+    if (input.target === "image") await rerunDownstreamClip(ctx, video, scene, updated);
+    await reconcatIfPresent(ctx, input.videoId);
   } catch (error) {
     const message = error instanceof Error ? error.message : "regen_failed";
     updated = await store.updateArtefact(ctx.db, current.id, {
