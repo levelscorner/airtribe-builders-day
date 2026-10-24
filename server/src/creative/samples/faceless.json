@@ -1,0 +1,135 @@
+{
+  "genre": "faceless",
+  "brief": {
+    "topic": "how the Indian monsoon starts",
+    "genre": "faceless",
+    "resolution": "1080p",
+    "aspectRatio": "9:16",
+    "targetSeconds": 50,
+    "language": "en",
+    "audience": "Adults who watch short fact and story videos",
+    "artStyle": "cinematic-realistic",
+    "artStyleTraits": [
+      "natural light",
+      "realistic textures",
+      "shallow depth of field",
+      "restrained colour"
+    ],
+    "castIds": [
+      "preset_narrator"
+    ]
+  },
+  "cast": [
+    {
+      "id": "preset_narrator",
+      "name": "Narrator",
+      "role": "narrator",
+      "identityText": "The narrator is an unseen adult storyteller. No face, no body, and no character appears on screen.",
+      "dnaChips": [
+        "unseen narrator",
+        "adult storyteller",
+        "no face on screen",
+        "no body on screen",
+        "steady pace"
+      ],
+      "voiceId": "deep_storyteller_male",
+      "version": 1,
+      "status": "approved",
+      "isPreset": true
+    }
+  ],
+  "captionStyle": "High-contrast documentary captions, one line, no face on screen",
+  "script": {
+    "scenes": [
+      {
+        "idx": 0,
+        "title": "hook",
+        "narration": "Every June, a wind from the sea turns half of India green. Here is how the monsoon actually starts.",
+        "durationMs": 10000,
+        "doubts": [],
+        "castIds": [
+          "preset_narrator"
+        ]
+      },
+      {
+        "idx": 1,
+        "title": "beat 1",
+        "narration": "Moist air travels off the Arabian Sea and meets the hot land.",
+        "durationMs": 10000,
+        "doubts": [],
+        "castIds": [
+          "preset_narrator"
+        ]
+      },
+      {
+        "idx": 2,
+        "title": "beat 2",
+        "narration": "The Western Ghats push that air upward, so the first heavy rain falls on the west coast.",
+        "durationMs": 10000,
+        "doubts": [],
+        "castIds": [
+          "preset_narrator"
+        ]
+      },
+      {
+        "idx": 3,
+        "title": "beat 3",
+        "narration": "The same wind then moves north and east, which is why Kerala sees rain before Delhi.",
+        "durationMs": 10000,
+        "doubts": [],
+        "castIds": [
+          "preset_narrator"
+        ]
+      },
+      {
+        "idx": 4,
+        "title": "payoff",
+        "narration": "So the monsoon is not one cloud. It is a seasonal wind, a mountain wall, and a calendar you can follow.",
+        "durationMs": 10000,
+        "doubts": [
+          "Confirm the payoff stays general and does not invent a date or a record."
+        ],
+        "castIds": [
+          "preset_narrator"
+        ]
+      }
+    ]
+  },
+  "prompts": [
+    {
+      "sceneIdx": 0,
+      "imagePrompt": "natural light, realistic textures, shallow depth of field, restrained colour. One still frame, aspect 9:16, no text, no letters, no logo, no watermark. No person. A wide view that shows how the Indian monsoon starts, natural light, empty of faces. The narrator is an unseen adult storyteller. No face, no body, and no character appears on screen. AI-generated scene.",
+      "videoPrompt": "Motion continues from the still. No person. A wide view that shows how the Indian monsoon starts, natural light, empty of faces. Camera: slow push-in. Pace: steady documentary pace. Duration 10000 milliseconds. No burned-in text. The narrator is an unseen adult storyteller. No face, no body, and no character appears on screen. AI-generated scene.",
+      "elementIds": []
+    },
+    {
+      "sceneIdx": 1,
+      "imagePrompt": "natural light, realistic textures, shallow depth of field, restrained colour. One still frame, aspect 9:16, no text, no letters, no logo, no watermark. No person. A closer natural detail that explains how the Indian monsoon starts. The narrator is an unseen adult storyteller. No face, no body, and no character appears on screen. AI-generated scene.",
+      "videoPrompt": "Motion continues from the still. No person. A closer natural detail that explains how the Indian monsoon starts. Camera: locked medium shot. Pace: steady documentary pace. Duration 10000 milliseconds. No burned-in text. The narrator is an unseen adult storyteller. No face, no body, and no character appears on screen. AI-generated scene.",
+      "elementIds": []
+    },
+    {
+      "sceneIdx": 2,
+      "imagePrompt": "natural light, realistic textures, shallow depth of field, restrained colour. One still frame, aspect 9:16, no text, no letters, no logo, no watermark. No person. The cause of how the Indian monsoon starts shown as landscape, weather, or objects. The narrator is an unseen adult storyteller. No face, no body, and no character appears on screen. AI-generated scene.",
+      "videoPrompt": "Motion continues from the still. No person. The cause of how the Indian monsoon starts shown as landscape, weather, or objects. Camera: locked medium shot. Pace: steady documentary pace. Duration 10000 milliseconds. No burned-in text. The narrator is an unseen adult storyteller. No face, no body, and no character appears on screen. AI-generated scene.",
+      "elementIds": []
+    },
+    {
+      "sceneIdx": 3,
+      "imagePrompt": "natural light, realistic textures, shallow depth of field, restrained colour. One still frame, aspect 9:16, no text, no letters, no logo, no watermark. No person. A simple comparison that makes how the Indian monsoon starts easy to follow. The narrator is an unseen adult storyteller. No face, no body, and no character appears on screen. AI-generated scene.",
+      "videoPrompt": "Motion continues from the still. No person. A simple comparison that makes how the Indian monsoon starts easy to follow. Camera: locked medium shot. Pace: steady documentary pace. Duration 10000 milliseconds. No burned-in text. The narrator is an unseen adult storyteller. No face, no body, and no character appears on screen. AI-generated scene.",
+      "elementIds": []
+    },
+    {
+      "sceneIdx": 4,
+      "imagePrompt": "natural light, realistic textures, shallow depth of field, restrained colour. One still frame, aspect 9:16, no text, no letters, no logo, no watermark. No person. A quiet final image that lands how the Indian monsoon starts, still with no face. The narrator is an unseen adult storyteller. No face, no body, and no character appears on screen. AI-generated scene.",
+      "videoPrompt": "Motion continues from the still. No person. A quiet final image that lands how the Indian monsoon starts, still with no face. Camera: slow pull-back. Pace: steady documentary pace. Duration 10000 milliseconds. No burned-in text. The narrator is an unseen adult storyteller. No face, no body, and no character appears on screen. AI-generated scene.",
+      "elementIds": []
+    }
+  ],
+  "skillLoad": {
+    "mounted": false,
+    "loaded": 0,
+    "missing": 50
+  }
+}

@@ -1,0 +1,52 @@
+[
+  {
+    "id": "preset_chintu",
+    "name": "Chintu",
+    "role": "mascot",
+    "identityText": "Chintu is an 8-year-old cartoon boy with a round face, short black hair, a small gap in his front teeth, a yellow kurta, and a red backpack worn on one shoulder.",
+    "dnaChips": ["8-year-old boy", "round face", "short black hair", "yellow kurta", "red backpack", "gap-tooth smile"],
+    "artStyle": "bright-2d-cartoon",
+    "higgsfieldElementId": "el_chintu",
+    "voiceId": "playful_young_male",
+    "version": 1,
+    "status": "approved",
+    "isPreset": true
+  },
+  {
+    "id": "preset_mini",
+    "name": "Mini",
+    "role": "mascot",
+    "identityText": "Mini is an 8-year-old cartoon girl with a round face, two black braids tied with blue bands, bright curious eyes, a green frock over leggings, and a tiny star clip above her left ear.",
+    "dnaChips": ["8-year-old girl", "two black braids", "blue hair bands", "green frock", "star clip", "curious eyes"],
+    "artStyle": "bright-2d-cartoon",
+    "higgsfieldElementId": "el_mini",
+    "voiceId": "warm_kid_female",
+    "version": 1,
+    "status": "approved",
+    "isPreset": true
+  },
+  {
+    "id": "preset_riya",
+    "name": "Riya",
+    "role": "presenter",
+    "identityText": "Riya is a young Indian woman presenter with a shoulder-length wavy black bob, warm brown eyes, small gold studs, a coral short-sleeve shirt, and a thin brass bangle on her right wrist.",
+    "dnaChips": ["young woman presenter", "wavy black bob", "warm brown eyes", "coral shirt", "gold studs", "brass bangle"],
+    "artStyle": "clean-product-studio",
+    "higgsfieldElementId": "el_riya",
+    "voiceId": "confident_presenter_female",
+    "version": 1,
+    "status": "approved",
+    "isPreset": true
+  },
+  {
+    "id": "preset_narrator",
+    "name": "Narrator",
+    "role": "narrator",
+    "identityText": "The narrator is an unseen adult storyteller. No face, no body, and no character appears on screen.",
+    "dnaChips": ["unseen narrator", "adult storyteller", "no face on screen", "no body on screen", "steady pace"],
+    "voiceId": "deep_storyteller_male",
+    "version": 1,
+    "status": "approved",
+    "isPreset": true
+  }
+]

@@ -1,0 +1,46 @@
+{
+  "id": "faceless",
+  "label": "Faceless",
+  "who": "facts, story, and motivation channels",
+  "tone": "narrator, curiosity",
+  "shape": "hook, beats, payoff, 45-60s",
+  "beats": ["hook", "beat", "beat", "beat", "payoff"],
+  "defaultTargetSeconds": 50,
+  "minSeconds": 45,
+  "maxSeconds": 60,
+  "defaultResolution": "1080p",
+  "defaultAspectRatio": "9:16",
+  "defaultLanguage": "hinglish",
+  "defaultAudience": "Adults who watch short fact and story videos",
+  "defaultTopic": "one surprising fact",
+  "artStylePresets": [
+    {
+      "id": "cinematic-realistic",
+      "label": "Cinematic realistic",
+      "traits": ["natural light", "realistic textures", "shallow depth of field", "restrained colour"]
+    },
+    {
+      "id": "indian-folk-flat",
+      "label": "Indian folk-art flat",
+      "traits": ["flat folk-art shapes", "earthy mineral colours", "hand-drawn pattern fills", "even light"]
+    },
+    {
+      "id": "soft-3d-toon",
+      "label": "Soft 3D toon",
+      "traits": ["soft rounded forms", "gentle studio light", "pastel surfaces", "smooth shading"]
+    }
+  ],
+  "defaultArtStyle": "cinematic-realistic",
+  "defaultCastIds": ["preset_narrator"],
+  "captionStyle": "High-contrast documentary captions, one line, no face on screen",
+  "followUps": [
+    {
+      "field": "topic",
+      "prompt": "What fact or story should the narrator tell?",
+      "allowFreeText": true,
+      "allowSkip": true,
+      "allowDefaults": true
+    }
+  ],
+  "skillRefs": ["cards-format-documentary", "story-shape", "cards-format-vertical-short"]
+}
