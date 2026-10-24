@@ -1,6 +1,8 @@
 import type { ArtefactKind, ChatMessage, QuestionMessage } from "@chotu/shared";
+import { readAgentReview, reviewFeedback, reviewFixes, reviewStatusLabel, reviewTone } from "../src/agent-review";
 import { openQuestion } from "../src/chat/open-question";
-import { STARTER_CREDITS } from "../src/mock-fixtures";
+import { parseMediaProgress, providerChipLabel, type MediaProgressEvent } from "../src/media-contract";
+import { STARTER_CREDITS, VOICES } from "../src/mock-fixtures";
 import { createMockStudio } from "../src/mock-studio";
 import { readRejectNote } from "../src/reject-note";
 import { sessionFromCheckout } from "../src/checkout";
@@ -92,7 +94,182 @@ function isQuestion(message: ChatMessage | undefined): message is QuestionMessag
   return message?.kind === "question";
 }
 
+function providerCases(): void {
+  assert(VOICES.length === 4, "shared mock bank has the four seeded voices");
+  assert(
+    VOICES.every((voice) => voice.id && voice.elevenlabsVoiceId && voice.label && voice.languageHint && voice.isPreset),
+    "voices use the shared VoicePreset fields",
+  );
+  assert(
+    providerChipLabel({ payload: { provider: "mock", model: "alibaba/qwen-image-3/text-to-image" } }) === "Qwen Image",
+    "image model chip uses the Qwen endpoint",
+  );
+  assert(
+    providerChipLabel({ payload: { provider: "mock", model: "bytedance/seedance-2.0/image-to-video" } }) ===
+      "Seedance 2.0",
+    "clip model chip uses the Seedance 2.0 endpoint",
+  );
+  assert(
+    providerChipLabel({ payload: { provider: "openai", model: "gpt-image-2" } }) === "GPT Image 2",
+    "openai gpt-image-2 chip",
+  );
+  assert(
+    providerChipLabel({ provider: "ark", model: "dreamina-seedance-2-5-260628" }) === "Seedance 2.5",
+    "ark seedance 2.5 chip reads artefact fields",
+  );
+  assert(
+    providerChipLabel({
+      providerLabel: "Seedance 2.5 · BytePlus",
+      payload: { provider: "openai", model: "gpt-image-2" },
+    }) === "Seedance 2.5 · BytePlus",
+    "artefact providerLabel wins over payload",
+  );
+  assert(
+    providerChipLabel({
+      provider: "openai",
+      model: "gpt-image-2",
+      payload: { provider: "mock", model: "other" },
+    }) === "GPT Image 2",
+    "artefact provider and model win over payload",
+  );
+  assert(
+    providerChipLabel({ payload: { provider: "openai", model: "custom-model", providerLabel: "Studio label" } }) ===
+      "Studio label",
+    "unknown model falls back to providerLabel",
+  );
+  assert(
+    providerChipLabel({ payload: { provider: "openai", model: "custom-model" } }) === "custom-model",
+    "unknown model without a label shows the raw model",
+  );
+  assert(providerChipLabel({ payload: { provider: "elevenlabs" } }) === "ElevenLabs", "voice provider chip");
+  assert(providerChipLabel({ payload: { provider: "mock" } }) === "Mock", "mock provider chip");
+  assert(providerChipLabel({ payload: {} }) === undefined, "a card with no provider has no chip");
+  const queued = parseMediaProgress({
+    type: "media.progress",
+    jobId: "job_1",
+    artefactId: "art_1",
+    kind: "image",
+    status: "queued",
+    provider: "mock",
+  });
+  assert(queued?.status === "queued", "queued progress parses");
+  const generating = parseMediaProgress({
+    type: "media.progress",
+    jobId: "job_1",
+    artefactId: "art_1",
+    kind: "clip",
+    status: "generating",
+    percent: 40,
+    provider: "mock",
+    model: "bytedance/seedance-2.0/image-to-video",
+    warning: "ignore",
+  });
+  assert(generating?.percent === 40 && generating.model?.includes("seedance"), "generating keeps percent and model");
+  const done = parseMediaProgress({
+    type: "media.progress",
+    jobId: "job_1",
+    artefactId: "art_1",
+    kind: "voice",
+    status: "done",
+    provider: "elevenlabs",
+    url: "mock://voice/1",
+  });
+  assert(done?.status === "done" && done.url === "mock://voice/1", "done progress keeps the mock url");
+  assert(
+    parseMediaProgress({
+      type: "media.progress",
+      jobId: "job_1",
+      artefactId: "art_1",
+      kind: "image",
+      status: "nope",
+      provider: "mock",
+    }) === undefined,
+    "unknown progress status is ignored",
+  );
+  assert(parseMediaProgress({ type: "message" }) === undefined, "chat messages are not media progress");
+}
+
+function agentReviewCases(): void {
+  assert(readAgentReview({ payload: {} }) === undefined, "a card without a review stays blank");
+  const failed = readAgentReview({ agentReview: { status: "failed", output: "Hook is missing." } });
+  assert(failed !== undefined && failed.status === "failed", "failed review parses");
+  assert(reviewTone(failed.status) === "warn", "failed uses the warning style");
+  assert(reviewFixes(failed).join() === "Hook is missing.", "a string output is one fix");
+
+  const budget = readAgentReview({
+    agentReview: { status: "budget_exceeded", output: "Stopped before scene 3.\nRetry the ending." },
+  });
+  assert(budget !== undefined && budget.status === "budget_exceeded", "budget review parses");
+  assert(reviewTone(budget.status) === "warn", "budget exceeded uses the warning style");
+  assert(reviewFixes(budget).length === 2, "a newline string splits into fixes");
+
+  const hitl = readAgentReview({
+    agentReview: { status: "hitl_triggered", confidence: 0.41, output: ["Check the claim.", "Check the name."] },
+  });
+  assert(hitl !== undefined && hitl.status === "hitl_triggered", "hitl review parses");
+  assert(reviewTone(hitl.status) === "hitl", "hitl is a note, not a warning");
+  assert(reviewFeedback(hitl).includes("Check the claim."), "hitl output becomes regenerate feedback");
+  assert(readAgentReview({ agentReview: { status: "nope", output: "x" } }) === undefined, "unknown status is ignored");
+
+  const mocked = readAgentReview({
+    agentReview: { status: "mocked", confidence: 1, output: ["Demo fix."], warning: "Live review skipped." },
+  });
+  assert(mocked !== undefined && mocked.status === "mocked", "mocked review parses");
+  assert(reviewTone(mocked.status) === "ready", "mocked stays a neutral chip");
+  assert(reviewStatusLabel(mocked.status) === "Demo review", "mocked chip says demo review");
+  assert(mocked.warning === "Live review skipped.", "warning is kept on the review");
+  const fromPayload = readAgentReview({
+    payload: { agentReview: { status: "mocked", output: "From the payload", warning: "Budget note" } },
+  });
+  assert(fromPayload?.status === "mocked" && fromPayload.warning === "Budget note", "payload.agentReview is read");
+  const fromTop = readAgentReview({
+    agentReview: { status: "completed", output: "On the artefact" },
+    payload: { agentReview: { status: "failed", output: "On the payload", warning: "ignore" } },
+  });
+  assert(fromTop?.status === "completed", "ScriptArtefact.agentReview wins when both are set");
+}
+
+async function mediaTicks(): Promise<void> {
+  const api = createMockStudio({ delayMs: 0 });
+  const seen: MediaProgressEvent[] = [];
+  await api.createUser({ displayName: "Asha", phoneOrEmail: "asha@example.com" });
+  const opened = await api.createChat({ initialMessage: "barish kaise banti hai" });
+  const stop = api.subscribe(opened.chatId, (event) => {
+    const progress = parseMediaProgress(event);
+    if (progress) seen.push(progress);
+  });
+  await answerBrief(api, opened.chatId, opened.videoId);
+  for (let step = 0; step < 40; step += 1) {
+    await pump();
+    const snap = await api.getVideo(opened.videoId);
+    if (snap.video.stage === "images") break;
+    if (snap.artefacts.some((item) => item.state === "awaiting_approval")) {
+      await api.approveAllRemaining(opened.videoId);
+    }
+  }
+  const image = (await api.getVideo(opened.videoId)).artefacts.find((item) => item.kind === "image");
+  assert(image, "image card missing");
+  assert(image.payload.provider === "openai" && image.payload.model === "gpt-image-2", "mock image uses gpt-image-2");
+  assert(providerChipLabel(image) === "GPT Image 2", "mock image chip follows gpt-image-2");
+  assert(typeof image.payload.url === "string" && image.payload.url.startsWith("mock://"), "image uses a mock url");
+  const clipReady = seen.some((event) => event.kind === "image" && event.status === "done");
+  assert(clipReady, "image generation emits a done tick");
+  seen.length = 0;
+  await api.regenerateArtefact(image.id, 1, "brighter sky");
+  await pump(12);
+  const statuses = seen.map((event) => event.status).join(",");
+  assert(statuses.includes("queued") && statuses.includes("generating") && statuses.includes("done"), statuses);
+  const updated = (await api.getVideo(opened.videoId)).artefacts.find((item) => item.id === image.id);
+  assert(updated?.payload.feedback === "brighter sky", "typed feedback is stored on the artefact");
+  assert(updated?.state === "awaiting_approval", "regenerate returns the card to review");
+  const voice = (await api.listVoices()).items;
+  assert(voice.length === VOICES.length, "listVoices returns the shared preset bank");
+  stop();
+}
+
 async function main(): Promise<void> {
+  providerCases();
+  agentReviewCases();
   await composerDuringChipQuestions();
 
   const api = createMockStudio({ delayMs: 0 });
@@ -299,8 +476,19 @@ async function briefEdges(): Promise<void> {
   assert(scriptSnap.video.brief.topic === "barish kaise banti hai", "typed topic should lock on the brief");
   const script = scriptSnap.artefacts.find((item) => item.kind === "script");
   assert(script, "script card missing");
+  const review = readAgentReview(script);
+  assert(review !== undefined && review.status === "completed", "mock script carries a completed agent review");
+  assert(review.confidence === 0.74, "mock script review includes a confidence");
+  assert(reviewFixes(review).length === 3, "mock script review lists three fixes");
+  const feedback = reviewFeedback(review);
   const before = JSON.stringify(script.payload);
-  await api.regenerateArtefact(script.id, 1);
+  await api.regenerateArtefact(script.id, 1, feedback);
+  await pump();
+  const withFeedback = (await api.getVideo(opened.videoId)).artefacts.find((item) => item.id === script.id);
+  const firstScene = Array.isArray(withFeedback?.payload.scenes) ? withFeedback.payload.scenes[0] : undefined;
+  const narration =
+    firstScene && typeof firstScene === "object" && "narration" in firstScene ? String(firstScene.narration) : "";
+  assert(narration.includes("Shorten the hook"), "regenerate feedback should land on the script");
   await pump();
   const regenerated = (await api.getVideo(opened.videoId)).artefacts.find((item) => item.id === script.id);
   assert(regenerated?.state === "awaiting_approval", "regenerated script should wait for approval");
@@ -321,6 +509,7 @@ async function briefEdges(): Promise<void> {
 
 main()
   .then(() => briefEdges())
+  .then(() => mediaTicks())
   .catch((error: unknown) => {
     console.error(error);
     process.exit(1);

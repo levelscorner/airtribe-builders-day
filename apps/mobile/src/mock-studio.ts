@@ -10,12 +10,14 @@ import type {
   QuestionMessage,
   Resolution,
   Scene,
-  SseEvent,
   Stage,
   TextMessage,
   User,
   VideoSummary,
 } from "@chotu/shared";
+import { readAgentReview, SAMPLE_SCRIPT_REVIEW } from "./agent-review";
+import type { KnownMediaProvider, MediaProgressEvent, MediaProgressStatus, StudioEvent } from "./media-contract";
+import { readModel, readProvider } from "./media-contract";
 import { applyRejectNote } from "./reject-note";
 import type { StudioClient } from "./studio-client";
 import {
@@ -76,7 +78,7 @@ interface ChatRuntime {
   id: string;
   videoId: string;
   messages: ChatMessage[];
-  listeners: Set<(event: SseEvent) => void>;
+  listeners: Set<(event: StudioEvent) => void>;
   answers: Record<string, string>;
   assumed: string[];
   qIndex: number;
@@ -87,7 +89,19 @@ interface ChatRuntime {
   approvalMessageIds: Map<string, string>;
 }
 
-type Listener = (event: SseEvent) => void;
+type Listener = (event: StudioEvent) => void;
+
+const MEDIA_DEFAULTS: Partial<Record<ArtefactKind, { provider: KnownMediaProvider; model: string }>> = {
+  image: { provider: "openai", model: "gpt-image-2" },
+  clip: { provider: "ark", model: "dreamina-seedance-2-5-260628" },
+};
+
+const MEDIA_KIND: Partial<Record<ArtefactKind, MediaProgressEvent["kind"]>> = {
+  image: "image",
+  clip: "clip",
+  audio: "voice",
+  voice_sample: "voice",
+};
 
 function stageKinds(stage: Stage): readonly ArtefactKind[] {
   return STAGE_KINDS[stage] ?? [];
@@ -117,8 +131,12 @@ export function createMockStudio(options?: {
   }
 
   function wait(): Promise<void> {
+    return pause(delayMs);
+  }
+
+  function pause(ms: number): Promise<void> {
     return new Promise((resolve) => {
-      setTimeout(resolve, delayMs);
+      setTimeout(resolve, ms);
     });
   }
 
@@ -147,6 +165,32 @@ export function createMockStudio(options?: {
       return { bundle, artefact, chat };
     }
     throw new StudioMockError("no_artefact", "Yeh card nahi mila.");
+  }
+
+  function mediaEvent(
+    artefact: ArtefactSummary,
+    status: MediaProgressStatus,
+    percent?: number,
+  ): MediaProgressEvent | undefined {
+    const kind = MEDIA_KIND[artefact.kind];
+    if (!kind) return undefined;
+    const url = typeof artefact.payload.url === "string" ? artefact.payload.url : undefined;
+    return {
+      type: "media.progress",
+      jobId: `job_${artefact.id}`,
+      artefactId: artefact.id,
+      kind,
+      status,
+      percent,
+      url,
+      provider: readProvider(artefact) ?? "mock",
+      model: readModel(artefact),
+    };
+  }
+
+  function emitMedia(chat: ChatRuntime, artefact: ArtefactSummary, status: MediaProgressStatus, percent?: number): void {
+    const event = mediaEvent(artefact, status, percent);
+    if (event) emit(chat, event);
   }
 
   function emit(chat: ChatRuntime, event: Parameters<Listener>[0]): void {
@@ -243,13 +287,26 @@ export function createMockStudio(options?: {
       state?: ArtefactState;
     },
   ): ArtefactSummary {
+    const media = MEDIA_DEFAULTS[input.kind];
+    const payload: Record<string, unknown> = {
+      provider: media?.provider ?? ("mock" satisfies KnownMediaProvider),
+      ...(media ? { model: media.model } : {}),
+      ...input.payload,
+      version: 1,
+    };
+    if (
+      (input.kind === "image" || input.kind === "clip" || input.kind === "audio" || input.kind === "final") &&
+      typeof payload.url !== "string"
+    ) {
+      payload.url = `mock://${input.kind}/${String(payload.idx ?? "card")}`;
+    }
     const artefact: ArtefactSummary = {
       id: nid("art"),
       videoId: bundle.video.id,
       sceneId: input.sceneId,
       kind: input.kind,
       state: input.state ?? "awaiting_approval",
-      payload: { ...input.payload, version: 1 },
+      payload,
       creditCost: REGEN_COST[input.kind],
       version: 1,
       updatedAt: now(),
@@ -353,6 +410,17 @@ export function createMockStudio(options?: {
     const cards = cardsForStage(bundle, stage);
     for (const card of cards) {
       const artefact = addArtefact(bundle, card);
+      if (artefact.kind === "script") {
+        const review = readAgentReview(artefact.payload);
+        if (review) {
+          artefact.agentReview = review;
+          artefact.payload.agentReview = review;
+        }
+      }
+      emitMedia(chat, artefact, "queued");
+      emitMedia(chat, artefact, "generating", 40);
+      emitMedia(chat, artefact, "generating", 80);
+      emitMedia(chat, artefact, "done");
       publishArtefact(chat, artefact, card.title);
     }
     emitText(chat, "assistant", "Dekho. Theek lage to Approve, note ke saath Reject, ya Regenerate.");
@@ -447,6 +515,10 @@ export function createMockStudio(options?: {
               narration: scene.narration ?? "",
               doubts: scene.doubts,
             })),
+            agentReview: {
+              ...SAMPLE_SCRIPT_REVIEW,
+              output: [...(SAMPLE_SCRIPT_REVIEW.output as string[])],
+            },
           },
         },
       ];
@@ -718,8 +790,25 @@ export function createMockStudio(options?: {
     }
   }
 
-  function bumpPayload(kind: ArtefactKind, payload: Record<string, unknown>, version: number): Record<string, unknown> {
+  function applyScriptFeedback(payload: Record<string, unknown>, feedback?: string): void {
+    const note = feedback?.trim();
+    if (!note || !Array.isArray(payload.scenes)) return;
+    const first = payload.scenes[0];
+    if (!first || typeof first !== "object") return;
+    const scene = first as Record<string, unknown>;
+    const narration = typeof scene.narration === "string" ? scene.narration : "";
+    scene.narration = `${narration} ${note}`.trim();
+  }
+
+  function bumpPayload(
+    kind: ArtefactKind,
+    payload: Record<string, unknown>,
+    version: number,
+    feedback?: string,
+  ): Record<string, unknown> {
     const next: Record<string, unknown> = { ...payload, version };
+    const note = feedback?.trim();
+    if (note) next.feedback = note;
     delete next.rejectNote;
     delete next.rejectionNote;
     if (kind === "identity" && Array.isArray(next.members)) {
@@ -971,7 +1060,7 @@ export function createMockStudio(options?: {
       return { artefact: snapshot };
     },
 
-    async regenerateArtefact(artefactId, confirm) {
+    async regenerateArtefact(artefactId, confirm, feedback) {
       const current = mustUser();
       const { artefact, chat } = mustArtefact(artefactId);
       if (confirm === 0) {
@@ -991,6 +1080,7 @@ export function createMockStudio(options?: {
       artefact.updatedAt = now();
       const snapshot = { ...artefact, payload: { ...artefact.payload } };
       emit(chat, { type: "artefact", artefact: snapshot });
+      emitMedia(chat, artefact, "queued");
       emit(chat, {
         type: "message",
         message: {
@@ -1005,12 +1095,21 @@ export function createMockStudio(options?: {
           createdAt: now(),
         },
       });
+      const slice = Math.floor(delayMs / 3);
       void (async () => {
-        await wait();
+        await pause(slice);
+        emitMedia(chat, artefact, "generating", 40);
+        await pause(slice);
+        emitMedia(chat, artefact, "generating", 80);
+        await pause(Math.max(0, delayMs - slice * 2));
+        emitMedia(chat, artefact, "done");
         artefact.version += 1;
         artefact.state = "awaiting_approval";
-        artefact.payload = bumpPayload(artefact.kind, artefact.payload, artefact.version);
-        if (artefact.kind === "script") syncScriptScenes(artefact);
+        artefact.payload = bumpPayload(artefact.kind, artefact.payload, artefact.version, feedback);
+        if (artefact.kind === "script") {
+          applyScriptFeedback(artefact.payload, feedback);
+          syncScriptScenes(artefact);
+        }
         artefact.updatedAt = now();
         patchApproval(chat, artefact);
         emit(chat, { type: "artefact", artefact: { ...artefact, payload: { ...artefact.payload } } });

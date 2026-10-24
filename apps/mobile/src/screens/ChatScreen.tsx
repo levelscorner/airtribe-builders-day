@@ -1,13 +1,18 @@
-import { useCallback, useMemo } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import type { VoicePreset } from "@chotu/shared";
+import { getStudioClient } from "../api";
 import { Composer } from "../chat/Composer";
+import { MediaRail } from "../chat/MediaRail";
 import { MessageList } from "../chat/MessageList";
 import { openQuestion } from "../chat/open-question";
 import { ProgressStrip } from "../chat/ProgressStrip";
 import { useChatStream } from "../chat/useChatStream";
 import { useKeyboardInset } from "../chat/useKeyboardInset";
+import { VOICES } from "../mock-fixtures";
+import { useWideLayout } from "../shell";
 import { colors, hitSlop, layout } from "../theme";
 
 export function ChatScreen({ chatId }: { chatId: string }) {
@@ -15,6 +20,20 @@ export function ChatScreen({ chatId }: { chatId: string }) {
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboardInset();
   const stream = useChatStream(chatId);
+  const wide = useWideLayout();
+  const [voices, setVoices] = useState<VoicePreset[]>(VOICES);
+  useEffect(() => {
+    let alive = true;
+    void getStudioClient()
+      .listVoices()
+      .then((response) => {
+        if (alive && response.items.length > 0) setVoices(response.items);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
   useFocusEffect(
     useCallback(() => {
       void stream.refreshCredits();
@@ -47,8 +66,8 @@ export function ChatScreen({ chatId }: { chatId: string }) {
         void stream.reject(artefactId, note);
       },
       onPreviewRegenerate: (artefactId: string) => stream.previewRegenerate(artefactId),
-      onConfirmRegenerate: (artefactId: string) => {
-        void stream.confirmRegenerate(artefactId);
+      onConfirmRegenerate: (artefactId: string, feedback?: string) => {
+        void stream.confirmRegenerate(artefactId, feedback);
       },
       onNeedCredits: () => {
         router.push(`/packs?from=${encodeURIComponent(`/chat/${chatId}`)}`);
@@ -67,9 +86,11 @@ export function ChatScreen({ chatId }: { chatId: string }) {
 
   return (
     <View style={styles.screen}>
+      <View style={[styles.row, wide ? styles.rowWide : null]}>
       <KeyboardAvoidingView
         style={[
           styles.column,
+          wide ? styles.columnWide : null,
           { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom, 8) + keyboard },
         ]}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -93,7 +114,7 @@ export function ChatScreen({ chatId }: { chatId: string }) {
             <Text style={styles.creditsHint}>Packs</Text>
           </Pressable>
         </View>
-        <ProgressStrip stage={stream.stage} />
+        {wide ? null : <ProgressStrip stage={stream.stage} />}
         {showApproveAll ? (
           <Pressable
             accessibilityRole="button"
@@ -158,6 +179,8 @@ export function ChatScreen({ chatId }: { chatId: string }) {
           <MessageList
             messages={stream.messages}
             artefacts={stream.artefacts}
+            progress={stream.mediaProgress}
+            voices={voices}
             thinking={stream.status === "ready" && stream.thinking}
             empty={stream.status === "ready" && stream.messages.length === 0}
             pin={keyboard}
@@ -177,6 +200,16 @@ export function ChatScreen({ chatId }: { chatId: string }) {
           />
         ) : null}
       </KeyboardAvoidingView>
+      {wide ? (
+        <ScrollView
+          style={[styles.side, { paddingTop: insets.top + 8 }]}
+          contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 8) }}
+        >
+          <ProgressStrip stage={stream.stage} />
+          <MediaRail messages={stream.messages} progress={stream.mediaProgress} />
+        </ScrollView>
+      ) : null}
+      </View>
     </View>
   );
 }
@@ -185,13 +218,38 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.paper,
+    alignItems: "center",
   },
-  column: {
+  row: {
     flex: 1,
     width: "100%",
     maxWidth: layout.maxWidth,
-    alignSelf: "center",
+  },
+  rowWide: {
+    maxWidth: layout.desktop,
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 16,
+  },
+  column: {
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    width: "100%",
     paddingHorizontal: layout.pad,
+  },
+  columnWide: {
+    maxWidth: 720,
+  },
+  side: {
+    width: layout.side,
+    maxWidth: layout.side,
+    flexGrow: 0,
+    flexShrink: 0,
+    borderLeftWidth: 1,
+    borderLeftColor: colors.line,
+    paddingLeft: layout.pad,
+    paddingRight: layout.pad,
   },
   stripe: {
     height: 6,

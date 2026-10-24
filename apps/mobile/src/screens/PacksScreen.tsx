@@ -6,6 +6,7 @@ import type { CreditPack } from "@chotu/shared";
 import { getStudioClient } from "../api";
 import { createCheckout } from "../checkout";
 import { packPriceLabel, STARTER_CREDITS } from "../mock-fixtures";
+import { useWideLayout } from "../shell";
 import { colors, hitSlop, layout } from "../theme";
 
 type PayState =
@@ -32,6 +33,7 @@ export function PacksScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const from = one(useLocalSearchParams<{ from?: string }>().from);
+  const wide = useWideLayout();
   const [packs, setPacks] = useState<CreditPack[]>([]);
   const [balance, setBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,7 +87,13 @@ export function PacksScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.column, { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom, 8) }]}>
+      <View
+        style={[
+          styles.column,
+          wide ? styles.columnWide : null,
+          { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom, 8) },
+        ]}
+      >
         <View style={styles.stripe} />
         <Pressable
           accessibilityRole="button"
@@ -172,12 +180,16 @@ export function PacksScreen() {
             </Pressable>
           </View>
         ) : null}
-        <ScrollView style={styles.flex} contentContainerStyle={styles.list}>
+        <ScrollView style={styles.flex} contentContainerStyle={[styles.list, wide ? styles.listWide : null]}>
           {packs.map((pack) => {
             const price = packPriceLabel(pack.amountInr);
             const pendingThis = pay.status === "pending" && pay.packId === pack.id;
             return (
-              <View key={pack.id} style={styles.card} accessibilityLabel={`${pack.label}, price ${price}, ${pack.credits} credits`}>
+              <View
+                key={pack.id}
+                style={[styles.card, wide ? styles.cardWide : null]}
+                accessibilityLabel={`${pack.label}, price ${price}, ${pack.credits} credits`}
+              >
                 <Text style={styles.cardTitle}>{pack.label}</Text>
                 <Text style={styles.meta}>{pack.credits} credits</Text>
                 <Text style={styles.price}>Price {price}</Text>
@@ -214,6 +226,17 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: layout.maxWidth,
     paddingHorizontal: layout.pad,
+  },
+  columnWide: {
+    maxWidth: 960,
+  },
+  listWide: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  cardWide: {
+    flexGrow: 1,
+    flexBasis: 280,
   },
   stripe: {
     height: 6,

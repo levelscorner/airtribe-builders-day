@@ -8,6 +8,8 @@ import type {
   Stage,
 } from "@chotu/shared";
 import { getStudioClient, StudioHttpError, StudioMockError } from "../api";
+import type { MediaProgressEvent } from "../media-contract";
+import { parseMediaProgress } from "../media-contract";
 import { applyRejectNote } from "../reject-note";
 
 export type ChatLoadStatus = "loading" | "ready" | "error";
@@ -108,6 +110,7 @@ export function useChatStream(chatId: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [stage, setStage] = useState<Stage>("brief");
   const [artefacts, setArtefacts] = useState<Record<string, ArtefactSummary>>({});
+  const [mediaProgress, setMediaProgress] = useState<Record<string, MediaProgressEvent>>({});
   const [videoId, setVideoId] = useState<string | null>(null);
   const [credits, setCredits] = useState<number | null>(null);
   const creditsRef = useRef<number | null>(null);
@@ -156,6 +159,7 @@ export function useChatStream(chatId: string) {
     videoRef.current = null;
     setMessages([]);
     setArtefacts({});
+    setMediaProgress({});
     setVideoId(null);
     setStage("brief");
     setStatus("loading");
@@ -172,6 +176,11 @@ export function useChatStream(chatId: string) {
     try {
       unsubscribe = client.subscribe(chatId, (event) => {
         if (!alive) return;
+        const progress = parseMediaProgress(event);
+        if (progress) {
+          setMediaProgress((prev) => ({ ...prev, [progress.artefactId]: progress }));
+          return;
+        }
         if (event.type === "message") upsert(event.message);
         else if (event.type === "stage") {
           setStage((current) => (stageIndex(event.stage) >= stageIndex(current) ? event.stage : current));
@@ -323,7 +332,7 @@ export function useChatStream(chatId: string) {
   );
 
   const confirmRegenerate = useCallback(
-    (artefactId: string) =>
+    (artefactId: string, feedback?: string) =>
       run(artefactId, async () => {
         const previous = artefactsRef.current[artefactId];
         const cost = previous?.creditCost ?? 0;
@@ -333,7 +342,7 @@ export function useChatStream(chatId: string) {
         const debit = balanceNow !== null && cost > 0 ? cost : 0;
         if (debit > 0 && balanceNow !== null) writeCredits(balanceNow - debit);
         try {
-          const result = await client.regenerateArtefact(artefactId, 1);
+          const result = await client.regenerateArtefact(artefactId, 1, feedback);
           if ("artefact" in result) {
             writeArtefact(result.artefact, false);
             writeCredits(result.balance);
@@ -392,6 +401,7 @@ export function useChatStream(chatId: string) {
     messages,
     stage,
     artefacts,
+    mediaProgress,
     videoId,
     credits,
     error,

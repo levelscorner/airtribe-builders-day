@@ -15,6 +15,7 @@ import type {
   VoicePreset,
 } from "@chotu/shared";
 import type { SqlClient } from "../db/client.js";
+import { readAgentReview } from "../integrations/agenticorg/parse.js";
 
 export const STARTER_CREDITS = Number(process.env.STARTER_CREDITS || 80);
 
@@ -418,17 +419,21 @@ function mapArtefact(row: {
   version: number;
   updated_at: Date | string;
 }): ArtefactSummary {
-  return {
+  const payload = row.payload ?? {};
+  const artefact: ArtefactSummary = {
     id: row.id,
     videoId: row.video_id,
     sceneId: row.scene_id ?? undefined,
     kind: row.kind,
     state: row.state,
-    payload: row.payload ?? {},
+    payload,
     creditCost: row.credit_cost,
     version: row.version,
     updatedAt: new Date(row.updated_at).toISOString(),
   };
+  if (artefact.kind !== "script") return artefact;
+  const agentReview = readAgentReview(payload.agentReview);
+  return agentReview ? { ...artefact, agentReview } : artefact;
 }
 
 export async function recordApproval(
