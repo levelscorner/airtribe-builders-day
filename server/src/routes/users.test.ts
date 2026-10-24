@@ -32,6 +32,39 @@ after(async () => {
   await resetDbForTests();
 });
 
+test("signup requires an email, accepts a legacy email, and stores phone", async () => {
+  const missing = await request(app).post("/v1/users").send({ displayName: "No Email" }).expect(400);
+  assert.equal(missing.body.error, "email_required");
+  const invalid = await request(app).post("/v1/users").send({ displayName: "Bad", email: "not-an-email" }).expect(400);
+  assert.equal(invalid.body.error, "invalid_email");
+  const legacyInvalid = await request(app)
+    .post("/v1/users")
+    .send({ displayName: "Bad", phoneOrEmail: "99999" })
+    .expect(400);
+  assert.equal(legacyInvalid.body.error, "invalid_email");
+
+  const created = await request(app)
+    .post("/v1/users")
+    .send({ displayName: "Asha Phone", phoneOrEmail: " asha-phone@example.com ", phone: " 9876543210 " })
+    .expect(201);
+  assert.equal(created.body.email, "asha-phone@example.com");
+  assert.equal(created.body.phone, "9876543210");
+  assert.equal(created.body.phoneOrEmail, "asha-phone@example.com");
+  const stored = await db.query<{ email: string; phone: string }>(
+    "SELECT email, phone FROM users WHERE id = $1",
+    [created.body.id],
+  );
+  assert.equal(stored.rows[0]?.email, "asha-phone@example.com");
+  assert.equal(stored.rows[0]?.phone, "9876543210");
+
+  const explicit = await request(app)
+    .post("/v1/users")
+    .send({ displayName: "Explicit", email: "explicit@example.com" })
+    .expect(201);
+  assert.equal(explicit.body.email, "explicit@example.com");
+  assert.equal(explicit.body.phone, undefined);
+});
+
 test("without DEMO_EMAIL_LOGIN an existing email stays 409 and does not sign in", async () => {
   delete process.env.DEMO_EMAIL_LOGIN;
   delete process.env.ADMIN_EMAILS;

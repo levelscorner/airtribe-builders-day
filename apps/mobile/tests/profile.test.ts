@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { OwnVideoSummary, User } from "@chotu/shared";
+import { profileLines } from "../src/profile/lines.ts";
 import { loadOwnProfile } from "../src/profile/load.ts";
 
 test("the profile sheet loads only the signed-in user and their videos", async () => {
@@ -28,6 +29,16 @@ test("the profile sheet loads only the signed-in user and their videos", async (
   assert.deepEqual(calls.sort(), ["me", "videos"]);
   assert.equal(loaded.user.displayName, "Asha");
   assert.equal(loaded.user.phoneOrEmail, "asha@example.com");
+  assert.deepEqual(profileLines(loaded.user), {
+    name: "Asha",
+    email: "asha@example.com",
+    phone: "—",
+    createdAt: user.createdAt,
+  });
+  assert.equal(
+    profileLines({ ...user, email: "asha@example.com", phone: "9876543210" }).phone,
+    "9876543210",
+  );
   assert.equal(loaded.videos[0]?.status, "active");
   assert.equal(JSON.stringify(loaded).includes("other@example.com"), false);
 });

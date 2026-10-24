@@ -31,6 +31,7 @@ import { buildScenePlan } from "../orchestrator/storyboard.js";
 import * as store from "../orchestrator/store.js";
 import { renderOutputPath } from "../render/ffmpeg.js";
 import { bindSessionUser, requireSessionUser } from "../sessions.js";
+import { signupContact } from "./signup-contact.js";
 
 const routesDir = dirname(fileURLToPath(import.meta.url));
 const mockClip = join(routesDir, "../../public/mock/clip.mp4");
@@ -61,7 +62,7 @@ async function signInExistingEmail(
 ): Promise<boolean> {
   if (!demoEmailLoginEnabled() || isAdminContact(phoneOrEmail)) return false;
   const existing = await store.findUserByContact(db, phoneOrEmail);
-  if (!existing || isAdminContact(existing.phoneOrEmail)) return false;
+  if (!existing || isAdminContact(existing.email) || isAdminContact(existing.phoneOrEmail)) return false;
   bindSessionUser(req, existing.id);
   res.status(200).json(presentUser(existing));
   return true;
@@ -104,16 +105,23 @@ export function createV1Router(deps: V1Deps): Router {
 
   router.post("/users", async (req, res) => {
     const body = req.body as CreateUserRequest;
-    const phoneOrEmail = body?.phoneOrEmail?.trim();
+    const contact = signupContact(body ?? {});
+    const email = "email" in contact ? contact.email : "";
     try {
       if (!body?.displayName?.trim()) {
         res.status(400).json({ error: "displayName required" });
         return;
       }
-      if (phoneOrEmail && (await signInExistingEmail(req, res, deps.db, phoneOrEmail))) return;
+      if ("error" in contact) {
+        res.status(400).json({ error: contact.error });
+        return;
+      }
+      if (await signInExistingEmail(req, res, deps.db, contact.email)) return;
       const user = await store.insertUser(deps.db, {
         displayName: body.displayName.trim(),
-        phoneOrEmail,
+        email: contact.email,
+        phone: contact.phone,
+        phoneOrEmail: contact.email,
       });
       await grantSignupCredits(deps.db, {
         userId: user.id,
@@ -127,7 +135,7 @@ export function createV1Router(deps: V1Deps): Router {
     } catch (error) {
       const message = error instanceof Error ? error.message : "";
       const duplicate = (error as { code?: string })?.code === "23505" || /duplicate key/i.test(message);
-      if (duplicate && phoneOrEmail && (await signInExistingEmail(req, res, deps.db, phoneOrEmail))) return;
+      if (duplicate && email && (await signInExistingEmail(req, res, deps.db, email))) return;
       if (duplicate) {
         res.status(409).json({ error: DUPLICATE_EMAIL });
         return;

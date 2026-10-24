@@ -25,12 +25,13 @@ import {
   LoaderCircle,
   SlidersHorizontal,
 } from "lucide-react";
-import type {
-  ApprovalCardMessage,
-  ArtefactSummary,
-  ChatMessage,
-  QuestionMessage,
-  RegeneratePreviewResponse,
+import {
+  isEmail,
+  type ApprovalCardMessage,
+  type ArtefactSummary,
+  type ChatMessage,
+  type QuestionMessage,
+  type RegeneratePreviewResponse,
 } from "@chotu/shared";
 import {
   useStudioRuntime,
@@ -446,6 +447,7 @@ export function WebHome() {
   const [error, setError] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const textarea = useRef<HTMLTextAreaElement>(null);
   const profileCreated = useRef(false);
   useEffect(() => {
@@ -519,9 +521,20 @@ export function WebHome() {
     setError("");
     try {
       if (!profileCreated.current) {
+        const address = email.trim();
+        if (!address) {
+          setError("Email is required.");
+          return;
+        }
+        if (!isEmail(address)) {
+          setError("Enter a valid email.");
+          return;
+        }
         await getStudioClient().createUser({
           displayName: name.trim(),
-          phoneOrEmail: email.trim(),
+          email: address,
+          phone: phone.trim() || undefined,
+          phoneOrEmail: address,
         });
         rememberBrowserSession();
         profileCreated.current = true;
@@ -621,6 +634,16 @@ export function WebHome() {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="you@example.com"
+                      />
+                    </label>
+                    <label>
+                      Phone
+                      <input
+                        type="tel"
+                        autoComplete="tel"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        placeholder="Optional"
                       />
                     </label>
                     <button

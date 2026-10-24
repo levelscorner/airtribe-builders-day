@@ -12,15 +12,16 @@ test("user csv quotes commas, quotes, and newlines", () => {
     {
       id: "00000000-0000-4000-8000-000000000001",
       displayName: 'Ada "Bee", Jr.',
-      phoneOrEmail: "ada@example.com\n<script>",
+      email: "ada@example.com\n<script>",
+      phone: "98765",
       createdAt: "2026-01-02T03:04:05.000Z",
     },
   ]);
   assert.equal(
     csv,
     [
-      "display_name,phone_or_email,created_at",
-      '"Ada ""Bee"", Jr.","ada@example.com\n<script>","2026-01-02T03:04:05.000Z"',
+      "display_name,email,phone,created_at",
+      '"Ada ""Bee"", Jr.","ada@example.com\n<script>","98765","2026-01-02T03:04:05.000Z"',
     ].join("\n") + "\n",
   );
 });
@@ -68,9 +69,9 @@ test("admin lists each user and the csv repeats those fields", async () => {
 
       const csv = await (await fetch(`http://127.0.0.1:${port}/admin/export.csv`, { headers })).text();
       assert.match(csv.split("\n")[0] ?? "", /^id,created_at,kind,user_id,video_id,payload$/);
-      assert.match(csv, /display_name,phone_or_email,created_at/);
-      assert.match(csv, /"Ada ""Bee"", Jr\.","ada@example\.com\n<script>","2026-01-02T03:04:05\.000Z"/);
-      assert.match(csv, /"Newer, Plain","","2026-02-03T04:05:06\.000Z"/);
+      assert.match(csv, /display_name,email,phone,created_at/);
+      assert.match(csv, /"Ada ""Bee"", Jr\.","ada@example\.com\n<script>","","2026-01-02T03:04:05\.000Z"/);
+      assert.match(csv, /"Newer, Plain","","","2026-02-03T04:05:06\.000Z"/);
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     }

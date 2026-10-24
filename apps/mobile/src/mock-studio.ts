@@ -1,3 +1,4 @@
+import { isEmail } from "@chotu/shared";
 import type {
   ApprovalCardMessage,
   ArtefactKind,
@@ -1018,14 +1019,20 @@ export function createMockStudio(options?: {
     async createUser(body) {
       const name = body.displayName.trim();
       if (!name) throw new StudioMockError("name", "Naam likho.");
-      const email = body.phoneOrEmail?.trim();
-      if (email && !email.includes("@")) throw new StudioMockError("email", "Email mein @ hona chahiye.");
+      const explicit = body.email?.trim() ?? "";
+      const legacy = body.phoneOrEmail?.trim() ?? "";
+      const address = explicit || legacy;
+      if (!address) throw new StudioMockError("email_required", "Email likho.");
+      if (!isEmail(address)) throw new StudioMockError("invalid_email", "Email mein @ hona chahiye.");
+      const mobile = body.phone?.trim() || undefined;
       // Demo only: there is no password or OTP, so anyone with the email gets in.
-      if (email && user?.phoneOrEmail === email) return user;
+      if (user?.email === address || user?.phoneOrEmail === address) return user;
       user = {
         id: nid("usr"),
         displayName: name,
-        phoneOrEmail: email,
+        email: address,
+        phone: mobile,
+        phoneOrEmail: address,
         creditBalance: starterCredits,
         creditsEnabled: false,
         createdAt: now(),

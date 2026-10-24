@@ -49,7 +49,9 @@ test("an admin user page shows that person's details and video status", async ()
       const html = await page.text();
       assert.equal(page.status, 200);
       assert.match(html, /Asha/);
-      assert.match(html, /asha@example.com/);
+      assert.match(html, /Email: asha@example.com/);
+      assert.match(html, /Phone: —/);
+      assert.match(html, /created_at: /);
       assert.match(html, /Bees/);
       assert.match(html, /failed/);
       assert.equal(html.includes("ravi-secret@example.com"), false);

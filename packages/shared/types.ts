@@ -161,6 +161,8 @@ export interface User {
   id: string;
   displayName: string;
   phoneOrEmail?: string;
+  email?: string;
+  phone?: string;
   creditBalance: number;
   /** False unless the server set CREDITS_ENABLED. Omitted means off. */
   creditsEnabled?: boolean;
@@ -336,6 +338,9 @@ export interface CreditPack {
 
 export interface CreateUserRequest {
   displayName: string;
+  email?: string;
+  phone?: string;
+  /** Legacy contact. Used as the email when it contains one. */
   phoneOrEmail?: string;
 }
 export type CreateUserResponse = User;
@@ -722,5 +727,6 @@ export const ApiPaths = {
   adminExport: '/admin/export.csv',
 } as const;
 
+export { isEmail } from './email.ts';
 export type { VoiceBankPreset } from './voicePresets.ts';
 export { VOICE_PRESETS } from './voicePresets.ts';

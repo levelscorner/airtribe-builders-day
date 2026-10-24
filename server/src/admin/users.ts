@@ -3,7 +3,8 @@ import type { Db } from "../credits/db.js";
 export interface AdminUser {
   id: string;
   displayName: string;
-  phoneOrEmail: string;
+  email: string;
+  phone: string;
   createdAt: string;
 }
 
@@ -27,10 +28,13 @@ export function createUserDirectory(db: Db): UserDirectory {
       const result = await db.query<{
         id: string;
         display_name: string;
-        phone_or_email: string | null;
+        email: string | null;
+        phone: string | null;
         created_at: Date | string;
       }>(
-        `SELECT id, display_name, phone_or_email, created_at
+        `SELECT id, display_name,
+                COALESCE(email, CASE WHEN phone_or_email LIKE '%_@_%._%' THEN phone_or_email END) AS email,
+                phone, created_at
          FROM users
          ORDER BY created_at DESC, display_name ASC
          LIMIT $1`,
@@ -42,10 +46,13 @@ export function createUserDirectory(db: Db): UserDirectory {
       const result = await db.query<{
         id: string;
         display_name: string;
-        phone_or_email: string | null;
+        email: string | null;
+        phone: string | null;
         created_at: Date | string;
       }>(
-        `SELECT id, display_name, phone_or_email, created_at
+        `SELECT id, display_name,
+                COALESCE(email, CASE WHEN phone_or_email LIKE '%_@_%._%' THEN phone_or_email END) AS email,
+                phone, created_at
          FROM users
          WHERE id = $1`,
         [id],
@@ -83,13 +90,15 @@ export function createUserDirectory(db: Db): UserDirectory {
 function toUser(row: {
   id: string;
   display_name: string;
-  phone_or_email: string | null;
+  email: string | null;
+  phone: string | null;
   created_at: Date | string;
 }): AdminUser {
   return {
     id: String(row.id),
     displayName: row.display_name,
-    phoneOrEmail: row.phone_or_email ?? "",
+    email: row.email ?? "",
+    phone: row.phone ?? "",
     createdAt: asIso(row.created_at),
   };
 }
