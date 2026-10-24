@@ -15,7 +15,8 @@
     "test:media": "MOCK=1 tsx --test src/media/ports.mock.test.ts src/media/live.test.ts",
     "db:migrate": "tsx src/db/migrate.ts",
     "test:db": "MOCK=1 tsx --test src/db/*.test.ts",
-    "test:e2e": "MOCK=1 tsx --test src/scripts/e2e-kids-mock.ts"
+    "test:e2e": "MOCK=1 tsx --test src/scripts/e2e-kids-mock.ts",
+    "test:orchestrator": "MOCK=1 tsx --test src/orchestrator/*.test.ts"
   },
   "dependencies": {
     "@ai-sdk/mcp": "^0.0.14",

@@ -178,6 +178,25 @@ export async function getChatMeta(
   return { chatId: row.id, videoId: row.video_id, userId: row.user_id };
 }
 
+/**
+ * CAS stage transition. Returns false if another worker already moved the stage.
+ */
+export async function tryTransitionStage(
+  db: SqlClient,
+  videoId: string,
+  from: Stage,
+  to: Stage,
+): Promise<boolean> {
+  const status = to === "done" ? "done" : "active";
+  const result = await db.query(
+    `UPDATE videos SET stage = $2, status = $3, updated_at = now()
+     WHERE id = $1 AND stage = $4
+     RETURNING id`,
+    [videoId, to, status, from],
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
 export async function updateVideo(
   db: SqlClient,
   videoId: string,
