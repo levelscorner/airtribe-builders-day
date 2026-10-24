@@ -160,14 +160,30 @@ export function useChatStream(chatId: string, videoId: string) {
   );
 
   const approveAll = useCallback(
-    () => run("approve-all", () => client.approveAllRemaining(videoId).then(() => undefined)),
-    [client, run, videoId],
+    () =>
+      run("approve-all", async () => {
+        await client.approveAllRemaining(videoId);
+        const chat = await client.getChat(chatId);
+        setStage(chat.stage);
+        setArtefacts(Object.fromEntries(chat.artefacts.map((item) => [item.id, item.state])));
+        setMessages((prev) => mergeMessages(chat.messages, prev));
+      }),
+    [chatId, client, run, videoId],
   );
 
-  const awaitingCount = useMemo(
-    () => Object.values(artefacts).filter((state) => state === "awaiting_approval").length,
-    [artefacts],
-  );
+  const awaitingCount = useMemo(() => {
+    const fromArts = Object.entries(artefacts)
+      .filter(([, state]) => state === "awaiting_approval")
+      .map(([id]) => id);
+    const ids = new Set(fromArts);
+    // Approval cards can arrive over SSE before the artefact map hydrates.
+    for (const message of messages) {
+      if (message.kind === "approval" && message.state === "awaiting_approval") {
+        ids.add(message.artefactId);
+      }
+    }
+    return ids.size;
+  }, [artefacts, messages]);
 
   const thinking = useMemo(() => {
     const generating = Object.values(artefacts).some((state) => state === "generating");
