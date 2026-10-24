@@ -5,6 +5,7 @@
   "description": "Chotu mini \u2014 kids explainer short-video maker (Expo + Node)",
   "scripts": {
     "start": "MOCK=1 npm --prefix server run start",
+    "start:legacy": "npm --prefix server run start:legacy",
     "server": "npm --prefix server run start",
     "server:dev": "npm --prefix server run dev",
     "test:e2e": "npm --prefix server run test:e2e",

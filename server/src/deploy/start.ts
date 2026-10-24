@@ -9,6 +9,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getDb, migrate } from "../db/client.js";
 import { createV1Router } from "../routes/v1.js";
+import { createSessionMiddleware, createSessionStore } from "../sessions.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "../../..");
@@ -25,16 +26,23 @@ export async function startServer(options?: { port?: number; listen?: boolean })
   const db = await getDb();
   await migrate(db);
 
-  const session = { userId: null as string | null };
+  const sessions = createSessionStore();
   const app = express();
-  app.use(cors());
+  app.set("trust proxy", 1);
+  app.use(
+    cors({
+      origin: true,
+      credentials: true,
+    }),
+  );
   app.use(express.json({ limit: "2mb" }));
+  app.use(createSessionMiddleware(sessions));
 
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true, mock, memory: db.memory });
   });
 
-  app.use("/v1", createV1Router({ db, mock, session }));
+  app.use("/v1", createV1Router({ db, mock }));
 
   const publicDir = resolve(__dirname, "../../public");
   if (existsSync(publicDir)) {
@@ -68,12 +76,12 @@ export async function startServer(options?: { port?: number; listen?: boolean })
 
   const port = options?.port ?? Number(process.env.PORT || 8787);
   if (options?.listen === false) {
-    return { app, db, session, port, mock };
+    return { app, db, sessions, port, mock };
   }
   const server = app.listen(port, () => {
     console.log(`Chotu Studio on http://localhost:${port} (mock=${mock}, memory=${db.memory})`);
   });
-  return { app, db, session, port, mock, server };
+  return { app, db, sessions, port, mock, server };
 }
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1]);

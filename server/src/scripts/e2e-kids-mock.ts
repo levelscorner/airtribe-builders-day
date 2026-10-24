@@ -1,5 +1,6 @@
 /**
  * MOCK=1 kids path: signup → brief defaults → cast→…→final approve-all → done.
+ * Also asserts per-browser session isolation between two agents.
  */
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
@@ -10,13 +11,13 @@ import { startServer } from "../deploy/start.js";
 process.env.MOCK = "1";
 delete process.env.DATABASE_URL;
 
-let agent: ReturnType<typeof request>;
+let app: Awaited<ReturnType<typeof startServer>>["app"];
 let close: (() => Promise<void>) | undefined;
 
 before(async () => {
   await resetDbForTests();
   const started = await startServer({ listen: false });
-  agent = request(started.app);
+  app = started.app;
   close = async () => {
     await started.db.close();
     await resetDbForTests();
@@ -31,7 +32,45 @@ async function pump(ms = 10): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+test("two browsers cannot see each other's profile or chats", async () => {
+  const asha = request.agent(app);
+  const ravi = request.agent(app);
+
+  const ashaUser = await asha
+    .post("/v1/users")
+    .send({ displayName: "Asha", phoneOrEmail: "asha-iso@example.com" })
+    .expect(201);
+  const raviUser = await ravi
+    .post("/v1/users")
+    .send({ displayName: "Ravi", phoneOrEmail: "ravi-iso@example.com" })
+    .expect(201);
+  assert.notEqual(ashaUser.body.id, raviUser.body.id);
+
+  const ashaMe = await asha.get("/v1/me").expect(200);
+  const raviMe = await ravi.get("/v1/me").expect(200);
+  assert.equal(ashaMe.body.displayName, "Asha");
+  assert.equal(raviMe.body.displayName, "Ravi");
+  assert.notEqual(ashaMe.body.id, raviMe.body.id);
+
+  const ashaChat = await asha
+    .post("/v1/chats")
+    .send({ initialMessage: "Asha private bees" })
+    .expect(201);
+  const raviChat = await ravi
+    .post("/v1/chats")
+    .send({ initialMessage: "Ravi private bees" })
+    .expect(201);
+
+  await asha.get(`/v1/chats/${ashaChat.body.chatId}`).expect(200);
+  await ravi.get(`/v1/chats/${raviChat.body.chatId}`).expect(200);
+  await asha.get(`/v1/chats/${raviChat.body.chatId}`).expect(404);
+  await ravi.get(`/v1/chats/${ashaChat.body.chatId}`).expect(404);
+  await asha.get(`/v1/videos/${raviChat.body.videoId}`).expect(404);
+  await ravi.get(`/v1/videos/${ashaChat.body.videoId}`).expect(404);
+});
+
 test("MOCK=1 kids video reaches done via chat HITL", async () => {
+  const agent = request.agent(app);
   const signup = await agent
     .post("/v1/users")
     .send({ displayName: "Asha", phoneOrEmail: "asha@example.com" })
@@ -50,20 +89,22 @@ test("MOCK=1 kids video reaches done via chat HITL", async () => {
   assert.equal(chat.body.videoId, videoId);
   assert.ok(chat.body.messages.some((m: { kind: string }) => m.kind === "question"));
 
-  // Answer every brief question with defaults until cast stage.
   for (let step = 0; step < 12; step += 1) {
     await pump();
     const snap = await agent.get(`/v1/videos/${videoId}`).expect(200);
     if (snap.body.video.stage !== "brief") break;
     const history = await agent.get(`/v1/chats/${chatId}/messages`).expect(200);
-    const question = [...history.body.messages].reverse().find((m: { kind: string }) => m.kind === "question");
+    const question = [...history.body.messages]
+      .reverse()
+      .find((m: { kind: string }) => m.kind === "question");
     assert.ok(question, "expected an open question");
     await agent
       .post(`/v1/chats/${chatId}/messages`)
-      .send({ answer: { field: question.field, useDefaults: true } })
+      .send({ answer: { field: (question as { field: string }).field, useDefaults: true } })
       .expect(200);
   }
 
+  let didRejectRegen = false;
   let safety = 0;
   while (safety < 40) {
     safety += 1;
@@ -76,11 +117,9 @@ test("MOCK=1 kids video reaches done via chat HITL", async () => {
       (a) => a.state === "awaiting_approval",
     );
     if (awaiting.length === 0) {
-      // generation in flight
       continue;
     }
-    // Once: reject + regenerate cost preview on first cast card.
-    if (stage === "cast" && safety === 1) {
+    if (stage === "cast" && !didRejectRegen) {
       const target = awaiting[0]!;
       const rejected = await agent
         .post(`/v1/artefacts/${target.id}/reject`)
@@ -98,9 +137,12 @@ test("MOCK=1 kids video reaches done via chat HITL", async () => {
         .expect(200);
       assert.ok(confirmed.body.charged > 0);
       assert.ok(confirmed.body.artefact);
+      didRejectRegen = true;
     }
     await agent.post(`/v1/videos/${videoId}/approve-all-remaining`).expect(200);
   }
+
+  assert.equal(didRejectRegen, true, "reject+regenerate must run once on cast");
 
   const done = await agent.get(`/v1/videos/${videoId}`).expect(200);
   assert.equal(done.body.video.stage, "done");

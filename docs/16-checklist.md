@@ -44,8 +44,10 @@ Replit: import this GitHub repo → set Secrets (`MOCK=1` until keys exist; opti
 | S4 | Stage machine + HITL approve/reject/regen/approve-all + events | ✅ | PR #22 |
 | S5 | Wire Venus creative + Neptune media ports | ✅ | PR #22 (mock path) |
 | S6 | `MOCK=1` kids E2E chat → done | 🟡 | `server/src/scripts/e2e-kids-mock.ts` (merge with deploy PR) |
-| S7 | Single-process deploy start (API + Expo web) | 🟡 | `server/src/deploy/start.ts` + root `npm start` |
-| S8 | Gaia HTTP `StudioClient` against `/v1` | 🟡 | `apps/mobile/src/http-studio.ts` |
+| S7 | Single-process deploy start (API + Expo web) | 🟡 | `server/src/deploy/start.ts` + root `npm start` (PR #24) |
+| S8 | Gaia HTTP `StudioClient` against `/v1` | 🟡 | `apps/mobile/src/http-studio.ts` (PR #24) |
+| S9 | Per-browser signed cookie sessions + isolation test | ✅ | Fixes #25 on PR #24 |
+| S10 | SSE reconnect hydrate + Last-Event-ID replay | ✅ | Fixes #25 on PR #24 |
 
 ---
 

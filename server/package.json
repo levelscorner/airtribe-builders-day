@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/deploy/start.ts",
     "start": "tsx src/deploy/start.ts",
+    "start:legacy": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "test:mock": "tsx src/scripts/smoke-mock.ts",

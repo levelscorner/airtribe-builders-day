@@ -65,12 +65,14 @@ async function readJson<T>(response: Response): Promise<T> {
 
 /**
  * Live StudioClient against Saturn /v1 (same-origin when baseUrl is "").
- * Session is server-side for the MOCK demo (set on POST /v1/users).
+ * Cookies carry the per-browser session (credentials: include).
+ * On every EventSource open/reconnect, hydrates via GET /v1/chats/:id.
  */
 export function createHttpStudio(baseUrl = ""): StudioClient {
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(joinUrl(baseUrl, path), {
       ...init,
+      credentials: "include",
       headers: {
         Accept: "application/json",
         ...(init?.body ? { "Content-Type": "application/json" } : {}),
@@ -78,6 +80,25 @@ export function createHttpStudio(baseUrl = ""): StudioClient {
       },
     });
     return readJson<T>(response);
+  }
+
+  async function hydrateChat(chatId: string, onEvent: (event: SseEvent) => void): Promise<void> {
+    try {
+      const chat = await api<GetChatResponse>(ApiPaths.chat(chatId));
+      onEvent({ type: "stage", videoId: chat.videoId, stage: chat.stage });
+      for (const message of chat.messages) {
+        onEvent({ type: "message", message });
+      }
+      for (const artefact of chat.artefacts) {
+        onEvent({ type: "artefact", artefact });
+      }
+    } catch (error) {
+      onEvent({
+        type: "error",
+        code: "hydrate_failed",
+        message: error instanceof Error ? error.message : "Chat sync fail.",
+      });
+    }
   }
 
   return {
@@ -112,7 +133,17 @@ export function createHttpStudio(baseUrl = ""): StudioClient {
       if (typeof EventSource === "undefined") {
         throw new StudioHttpError("sse", "EventSource unavailable in this runtime");
       }
-      const source = new EventSource(joinUrl(baseUrl, ApiPaths.chatEvents(chatId)));
+      const source = new EventSource(joinUrl(baseUrl, ApiPaths.chatEvents(chatId)), {
+        withCredentials: true,
+      });
+      let openedOnce = false;
+      source.onopen = () => {
+        // First open + every reconnect: pull authoritative chat state.
+        void hydrateChat(chatId, onEvent);
+        openedOnce = true;
+      };
+      // Some browsers fire the first open late; also hydrate immediately.
+      if (!openedOnce) void hydrateChat(chatId, onEvent);
       source.onmessage = (message) => {
         try {
           onEvent(JSON.parse(message.data) as SseEvent);
@@ -121,10 +152,10 @@ export function createHttpStudio(baseUrl = ""): StudioClient {
         }
       };
       source.onerror = () => {
-        // Browser reconnects; surface soft errors only if closed hard.
         if (source.readyState === EventSource.CLOSED) {
           onEvent({ type: "error", code: "sse_closed", message: "Live updates ruk gayi." });
         }
+        // CONNECTING: browser will reopen → onopen hydrates again.
       };
       return () => source.close();
     },
