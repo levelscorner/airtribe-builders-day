@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { ApprovalCardMessage, ArtefactState, RegeneratePreviewResponse } from "@chotu/shared";
 import { MockMeter } from "../screens/PlayerCard";
+import { readRejectNote } from "../reject-note";
 import { colors, hitSlop, layout } from "../theme";
 import { KIND_LABEL, STAGE_LABEL } from "./labels";
 
@@ -156,6 +157,7 @@ export function ApprovalCard({
   onReject,
   onPreviewRegenerate,
   onConfirmRegenerate,
+  onNeedCredits,
 }: {
   message: ApprovalCardMessage;
   liveState: ArtefactState;
@@ -163,13 +165,14 @@ export function ApprovalCard({
   onReject: (note: string) => void;
   onPreviewRegenerate: () => Promise<RegeneratePreviewResponse>;
   onConfirmRegenerate: () => void;
+  onNeedCredits: () => void;
 }) {
   const [rejecting, setRejecting] = useState(false);
   const [note, setNote] = useState("");
   const [quote, setQuote] = useState<RegeneratePreviewResponse | null>(null);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const version = num(message.preview.version) ?? 1;
-  const rejectionNote = str(message.preview.rejectionNote);
+  const rejectionNote = readRejectNote(message);
   const generating = liveState === "generating";
   const approved = !generating && (liveState === "approved" || message.state === "approved");
   const rejected = !generating && (liveState === "rejected" || message.state === "rejected");
@@ -261,7 +264,17 @@ export function ApprovalCard({
                 >
                   <Text style={styles.primaryText}>Haan, {quote.creditCost} credits kaato</Text>
                 </Pressable>
-              ) : null}
+              ) : (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Credits kam hain, packs dekho, ${message.title}`}
+                  hitSlop={hitSlop}
+                  onPress={onNeedCredits}
+                  style={styles.primary}
+                >
+                  <Text style={styles.primaryText}>Packs dekho</Text>
+                </Pressable>
+              )}
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Rehne do, ${message.title}`}

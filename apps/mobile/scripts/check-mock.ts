@@ -1,6 +1,9 @@
 import type { ArtefactKind, ChatMessage, QuestionMessage } from "@chotu/shared";
 import { openQuestion } from "../src/chat/open-question";
+import { STARTER_CREDITS } from "../src/mock-fixtures";
 import { createMockStudio } from "../src/mock-studio";
+import { readRejectNote } from "../src/reject-note";
+import { sessionFromCheckout } from "../src/checkout";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -165,7 +168,10 @@ async function main(): Promise<void> {
       const history = await api.listMessages(opened.chatId);
       const card = history.messages.find((item) => item.kind === "approval" && item.artefactId === target.id);
       assert(card && card.kind === "approval" && card.state === "rejected", "reject should update the card");
-      assert(card.preview.rejectionNote === "Sheet ka pose badlo", "note should sit on the preview");
+      assert(readRejectNote(card) === "Sheet ka pose badlo", "rejectNote should sit on the card");
+      assert(card.preview.rejectionNote === undefined, "preview.rejectionNote is not the card field");
+      assert(card.preview.rejectNote === undefined, "rejectNote stays off the preview bag");
+      assert(rejectedBody.artefact.payload.rejectNote === "Sheet ka pose badlo", "artefact keeps the typed note name");
       const cleared = await api.approveAllRemaining(opened.videoId);
       assert(!cleared.approvedIds.includes(target.id), "approve-all must skip rejected cards");
       const held = await api.getVideo(opened.videoId);
@@ -229,6 +235,29 @@ async function main(): Promise<void> {
   assert(done.video.brief.artStyle?.includes("2D"), "kids default art style");
   assert((done.video.brief.castIds ?? []).join() === "cast_chintu,cast_mini", "cast optionIds should stick");
   assert(done.video.brief.topic?.includes("barish"), "opening line should stay the topic");
+
+  const packs = await api.listPacks();
+  assert(packs.packs.length === 3, "three video packs");
+  assert(packs.packs.map((pack) => pack.label).join(",") === "1 video,3 videos,10 videos", "pack labels are video counts");
+  assert(packs.packs.every((pack) => pack.amountInr === 0), "placeholder prices stay TBD");
+  assert(packs.packs[0]?.credits === STARTER_CREDITS, "one video uses the starter grant");
+  assert(packs.packs[2]?.credits === STARTER_CREDITS * 10, "ten videos scale the starter grant");
+  const beforePacks = (await api.getMe()).creditBalance;
+  const bought = await api.checkout({ packId: "pack_1" });
+  const session = sessionFromCheckout(bought);
+  assert(session.orderId === bought.paymentId, "checkout returns an order id");
+  assert(session.checkoutUrl?.startsWith("mock://pine-labs/"), "mock checkout locator");
+  assert(!String(session.checkoutUrl).includes("http"), "checkout must not be a network url");
+  assert(bought.creditsGranted === STARTER_CREDITS, "mock grants the pack credits");
+  assert((await api.getMe()).creditBalance === beforePacks + STARTER_CREDITS, "balance grows by the pack");
+  let unknownPack = false;
+  try {
+    await api.checkout({ packId: "missing" });
+  } catch {
+    unknownPack = true;
+  }
+  assert(unknownPack, "unknown pack fails checkout");
+  assert((await api.getMe()).creditBalance === beforePacks + STARTER_CREDITS, "failed checkout leaves the balance");
 }
 
 async function answerBrief(api: ReturnType<typeof createMockStudio>, chatId: string, videoId: string): Promise<void> {

@@ -16,6 +16,7 @@ import type {
   User,
   VideoSummary,
 } from "@chotu/shared";
+import { applyRejectNote } from "./reject-note";
 import type { StudioClient } from "./studio-client";
 import {
   CAST,
@@ -201,12 +202,14 @@ export function createMockStudio(options?: {
       artefact.state === "awaiting_approval" || artefact.state === "approved" || artefact.state === "rejected"
         ? artefact.state
         : null;
-    const next: ApprovalCardMessage = {
-      ...current,
-      preview: { ...artefact.payload },
-      regenerateCreditCost: artefact.creditCost,
-      state: legal ?? current.state,
-    };
+    const next: ApprovalCardMessage = applyRejectNote(
+      {
+        ...current,
+        regenerateCreditCost: artefact.creditCost,
+        state: legal ?? current.state,
+      },
+      artefact.payload,
+    );
     emit(chat, { type: "message", message: next });
   }
 
@@ -717,6 +720,7 @@ export function createMockStudio(options?: {
 
   function bumpPayload(kind: ArtefactKind, payload: Record<string, unknown>, version: number): Record<string, unknown> {
     const next: Record<string, unknown> = { ...payload, version };
+    delete next.rejectNote;
     delete next.rejectionNote;
     if (kind === "identity" && Array.isArray(next.members)) {
       next.members = next.members.map((item) => {
@@ -957,7 +961,8 @@ export function createMockStudio(options?: {
         throw new StudioMockError("bad_state", "Yeh card reject nahi ho sakta.");
       }
       artefact.state = "rejected";
-      artefact.payload = { ...artefact.payload, rejectionNote: note };
+      artefact.payload = { ...artefact.payload, rejectNote: note };
+      delete artefact.payload.rejectionNote;
       artefact.updatedAt = now();
       patchApproval(chat, artefact);
       const snapshot = { ...artefact, payload: { ...artefact.payload } };
@@ -1062,17 +1067,21 @@ export function createMockStudio(options?: {
     },
 
     async listPacks() {
+      await wait();
       return { packs: PACKS.map((pack) => ({ ...pack })) };
     },
 
     async checkout(body) {
+      await wait();
       const current = mustUser();
       const pack = PACKS.find((item) => item.id === body.packId);
       if (!pack) throw new StudioMockError("pack", "Yeh pack nahi mila.");
       current.creditBalance += pack.credits;
+      const paymentId = nid("pay");
       return {
-        paymentId: nid("pay"),
-        status: "mocked",
+        paymentId,
+        status: "mocked" as const,
+        checkoutUrl: `mock://pine-labs/${paymentId}`,
         creditsGranted: pack.credits,
       };
     },
