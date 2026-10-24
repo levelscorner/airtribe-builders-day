@@ -10,7 +10,7 @@ export function assertPineLabsTestOrigin(baseUrl: string): URL {
   } catch {
     throw new PaymentError("Pine Labs base URL is not a URL", 500, "bad_pine_host");
   }
-  if (url.protocol !== "https:" || !url.hostname.includes("pluraluat")) {
+  if (url.origin !== PINE_LABS_UAT_ORIGIN) {
     throw new PaymentError(
       "Pine Labs checkout is TEST MODE only (pluraluat host)",
       500,

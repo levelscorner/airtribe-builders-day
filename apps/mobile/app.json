@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Chotu Studio",
+    "slug": "chotu-studio",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "chotustudio",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "studio.chotu.studio"
+    },
+    "android": {
+      "package": "studio.chotu.studio",
+      "adaptiveIcon": {
+        "backgroundColor": "#F3EEE6"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-asset"
+    ]
+  }
+}

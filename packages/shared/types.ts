@@ -40,7 +40,9 @@ export type ArtefactState =
   | 'generating'
   | 'awaiting_approval'
   | 'approved'
-  | 'rejected';
+  | 'rejected'
+  /** Generation threw before a reviewable payload; regenerate can recover. */
+  | 'failed';
 
 export type ApprovalAction =
   | 'approve'
@@ -97,7 +99,7 @@ export interface ApprovalCardMessage extends ChatMessageBase {
   preview: Record<string, unknown>;
   /** Credits charged if the user regenerates (shown before confirm). */
   regenerateCreditCost: number;
-  state: Extract<ArtefactState, 'awaiting_approval' | 'approved' | 'rejected'>;
+  state: Extract<ArtefactState, 'awaiting_approval' | 'approved' | 'rejected' | 'failed'>;
 }
 
 export interface ProgressMessage extends ChatMessageBase {
@@ -144,6 +146,8 @@ export interface User {
 }
 
 export interface Brief {
+  /** Creator topic / subject line from chat intake. */
+  topic?: string;
   genre?: Genre;
   language?: Language;
   aspectRatio?: string;
@@ -153,6 +157,11 @@ export interface Brief {
   artStyle?: string;
   artStyleTraits?: string[];
   castIds?: string[];
+  /**
+   * Free-form intake leftovers only (product, cast_request, skipped fields).
+   * Do not store topic or regenerate feedback here — use `topic` and
+   * `RegenerateRequest.feedback` / `ScriptGenInput.feedback`.
+   */
   notes?: string;
 }
 
@@ -265,7 +274,13 @@ export interface PostMessageRequest {
   /** Answer to a QuestionMessage */
   answer?: {
     field: string;
+    /** Single-choice chips (genre, resolution, language, …). */
     optionId?: string;
+    /**
+     * Multi-choice chips for cast (1–2 members). Prefer this over packing
+     * several ids into `optionId`. Single-choice fields keep using `optionId`.
+     */
+    optionIds?: string[];
     freeText?: string;
     skip?: boolean;
     useDefaults?: boolean;
@@ -277,7 +292,26 @@ export interface PostMessageResponse {
 }
 
 export interface RejectArtefactRequest {
-  note: string;
+  /** Creator note explaining the rejection (HITL). */
+  rejectNote: string;
+}
+
+/** Body for POST /v1/artefacts/:id/regenerate (?confirm=0 preview, confirm=1 run). */
+export interface RegenerateRequest {
+  /** Optional guidance for the next generation. */
+  feedback?: string;
+  /** When false/omitted with preview semantics, return credit cost only. */
+  confirm?: boolean;
+}
+
+/** POST /v1/artefacts/:id/approve — body may be empty. SSE still broadcasts. */
+export interface ApproveArtefactResponse {
+  artefact: ArtefactSummary;
+}
+
+/** POST /v1/artefacts/:id/reject — SSE still broadcasts. */
+export interface RejectArtefactResponse {
+  artefact: ArtefactSummary;
 }
 
 export interface RegeneratePreviewResponse {
@@ -291,6 +325,19 @@ export interface RegenerateConfirmResponse {
   artefactId: string;
   state: ArtefactState;
   charged: number;
+  /** Wallet balance after the debit. */
+  balance: number;
+  /** Updated artefact (often `generating`); SSE still broadcasts. */
+  artefact: ArtefactSummary;
+}
+
+/** GET /v1/chats/:id — hydrate the chat shell in one round trip. */
+export interface GetChatResponse {
+  chatId: string;
+  videoId: string;
+  stage: Stage;
+  messages: ChatMessage[];
+  artefacts: ArtefactSummary[];
 }
 
 export interface ApproveAllRemainingResponse {
@@ -339,6 +386,8 @@ export interface ScriptGenInput {
   genre: Genre;
   language: Language;
   targetSeconds: number;
+  /** From RegenerateRequest.feedback when the creator regenerates. */
+  feedback?: string;
 }
 
 export interface ScriptGenOutput {
@@ -363,6 +412,8 @@ export interface PromptGenInput {
   brief: Brief;
   cast: CastMember[];
   artStyle?: string;
+  /** From RegenerateRequest.feedback when the creator regenerates. */
+  feedback?: string;
 }
 
 export interface PromptGenOutput {
@@ -521,6 +572,7 @@ export const ApiPaths = {
   users: '/v1/users',
   me: '/v1/me',
   chats: '/v1/chats',
+  chat: (chatId: string) => `/v1/chats/${chatId}`,
   chatMessages: (chatId: string) => `/v1/chats/${chatId}/messages`,
   chatEvents: (chatId: string) => `/v1/chats/${chatId}/events`,
   artefactApprove: (id: string) => `/v1/artefacts/${id}/approve`,

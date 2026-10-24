@@ -1,0 +1,54 @@
+{
+  "id": "ad",
+  "label": "Ad",
+  "who": "small brands, D2C, local shops",
+  "tone": "punchy, benefit-led",
+  "shape": "hook, problem, product, offer, CTA, 20-30s",
+  "beats": ["hook", "problem", "product", "offer", "cta"],
+  "defaultTargetSeconds": 25,
+  "minSeconds": 20,
+  "maxSeconds": 30,
+  "defaultResolution": "1080p",
+  "defaultAspectRatio": "9:16",
+  "defaultLanguage": "hinglish",
+  "defaultAudience": "Shoppers at a small Indian brand or local shop",
+  "defaultTopic": "a product from a local shop",
+  "defaultProduct": "a small jar on a clean table",
+  "artStylePresets": [
+    {
+      "id": "clean-product-studio",
+      "label": "Clean product studio",
+      "traits": ["clean studio backdrop", "soft even light", "true product colour", "uncluttered tabletop"]
+    },
+    {
+      "id": "cinematic-realistic",
+      "label": "Cinematic realistic",
+      "traits": ["natural light", "realistic textures", "shallow depth of field", "restrained colour"]
+    },
+    {
+      "id": "bright-2d-cartoon",
+      "label": "Bright 2D cartoon",
+      "traits": ["bright flat colours", "bold clean outlines", "simple shapes", "even friendly light"]
+    }
+  ],
+  "defaultArtStyle": "clean-product-studio",
+  "defaultCastIds": ["preset_riya"],
+  "captionStyle": "Short punchy lower-third captions, offer spoken rather than painted into the picture",
+  "followUps": [
+    {
+      "field": "topic",
+      "prompt": "What are we advertising, in one line?",
+      "allowFreeText": true,
+      "allowSkip": true,
+      "allowDefaults": true
+    },
+    {
+      "field": "product",
+      "prompt": "Describe the product in a few plain words (shape, colour, what it is). No brand slogans.",
+      "allowFreeText": true,
+      "allowSkip": true,
+      "allowDefaults": true
+    }
+  ],
+  "skillRefs": ["cards-format-advert", "cards-format-product", "cards-format-ugc"]
+}

@@ -1,20 +1,42 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { frameSize, type RendererInput, type RendererOutput } from "./types.js";
 
-const FONTS = [
-  "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
-  "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-  "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-];
+const bundledFont = join(dirname(fileURLToPath(import.meta.url)), "fonts", "NotoSansDevanagari-Regular.ttf");
+
+/** DejaVu and Liberation have no Devanagari glyphs, so they are not fallbacks. */
+const FONTS = [bundledFont, "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf"];
 
 export function captionFont(): string {
   const found = FONTS.find((path) => existsSync(path));
-  if (!found) throw new Error("no caption font installed (looked for Noto Sans Devanagari, then DejaVu)");
+  if (!found) {
+    throw new Error(
+      "Noto Sans Devanagari is required for Hindi captions. Expected server/src/render/fonts/NotoSansDevanagari-Regular.ttf",
+    );
+  }
   return found;
+}
+
+/** Break narration so one drawtext line fits the portrait frame. */
+export function wrapCaption(text: string, maxChars: number): string {
+  const words = text.replace(/\s+/g, " ").trim().split(" ").filter((word) => word.length > 0);
+  const limit = Math.max(8, maxChars);
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (current && next.length > limit) {
+      lines.push(current);
+      current = word;
+      continue;
+    }
+    current = next;
+  }
+  if (current) lines.push(current);
+  return lines.join("\n");
 }
 
 export function renderOutputPath(workDir: string, videoId: string): string {
@@ -38,9 +60,11 @@ export async function assembleWithFfmpeg(input: RendererInput, options: Assemble
   if (input.scenes.length === 0) throw new Error("render needs at least one scene");
   const videoId = safeVideoId(input.videoId);
   const { width, height } = frameSize(input.resolution);
-  const dir = join(options.workDir, videoId);
+  const workDir = resolve(options.workDir);
+  const dir = join(workDir, videoId);
   await mkdir(dir, { recursive: true });
   const font = captionFont();
+  const fontSize = captionFontSize(input.captionStyle, height);
   const segments: string[] = [];
 
   for (const scene of input.scenes) {
@@ -56,7 +80,8 @@ export async function assembleWithFfmpeg(input: RendererInput, options: Assemble
       ? await materialize(scene.imageUrl, join(dir, `image-${scene.idx}`), options.fetchImpl)
       : undefined;
     const captionFile = join(dir, `caption-${scene.idx}.txt`);
-    await writeFile(captionFile, scene.narration.replace(/\s+/g, " ").trim());
+    const wrapped = wrapCaption(scene.narration, captionWidthChars(width, fontSize));
+    await writeFile(captionFile, wrapped);
     await encodeScene({
       segment,
       width,
@@ -65,16 +90,16 @@ export async function assembleWithFfmpeg(input: RendererInput, options: Assemble
       audio,
       clip,
       image,
-      captionFile: scene.narration.trim() ? captionFile : undefined,
+      captionFile: wrapped ? captionFile : undefined,
       font,
-      fontSize: captionFontSize(input.captionStyle, height),
+      fontSize,
     });
     segments.push(segment);
   }
 
   const listPath = join(dir, "concat.txt");
   await writeFile(listPath, segments.map((path) => `file '${path.replace(/'/g, "'\\''")}'`).join("\n"));
-  const output = renderOutputPath(options.workDir, videoId);
+  const output = renderOutputPath(workDir, videoId);
   await run("ffmpeg", ["-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", "-movflags", "+faststart", output]);
   const probed = await probeVideo(output);
   const base = options.publicBaseUrl.replace(/\/$/, "");
@@ -88,6 +113,10 @@ export async function assembleWithFfmpeg(input: RendererInput, options: Assemble
 function captionFontSize(style: string | undefined, height: number): number {
   const base = style === "large" ? 72 : 56;
   return Math.max(28, Math.round(base * (height / 1920)));
+}
+
+function captionWidthChars(width: number, fontSize: number): number {
+  return Math.max(12, Math.floor((width * 0.84) / (fontSize * 0.55)));
 }
 
 async function encodeScene(input: {
@@ -108,7 +137,7 @@ async function encodeScene(input: {
       ? ["-loop", "1", "-i", input.image]
       : ["-f", "lavfi", "-i", `color=c=0x1a1a2e:s=${input.width}x${input.height}:r=25`];
   const draw = input.captionFile
-    ? `drawtext=fontfile='${filterPath(input.font)}':textfile='${filterPath(input.captionFile)}':text_shaping=1:fontsize=${input.fontSize}:fontcolor=white:borderw=4:bordercolor=black:x=(w-text_w)/2:y=h-220,`
+    ? `drawtext=fontfile='${filterPath(input.font)}':textfile='${filterPath(input.captionFile)}':text_shaping=1:fontsize=${input.fontSize}:fontcolor=white:borderw=4:bordercolor=black:line_spacing=8:x=(w-text_w)/2:y=h-text_h-96,`
     : "";
   const duration = input.durationSec.toFixed(3);
   const filter =
