@@ -5,6 +5,7 @@ import cors from "cors";
 import express, { type Express } from "express";
 import { asyncRoute } from "../admin/async-route.js";
 import { adminRouter, type PaymentReview } from "../admin/routes.js";
+import { createUserDirectory } from "../admin/users.js";
 import { createMemoryEventLog, createPostgresEventLog, type EventLog } from "../admin/log.js";
 import { createPgDb, createPgPool, migrate, type Db } from "../credits/db.js";
 import { createCredits } from "../credits/index.js";
@@ -75,7 +76,7 @@ export async function createApp(options: AppOptions = {}): Promise<Express> {
       },
     }),
   );
-  app.use(adminRouter(events, { mock: config.mock, database }, review));
+  app.use(adminRouter(events, { mock: config.mock, database }, review, db ? createUserDirectory(db) : undefined));
 
   app.get("/v1/videos/:id/download", asyncRoute(async (req, res) => {
     const videoId = req.params.id;

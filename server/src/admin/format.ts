@@ -1,5 +1,6 @@
 import { VIEWPORT_META } from "../html.js";
 import type { EventRow } from "./log.js";
+import type { AdminUser } from "./users.js";
 
 export function escapeHtml(value: string): string {
   return value
@@ -12,6 +13,7 @@ export function escapeHtml(value: string): string {
 export function renderAdminHtml(input: {
   rows: EventRow[];
   counts: Array<{ kind: string; n: number }>;
+  users: AdminUser[];
   mock: boolean;
   database: boolean;
 }): string {
@@ -47,11 +49,29 @@ export function renderAdminHtml(input: {
 <p>${total} events. Mock ${input.mock ? "on" : "off"}. Database ${input.database ? "connected" : "in memory"}.</p>
 <ul>${counts || "<li>No events yet.</li>"}</ul>
 <p><a href="/admin/payments">Payments</a> · <a href="/admin/export.csv">Download CSV</a></p>
+<h2>Users</h2>
+<table>
+<thead><tr><th>display_name</th><th>phone_or_email</th><th>created_at</th></tr></thead>
+<tbody>${renderUserRows(input.users)}</tbody>
+</table>
 <table>
 <thead><tr><th>When</th><th>Kind</th><th>User</th><th>Video</th><th>Payload</th></tr></thead>
 <tbody>${body}</tbody>
 </table>
 </body></html>`;
+}
+
+function renderUserRows(users: AdminUser[]): string {
+  if (users.length === 0) return `<tr><td colspan="3">No users yet.</td></tr>`;
+  return users
+    .map(
+      (user) => `<tr>
+<td>${escapeHtml(user.displayName)}</td>
+<td>${escapeHtml(user.phoneOrEmail)}</td>
+<td>${escapeHtml(user.createdAt)}</td>
+</tr>`,
+    )
+    .join("");
 }
 
 function csvCell(value: string): string {
@@ -76,4 +96,17 @@ export function renderEventsCsv(rows: EventRow[]): string {
     );
   }
   return `${lines.join("\n")}\n`;
+}
+
+/** User rows follow the event table. Every field is quoted, and quotes are doubled. */
+export function renderUsersCsv(users: AdminUser[]): string {
+  const lines = [["display_name", "phone_or_email", "created_at"].join(",")];
+  for (const user of users) {
+    lines.push([user.displayName, user.phoneOrEmail, user.createdAt].map(csvCell).join(","));
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+export function renderAdminCsv(events: EventRow[], users: AdminUser[]): string {
+  return `${renderEventsCsv(events)}${renderUsersCsv(users)}`;
 }
