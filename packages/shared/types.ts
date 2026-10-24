@@ -40,7 +40,9 @@ export type ArtefactState =
   | 'generating'
   | 'awaiting_approval'
   | 'approved'
-  | 'rejected';
+  | 'rejected'
+  /** Generation threw before a reviewable payload; regenerate can recover. */
+  | 'failed';
 
 export type ApprovalAction =
   | 'approve'
@@ -97,7 +99,7 @@ export interface ApprovalCardMessage extends ChatMessageBase {
   preview: Record<string, unknown>;
   /** Credits charged if the user regenerates (shown before confirm). */
   regenerateCreditCost: number;
-  state: Extract<ArtefactState, 'awaiting_approval' | 'approved' | 'rejected'>;
+  state: Extract<ArtefactState, 'awaiting_approval' | 'approved' | 'rejected' | 'failed'>;
 }
 
 export interface ProgressMessage extends ChatMessageBase {

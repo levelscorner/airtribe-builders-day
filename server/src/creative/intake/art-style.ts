@@ -1,8 +1,8 @@
 const BLOCKED =
   /\b(disney|pixar|ghibli|miyazaki|dreamworks|marvel|dc comics|nintendo|pokemon|pokémon|hello kitty|warner|illumination|barbie|star wars|van gogh|picasso|monet)\b/gi;
 
-const STYLE_OF =
-  /\b(?:in the style of|inspired by)\s+[A-Za-z][\w.'-]*(?:\s+[A-Za-z][\w.'-]*){0,3}/gi;
+/** One artist name only. "with" / "and" stay, so the requested look is not eaten. */
+const STYLE_OF = /\b(?:in the style of|inspired by)\s+[A-Za-z][\w.'-]*/gi;
 
 export function stripBlockedNames(text: string): string {
   return text.replace(STYLE_OF, " ").replace(BLOCKED, " ").replace(/\s+/g, " ").trim();
@@ -14,7 +14,7 @@ export function traitsFromArtText(text: string): { artStyle: string; artStyleTra
     .split(/[,;/]|\band\b/i)
     .map((part) =>
       part
-        .replace(/[^a-z0-9\s-]/gi, " ")
+        .replace(/[^\p{L}\p{M}\p{N}\s-]/gu, " ")
         .replace(/\s+/g, " ")
         .trim()
         .toLowerCase(),
