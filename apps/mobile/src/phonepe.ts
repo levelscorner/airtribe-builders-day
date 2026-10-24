@@ -4,12 +4,11 @@ export const PHONEPE_PAYEE = "ABHINAV RANA";
 
 type EnvLike = Record<string, string | undefined>;
 
-/** Empty EXPO_PUBLIC_API_URL means same-origin, which is how the web build talks to npm start. */
-export function paymentsApiBase(env: EnvLike = envRecord()): string {
-  if (Object.prototype.hasOwnProperty.call(env, "EXPO_PUBLIC_API_URL") && env.EXPO_PUBLIC_API_URL !== undefined) {
-    return env.EXPO_PUBLIC_API_URL.replace(/\/$/, "");
-  }
-  return (env.PUBLIC_BASE_URL || "http://localhost:8787").replace(/\/$/, "");
+/** Empty EXPO_PUBLIC_API_URL means same-origin. The member read must stay direct so Metro inlines it. */
+export function paymentsApiBase(env?: EnvLike): string {
+  const raw = env ? env.EXPO_PUBLIC_API_URL : process.env.EXPO_PUBLIC_API_URL;
+  if (raw !== undefined) return raw.replace(/\/$/, "");
+  return "http://localhost:8787";
 }
 
 export interface PhonePeDeclaration {
@@ -54,8 +53,4 @@ export async function listServerPacks(input?: { base?: string; fetchImpl?: typeo
   } catch {
     return null;
   }
-}
-
-function envRecord(): EnvLike {
-  return process.env as EnvLike;
 }
