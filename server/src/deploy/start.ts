@@ -10,6 +10,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPostgresEventLog } from "../admin/log.js";
 import { adminRouter, type PaymentReview } from "../admin/routes.js";
+import { createUserDirectory } from "../admin/users.js";
 import { dbFromSql } from "../admin/sql-db.js";
 import { creditsEnabled } from "../credits/flag.js";
 import { createCredits } from "../credits/index.js";
@@ -79,7 +80,7 @@ export async function startServer(options?: { port?: number; listen?: boolean })
         }
       : undefined;
   app.use(paymentsRouter(payments));
-  app.use(adminRouter(events, { mock, database: !db.memory }, review));
+  app.use(adminRouter(events, { mock, database: !db.memory }, review, createUserDirectory(marsDb)));
 
   const health = () =>
     apiHealthBody({ mock, memory: db.memory, llm: resolveLlmProvider(), payments: payMode });
