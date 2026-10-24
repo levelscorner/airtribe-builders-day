@@ -34,7 +34,7 @@ function input(overrides: Partial<ScriptGenInput> = {}): ScriptGenInput {
 
 test("mock script returns one cast list per scene and durations that add up", async () => {
   const script = await createScriptGen({ mock: true }).generate(input());
-  assert.equal(script.scenes.length, 5);
+  assert.equal(script.scenes.length, 2);
   assert.equal(
     script.scenes.reduce((total, scene) => total + scene.durationMs, 0),
     45_000,
@@ -42,7 +42,7 @@ test("mock script returns one cast list per scene and durations that add up", as
   assert.deepEqual(script.scenes[0]?.castIds, ["preset_chintu", "preset_mini"]);
   assert.equal(script.scenes[1]?.castIds.length, 1);
   assert.match(script.scenes[0]?.narration ?? "", /शहद|Chintu/);
-  assert.match(script.scenes[4]?.doubts[0] ?? "", /quiz/i);
+  assert.match(script.scenes[1]?.doubts[0] ?? "", /quiz/i);
   assert.equal(script.rawMarkdown, undefined);
 });
 
@@ -81,6 +81,42 @@ test("live ScriptGen refuses to call the network without a key", async () => {
   );
 });
 
+test("live ScriptGen trims extra scenes and the prompt states the count", async () => {
+  const sample = input();
+  let system = "";
+  let prompt = "";
+  const script = await createScriptGen({
+    mock: false,
+    llmApiKey: "",
+    complete: async (request: CompleteRequest) => {
+      system = request.system;
+      prompt = request.prompt;
+      return mockScript({ ...sample, brief: { ...sample.brief, sceneCount: 5 } });
+    },
+  }).generate(sample);
+  assert.equal(script.scenes.length, 2);
+  assert.equal(
+    script.scenes.reduce((total, scene) => total + scene.durationMs, 0),
+    45_000,
+  );
+  assert.deepEqual(
+    script.scenes.map((scene) => scene.idx),
+    [0, 1],
+  );
+  assert.match(system, /exactly the sceneCount/);
+  assert.match(prompt, /"sceneCount":2/);
+});
+
+test("an explicit brief scene count is kept", async () => {
+  const sample = input();
+  const script = await createScriptGen({ mock: true }).generate({
+    ...sample,
+    brief: { ...sample.brief, sceneCount: 5 },
+  });
+  assert.equal(script.scenes.length, 5);
+  assert.match(script.scenes[4]?.doubts[0] ?? "", /quiz/i);
+});
+
 test("faceless scenes keep the narrator and nobody else", async () => {
   const narrator = getPresetCast().find((member) => member.id === "preset_narrator") as CastMember;
   const script = await createScriptGen({ mock: true }).generate({
@@ -96,7 +132,7 @@ test("faceless scenes keep the narrator and nobody else", async () => {
     },
     cast: [narrator],
   });
-  assert.equal(script.scenes.length, 5);
+  assert.equal(script.scenes.length, 2);
   assert.ok(script.scenes.every((scene) => scene.castIds.join() === "preset_narrator"));
   assert.match(script.scenes[0]?.narration ?? "", /monsoon/i);
 });

@@ -147,7 +147,15 @@ function sameToken(got: string, expected: string): boolean {
   return timingSafeEqual(left, right);
 }
 
+/** Pages served without ADMIN_TOKEN when ADMIN_OPEN=1. Approve and reject stay gated. */
+const OPEN_ADMIN_PATHS = new Set(["/admin", "/admin/payments", "/admin/export.csv"]);
+
+function adminOpen(): boolean {
+  return (process.env.ADMIN_OPEN ?? "").trim() === "1";
+}
+
 function allowAdmin(req: Request, res: Response): boolean {
+  if (adminOpen() && OPEN_ADMIN_PATHS.has(req.path)) return true;
   const expected = adminToken();
   if (!expected) {
     res.status(503).json({ error: "admin_unconfigured" });

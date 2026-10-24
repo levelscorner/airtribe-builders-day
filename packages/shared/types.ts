@@ -175,6 +175,8 @@ export interface Brief {
   aspectRatio?: string;
   resolution?: Resolution;
   targetSeconds?: number;
+  /** How many scenes the script must contain. Omitted means 2. */
+  sceneCount?: number;
   audience?: string;
   artStyle?: string;
   artStyleTraits?: string[];
@@ -561,6 +563,8 @@ export interface ClipGenInput {
   elementIds: string[];
   durationMs: number;
   aspectRatio: string;
+  /** Seedance native audio. Set only when ElevenLabs produced no line for the scene. */
+  generateAudio?: boolean;
 }
 
 export interface ClipGenOutput {

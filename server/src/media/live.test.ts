@@ -11,6 +11,7 @@ import { createClipGen } from "./higgsfield/clip-gen.js";
 import { createImageGen } from "./higgsfield/image-gen.js";
 import { createVoiceGen } from "./elevenlabs/voice-gen.js";
 import { createMediaPorts } from "./index.js";
+import { DEFAULT_VOICE_ID } from "../../../packages/shared/voicePresets.ts";
 
 interface Call {
   url: string;
@@ -386,7 +387,10 @@ test("voice gen posts with-timestamps and writes the mp3", async () => {
   assert.deepEqual(readFileSync(join(dir, filename)), audio);
   assert.equal(header(calls[0]?.init, "xi-api-key"), "test-eleven");
   assert.equal(header(calls[0]?.init, "authorization"), null);
-  assert.match(calls[0]?.url ?? "", /\/v1\/text-to-speech\/T536A2SFCG4AEDVTRucQ\/with-timestamps\?output_format=mp3_44100_128$/);
+  assert.match(
+    calls[0]?.url ?? "",
+    new RegExp(`/v1/text-to-speech/${DEFAULT_VOICE_ID}/with-timestamps\\?output_format=mp3_44100_128$`),
+  );
   const body = JSON.parse(String(calls[0]?.init?.body));
   assert.equal(body.model_id, "eleven_multilingual_v2");
   assert.equal("language_code" in body, false);

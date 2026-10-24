@@ -1,3 +1,4 @@
+import { DEFAULT_VOICE_ID } from "../../../../packages/shared/voicePresets.ts";
 import type { Language, VoiceGenInput } from "../../../../packages/shared/types.ts";
 import { MediaInputError } from "../errors.js";
 import { DEFAULT_SETTINGS, findPreset, type StudioVoicePreset } from "./presets.js";
@@ -43,6 +44,7 @@ export function buildVoiceRequest(
   if (!voiceId) throw new MediaInputError("voice id is required");
 
   const preset = findPreset(presets, voiceId);
+  const resolvedVoiceId = preset?.elevenlabsVoiceId ?? DEFAULT_VOICE_ID;
   const modelId = preview ? VoiceModels.preview : VoiceModels.final;
   const body: VoiceRequest["body"] = {
     text,
@@ -58,9 +60,9 @@ export function buildVoiceRequest(
   if (preview) body.language_code = languageCode(input.language);
 
   return {
-    voiceId: preset?.elevenlabsVoiceId ?? voiceId,
+    voiceId: resolvedVoiceId,
     modelId,
-    path: `/v1/text-to-speech/${encodeURIComponent(preset?.elevenlabsVoiceId ?? voiceId)}/with-timestamps`,
+    path: `/v1/text-to-speech/${encodeURIComponent(resolvedVoiceId)}/with-timestamps`,
     query: { output_format: "mp3_44100_128" },
     body,
   };

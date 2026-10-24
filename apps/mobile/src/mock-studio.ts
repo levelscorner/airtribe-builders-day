@@ -1020,6 +1020,8 @@ export function createMockStudio(options?: {
       if (!name) throw new StudioMockError("name", "Naam likho.");
       const email = body.phoneOrEmail?.trim();
       if (email && !email.includes("@")) throw new StudioMockError("email", "Email mein @ hona chahiye.");
+      // Demo only: there is no password or OTP, so anyone with the email gets in.
+      if (email && user?.phoneOrEmail === email) return user;
       user = {
         id: nid("usr"),
         displayName: name,
