@@ -75,7 +75,7 @@ export async function createApp(options: AppOptions = {}): Promise<Express> {
       },
     }),
   );
-  app.use(adminRouter(events, { mock: config.mock, database }, review));
+  app.use(adminRouter(events, { mock: config.mock, database }, review, db));
 
   app.get("/v1/videos/:id/download", asyncRoute(async (req, res) => {
     const videoId = req.params.id;

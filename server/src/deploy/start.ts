@@ -74,7 +74,7 @@ export async function startServer(options?: { port?: number; listen?: boolean })
         }
       : undefined;
   app.use(paymentsRouter(payments));
-  app.use(adminRouter(events, { mock, database: !db.memory }, review));
+  app.use(adminRouter(events, { mock, database: !db.memory }, review, marsDb));
 
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true, mock, memory: db.memory, llm: resolveLlmProvider(), payments: payMode });

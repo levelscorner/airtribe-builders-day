@@ -2,9 +2,11 @@ import { timingSafeEqual } from "node:crypto";
 import express, { type Request, type Response, Router } from "express";
 import { VIEWPORT_META } from "../html.js";
 import type { PendingPayment } from "../payments/qr.js";
+import type { Db } from "../credits/db.js";
 import { asyncRoute } from "./async-route.js";
 import { escapeHtml, renderAdminHtml, renderEventsCsv } from "./format.js";
 import type { EventLog } from "./log.js";
+import { loadUsage, renderUsageCsv, renderUsageHtml } from "./usage.js";
 
 export const ADMIN_COOKIE = "chotu_admin";
 
@@ -20,6 +22,7 @@ export function adminRouter(
   log: EventLog,
   flags: { mock: boolean; database: boolean },
   review?: PaymentReview,
+  db?: Db,
 ): Router {
   const router = Router();
 
@@ -109,7 +112,31 @@ export function adminRouter(
     res.type("text/csv").set("content-disposition", "attachment; filename=\"traction.csv\"").send(renderEventsCsv(rows));
   }));
 
+  router.get("/admin/usage", asyncRoute(async (req, res) => {
+    const report = await loadUsage(db, { excludeTestAccounts: excludeTestAccounts(req) });
+    res.type("html").send(renderUsageHtml(report));
+  }));
+
+  router.get("/admin/usage.json", asyncRoute(async (req, res) => {
+    const report = await loadUsage(db, { excludeTestAccounts: excludeTestAccounts(req) });
+    res.json(report);
+  }));
+
+  router.get("/admin/usage.csv", asyncRoute(async (req, res) => {
+    const report = await loadUsage(db, { excludeTestAccounts: excludeTestAccounts(req) });
+    res
+      .type("text/csv")
+      .set("content-disposition", "attachment; filename=\"usage.csv\"")
+      .send(renderUsageCsv(report));
+  }));
+
   return router;
+}
+
+function excludeTestAccounts(req: Request): boolean {
+  const value = req.query.includeTests;
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw !== "1" && raw !== "true";
 }
 
 function text(value: unknown): string {
@@ -202,7 +229,7 @@ function renderPaymentsHtml(pending: PendingPayment[], enabled: boolean): string
   @media (min-width:800px){body{margin:2rem}}
 </style></head>
 <body>
-<p><a href="/admin">Traction</a></p>
+<p><a href="/admin">Traction</a> · <a href="/admin/usage">Usage</a></p>
 <h1>Payments</h1>
 <p>Approve credits the ledger once. The ledger ref is the UTR.</p>
 <table>
