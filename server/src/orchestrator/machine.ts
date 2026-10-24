@@ -5,6 +5,7 @@ import type {
   ArtefactSummary,
   Brief,
   CastMember,
+  PlannedScene,
   ChatMessage,
   Genre,
   Language,
@@ -27,12 +28,14 @@ import {
   getPresetCast,
   nextQuestion,
   PromptGenOutputSchema,
+  ScenePlanSchema,
   ScriptGenOutputSchema,
+  createScenePlan,
   toQuestionMessage,
 } from "../creative/index.js";
 import type { IntakeAnswer } from "../creative/index.js";
 import { claudeIntakeEnabled, claudeOpeningBrief, claudeParseFreeText, claudeQuestion } from "../llm/intake.js";
-import { PROMPT_JSON_HINT, SCRIPT_JSON_HINT, creativeGenEnv } from "../llm/wire.js";
+import { PROMPT_JSON_HINT, SCENE_PLAN_HINT, SCRIPT_JSON_HINT, creativeGenEnv } from "../llm/wire.js";
 import { artefactCreditCost, debitRegenerate } from "../credits/stub.js";
 import type { SqlClient } from "../db/client.js";
 import { createMediaPorts } from "../media/index.js";
@@ -51,6 +54,13 @@ const STAGE_ORDER: Stage[] = [
   "final",
   "done",
 ];
+
+function readScenePlan(payload: Record<string, unknown> | undefined): PlannedScene[] {
+  const plan = payload?.scenePlan;
+  if (!plan || typeof plan !== "object" || !("scenes" in plan)) return [];
+  const scenes = (plan as { scenes?: unknown }).scenes;
+  return Array.isArray(scenes) ? (scenes as PlannedScene[]) : [];
+}
 
 function now(): string {
   return new Date().toISOString();
@@ -338,12 +348,20 @@ async function beginScript(ctx: OrchestratorContext, chatId: string, videoId: st
     targetSeconds: video.targetSeconds,
   });
   const scenes = await store.replaceScenes(ctx.db, videoId, output.scenes);
+  const scenePlan = await createScenePlan(creativeGenEnv(ScenePlanSchema, SCENE_PLAN_HINT)).generate({
+    videoId,
+    brief: video.brief,
+    cast,
+    genre: video.genre,
+    language: video.language,
+    targetSeconds: video.targetSeconds,
+  });
   const artefact = await store.insertArtefact(ctx.db, {
     videoId,
     kind: "script",
     state: "awaiting_approval",
     creditCost: artefactCreditCost("script"),
-    payload: { scenes: output.scenes, sceneIds: scenes.map((s) => s.id) },
+    payload: { scenes: output.scenes, sceneIds: scenes.map((s) => s.id), scenePlan },
   });
   await approvalCard(ctx, chatId, "script", artefact, "Script");
 }
@@ -355,6 +373,9 @@ async function beginPrompts(ctx: OrchestratorContext, chatId: string, videoId: s
   const members = cast.length ? cast : getPresetCast().filter((m) => (video.brief.castIds ?? []).includes(m.id));
   await progress(ctx, chatId, "prompts", "Image/video prompts…", "Prompts");
   const gen = createPromptGen(creativeGenEnv(PromptGenOutputSchema, PROMPT_JSON_HINT));
+  const planned = readScenePlan(
+    (await store.listArtefacts(ctx.db, videoId)).find((item) => item.kind === "script")?.payload,
+  );
   for (const scene of scenes) {
     const sceneCast = members.filter((m) => scene.castIds.includes(m.id));
     const output = await gen.generate({
@@ -364,13 +385,23 @@ async function beginPrompts(ctx: OrchestratorContext, chatId: string, videoId: s
       cast: sceneCast,
       artStyle: video.artStyle,
     });
+    const fromPlan = planned[scene.idx];
     const artefact = await store.insertArtefact(ctx.db, {
       videoId,
       sceneId: scene.id,
       kind: "prompt",
       state: "awaiting_approval",
       creditCost: artefactCreditCost("prompt"),
-      payload: { ...output, sceneIdx: scene.idx, title: scene.title },
+      payload: {
+        ...output,
+        imagePrompt: fromPlan?.imagePrompt ?? output.imagePrompt,
+        motionPrompt: fromPlan?.motionPrompt ?? output.videoPrompt,
+        durationSec: fromPlan?.durationSec,
+        vo: fromPlan?.vo,
+        voiceId: fromPlan?.voiceId,
+        sceneIdx: scene.idx,
+        title: scene.title,
+      },
     });
     await approvalCard(ctx, chatId, "prompts", artefact, `Prompt · ${scene.title ?? scene.idx}`);
   }
@@ -779,10 +810,20 @@ async function buildRegenPayload(
       feedback,
     });
     const scenes = await store.replaceScenes(ctx.db, video.id, output.scenes);
+    const scenePlan = await createScenePlan(creativeGenEnv(ScenePlanSchema, SCENE_PLAN_HINT)).generate({
+      videoId: video.id,
+      brief: video.brief,
+      cast,
+      genre: video.genre,
+      language: video.language,
+      targetSeconds: video.targetSeconds,
+      feedback,
+    });
     return {
       ...current,
       scenes: output.scenes,
       sceneIds: scenes.map((scene) => scene.id),
+      scenePlan,
       feedback,
       regenerated: true,
       generationFailed: false,
