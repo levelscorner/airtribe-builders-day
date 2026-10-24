@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type {
+  AgentReview,
   ApprovalCardMessage,
   ArtefactKind,
   ArtefactSummary,
@@ -13,6 +14,7 @@ import type {
   RegenerateConfirmResponse,
   RegeneratePreviewResponse,
   Scene,
+  ScriptGenOutput,
   Stage,
   TextMessage,
   VideoMessage,
@@ -33,6 +35,8 @@ import { artefactCreditCost, debitRegenerate } from "../credits/stub.js";
 import type { SqlClient } from "../db/client.js";
 import { createMediaPorts } from "../media/index.js";
 import { mockAssets } from "../media/placeholders.js";
+import { ensureBlockingWarning, scriptArtefactState } from "../integrations/agenticorg/parse.js";
+import { runScriptReview, type ScriptReviewInput } from "../integrations/agenticorg/run.js";
 import { chatBus } from "./bus.js";
 import * as store from "./store.js";
 
@@ -62,6 +66,8 @@ export type OrchestratorContext = {
   mock: boolean;
   /** Active brief being filled during intake, keyed by chatId */
   briefs: Map<string, Brief>;
+  /** Test seam. Production uses the AgenticOrg client. */
+  reviewScript?: (input: ScriptReviewInput) => Promise<AgentReview>;
 };
 
 export function createOrchestratorContext(db: SqlClient, mock = true): OrchestratorContext {
@@ -326,14 +332,41 @@ async function beginScript(ctx: OrchestratorContext, chatId: string, videoId: st
     targetSeconds: video.targetSeconds,
   });
   const scenes = await store.replaceScenes(ctx.db, videoId, output.scenes);
+  const review = await reviewScriptSafely(ctx, {
+    genre: video.genre,
+    brief: video.brief,
+    scriptText: scriptTextOf(output),
+  });
+  if (review.warning) {
+    await progress(ctx, chatId, "script", review.warning, "AgenticOrg");
+  }
   const artefact = await store.insertArtefact(ctx.db, {
     videoId,
     kind: "script",
-    state: "awaiting_approval",
+    state: scriptArtefactState(review),
     creditCost: artefactCreditCost("script"),
-    payload: { scenes: output.scenes, sceneIds: scenes.map((s) => s.id) },
+    payload: {
+      scenes: output.scenes,
+      sceneIds: scenes.map((s) => s.id),
+      agentReview: review,
+    },
   });
   await approvalCard(ctx, chatId, "script", artefact, "Script");
+}
+
+function scriptTextOf(output: ScriptGenOutput): string {
+  if (output.rawMarkdown?.trim()) return output.rawMarkdown;
+  return output.scenes.map((scene) => `${scene.idx}. ${scene.title}\n${scene.narration}`).join("\n\n");
+}
+
+/** Agent failures stay on the script card. The error text is never copied through. */
+async function reviewScriptSafely(ctx: OrchestratorContext, input: ScriptReviewInput): Promise<AgentReview> {
+  try {
+    const review = ctx.reviewScript ? await ctx.reviewScript(input) : await runScriptReview(input);
+    return ensureBlockingWarning(review);
+  } catch {
+    return { status: "failed", output: "", warning: "AgenticOrg review could not be reached" };
+  }
 }
 
 async function beginPrompts(ctx: OrchestratorContext, chatId: string, videoId: string): Promise<void> {

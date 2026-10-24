@@ -25,6 +25,7 @@ Replit: import this GitHub repo → set Secrets (`MOCK=1` until keys exist; opti
 | chotu-craft repo access (private skills) | Abhinav / Venus | 🔒 | V2 blocked; ScriptGen/PromptGen mocks work |
 | LLM API key / base URL for live ScriptGen | Abhinav / Venus | 🔒 | Optional until V3 |
 | Pine Labs merchant + webhook secret | Abhinav / Mars | 🔒 | Packs checkout stubbed |
+| AgenticOrg API key + agent id | Abhinav / Saturn | 🔒 | `AGENTICORG_API_KEY` and `AGENTICORG_AGENT_ID` only. Blank or `MOCK=1` uses the mock review |
 | Product name + starter credit amount | Sol / product | 🔒 | `STARTER_CREDITS` defaults to 80 |
 | Public demo host (Replit / Render) | Mars / Abhinav | 🟡 | `npm start` ready; publish URL when import done |
 
@@ -48,6 +49,7 @@ Replit: import this GitHub repo → set Secrets (`MOCK=1` until keys exist; opti
 | S8 | Gaia HTTP `StudioClient` against `/v1` | 🟡 | `apps/mobile/src/http-studio.ts` (PR #24) |
 | S9 | Per-browser signed cookie sessions + isolation test | ✅ | Fixes #25 on PR #24 |
 | S10 | SSE reconnect hydrate + Last-Event-ID replay | ✅ | Fixes #25 on PR #24 |
+| S11 | AgenticOrg script critic on the script stage | 🟡 | `server/src/integrations/agenticorg`; `AgentReview` in `packages/shared/types.ts`. `POST /api/v1/agents/{AGENTICORG_AGENT_ID}/run`. `failed` / `budget_exceeded` / HTTP 200 `status: failed` → mock review + warning. `hitl_triggered` stays `awaiting_approval` |
 
 ---
 

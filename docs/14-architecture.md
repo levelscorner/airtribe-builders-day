@@ -25,6 +25,7 @@ Status: agreed for parallel build (Builders Day Track 04). Based on [`docs/13-re
 │   │   ├── orchestrator/       # Saturn — chat state machine
 │   │   ├── db/                 # Saturn — migrations, queries, seed
 │   │   ├── routes/             # Saturn — REST + SSE wiring
+│   │   ├── integrations/       # Saturn — AgenticOrg script critic
 │   │   ├── creative/           # Venus
 │   │   │   ├── genres/         # genre configs (kids | ad | faceless)
 │   │   │   ├── intake/         # brief clarifying questions
@@ -56,7 +57,7 @@ Status: agreed for parallel build (Builders Day Track 04). Based on [`docs/13-re
 | `server/src/media/**` | **Neptune** | Higgsfield API (images, clips, Reference Elements), ElevenLabs TTS, cast element create/list. `MOCK=1` adapters mandatory. |
 | `server/src/creative/**` | **Venus** | Genre configs, brief intake, ScriptGen, PromptGen. Loads **chotu-craft** skills server-side only (never ship to client). |
 | `server/src/render/**`, `credits/**`, `payments/**`, `admin/**`, `deploy/**` | **Mars** | ffmpeg final cut, credit ledger, Pine Labs, traction admin, Replit single-process start. |
-| `server/src/orchestrator/**`, `db/**`, `routes/**`, `packages/shared/**` | **Saturn** | Stage machine, Postgres schema/migrations, HTTP+SSE contract, wiring modules together. |
+| `server/src/orchestrator/**`, `db/**`, `routes/**`, `integrations/agenticorg/**`, `packages/shared/**` | **Saturn** | Stage machine, Postgres schema/migrations, HTTP+SSE contract, AgenticOrg script critic, wiring modules together. |
 
 **Rules for parallel work**
 - Do not edit another owner’s folder without a ticket that names both owners.
@@ -79,13 +80,15 @@ brief → cast → script → prompts → images → clips → audio → final �
 |---|---|---|
 | `brief` | Clarifying questions (genre, ratio, length, language, audience, art style, cast pick) | Brief answers saved (or defaults / skip) |
 | `cast` | Pick bank members and/or create new (HITL on identity, sheet, voice) | Selected cast approved & attached (`video_cast`) |
-| `script` | Scenes + narration | Script artefact `approved` |
+| `script` | Scenes + narration, then the AgenticOrg critic | Script artefact `approved` |
 | `prompts` | Per-scene image + video prompts | All prompt artefacts `approved` |
 | `images` | Per-scene keyframe | All image artefacts `approved` |
 | `clips` | Per-scene clip (or Ken Burns still if clips off) | All clip artefacts `approved` |
 | `audio` | Per-scene voice | All audio artefacts `approved` |
 | `final` | Assembled MP4 + captions | Final artefact `approved` |
 | `done` | Download / share; optional pack purchase | Terminal |
+
+**Script critic (active).** After ScriptGen, Saturn calls AgenticOrg: `POST https://agenticorg.hackathon.pinelabs.com/api/v1/agents/{AGENTICORG_AGENT_ID}/run`. The result is `AgentReview` on the script artefact (`packages/shared/types.ts`, also `payload.agentReview`). `hitl_triggered` keeps the artefact `awaiting_approval`. `failed`, `budget_exceeded`, and HTTP 200 with `status: failed` are non-blocking: store the mock review plus a warning, and still wait for the creator. `MOCK=1`, or a blank `AGENTICORG_API_KEY` / `AGENTICORG_AGENT_ID`, uses that mock and does not call out.
 
 ### Artefact lifecycle
 
@@ -412,6 +415,8 @@ Factories: `createX(env) → X`. When `process.env.MOCK === '1'`, return the moc
 | `PINE_LABS_WEBHOOK_SECRET` | live pay | Mars | Verify webhook |
 | `RENDER_API_KEY` | stretch | Mars | Trigger Render Workflow ffmpeg; if unset, local/Replit ffmpeg |
 | `MOCK` | demo | all | `1` = all modules mock; no external calls |
+| `AGENTICORG_API_KEY` | live critic | Saturn | AgenticOrg bearer token. Blank → mock review |
+| `AGENTICORG_AGENT_ID` | live critic | Saturn | Agent id for `POST /api/v1/agents/{AGENTICORG_AGENT_ID}/run`. Blank → mock review |
 | `PORT` | no | Mars | Default `8787` |
 | `PUBLIC_BASE_URL` | prod | Mars | Absolute URLs for media + SSE |
 | `STARTER_CREDITS` | no | Mars | Signup grant (open question in reqs) |
@@ -511,7 +516,7 @@ Live keys (N3, N4, M3, V3) can land after S6 without blocking the demo path.
 
 ## 7. Non-goals (today)
 
-Subscriptions, auto-post, >60s videos, voice cloning, Soul training, AgenticOrg (parked until end), MCP for Higgsfield (API key only).
+Subscriptions, auto-post, >60s videos, voice cloning, Soul training, MCP for Higgsfield (API key only). AgenticOrg is active as the script critic (see §2).
 
 ## 8. Open questions (carry from reqs §13)
 
