@@ -14,15 +14,18 @@ test("user csv quotes commas, quotes, and newlines", () => {
       displayName: 'Ada "Bee", Jr.',
       phoneOrEmail: "ada@example.com\n<script>",
       createdAt: "2026-01-02T03:04:05.000Z",
+      lastActiveAt: null,
     },
   ]);
   assert.equal(
     csv,
     [
-      "display_name,phone_or_email,created_at",
-      '"Ada ""Bee"", Jr.","ada@example.com\n<script>","2026-01-02T03:04:05.000Z"',
+      "display_name,phone_or_email,created_at,created_at_ist,last_active_at,last_active_at_ist",
+      '"Ada ""Bee"", Jr.","ada@example.com\n<script>","2026-01-02T03:04:05.000Z","2 Jan, 8:34 AM IST","2026-01-02T03:04:05.000Z","2 Jan, 8:34 AM IST"',
     ].join("\n") + "\n",
   );
+  assert.equal(csv.includes("2026-01-02T03:04:05.000Z"), true);
+  assert.equal(csv.includes("2 Jan, 8:34 AM IST"), true);
 });
 
 test("admin lists each user and the csv repeats those fields", async () => {
@@ -61,6 +64,10 @@ test("admin lists each user and the csv repeats those fields", async () => {
       assert.match(html, /Ada &quot;Bee&quot;, Jr\./);
       assert.match(html, /ada@example\.com\n&lt;script&gt;/);
       assert.match(html, /Newer, Plain/);
+      assert.match(html, /2 Jan, 8:34 AM IST/);
+      assert.match(html, /3 Feb, 9:35 AM IST/);
+      assert.equal(html.includes("2026-01-02T03:04:05.000Z"), false);
+      assert.equal(html.includes("2026-02-03T04:05:06.000Z"), false);
       assert.equal(html.includes("<script>"), false);
       const adaAt = html.indexOf("Ada &quot;Bee&quot;, Jr.");
       const newerAt = html.indexOf("Newer, Plain");
@@ -68,9 +75,9 @@ test("admin lists each user and the csv repeats those fields", async () => {
 
       const csv = await (await fetch(`http://127.0.0.1:${port}/admin/export.csv`, { headers })).text();
       assert.match(csv.split("\n")[0] ?? "", /^id,created_at,kind,user_id,video_id,payload$/);
-      assert.match(csv, /display_name,phone_or_email,created_at/);
-      assert.match(csv, /"Ada ""Bee"", Jr\.","ada@example\.com\n<script>","2026-01-02T03:04:05\.000Z"/);
-      assert.match(csv, /"Newer, Plain","","2026-02-03T04:05:06\.000Z"/);
+      assert.match(csv, /display_name,phone_or_email,created_at,created_at_ist,last_active_at,last_active_at_ist/);
+      assert.match(csv, /"Ada ""Bee"", Jr\.","ada@example\.com\n<script>","2026-01-02T03:04:05\.000Z","2 Jan, 8:34 AM IST","2026-01-02T03:04:05\.000Z","2 Jan, 8:34 AM IST"/);
+      assert.match(csv, /"Newer, Plain","","2026-02-03T04:05:06\.000Z","3 Feb, 9:35 AM IST","2026-02-03T04:05:06\.000Z","3 Feb, 9:35 AM IST"/);
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     }

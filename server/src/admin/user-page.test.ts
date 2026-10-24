@@ -50,6 +50,10 @@ test("an admin user page shows that person's details and video status", async ()
       assert.equal(page.status, 200);
       assert.match(html, /Asha/);
       assert.match(html, /asha@example.com/);
+      assert.match(html, /Signed up: /);
+      assert.match(html, /Last active: /);
+      assert.match(html, /IST/);
+      assert.equal(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(html), false);
       assert.match(html, /Bees/);
       assert.match(html, /failed/);
       assert.equal(html.includes("ravi-secret@example.com"), false);

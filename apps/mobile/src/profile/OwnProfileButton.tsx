@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import type { OwnVideoSummary, User } from "@chotu/shared";
+import { formatIst, formatLastActive, type OwnVideoSummary, type User } from "@chotu/shared";
 import { getStudioClient } from "../api";
 import { colors, hitSlop, layout } from "../theme";
 import { loadOwnProfile } from "./load";
@@ -58,7 +58,8 @@ export function OwnProfileButton() {
           <View accessibilityLabel="Your profile" style={styles.sheet}>
             <Text style={styles.title}>{user.displayName}</Text>
             <Text style={styles.line}>Email or phone: {user.phoneOrEmail || "—"}</Text>
-            <Text style={styles.line}>Signed up: {user.createdAt}</Text>
+            <Text style={styles.line}>Signed up: {formatIst(user.createdAt)}</Text>
+            <Text style={styles.line}>Last active: {formatLastActive(user.lastActiveAt, user.createdAt)}</Text>
             <Text style={styles.heading}>Videos</Text>
             {videos.length ? (
               videos.map((video) => (
