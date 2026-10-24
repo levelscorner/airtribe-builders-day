@@ -140,6 +140,23 @@ export function createQrPayments(input: {
     return found.rows[0] ?? null;
   }
 
+  async function claimStatus(row: StoredPayment, status: "paid" | "rejected"): Promise<boolean> {
+    if (!input.db) {
+      if (row.status !== "pending_verification") return false;
+      row.status = status;
+      return true;
+    }
+    const claimed = await input.db.query<{ id: string }>(
+      `UPDATE payments SET status = '${status}', updated_at = now()
+        WHERE id = $1 AND status = 'pending_verification'
+        RETURNING id`,
+      [row.id],
+    );
+    if (!claimed.rows[0]) return false;
+    row.status = status;
+    return true;
+  }
+
   async function markUtr(row: StoredPayment, utr: string): Promise<void> {
     if (!input.db) {
       const taken = memory.find((item) => item.provider_ref === utr && item.id !== row.id);
@@ -227,7 +244,12 @@ export function createQrPayments(input: {
       if (row.status !== "pending_verification" || !row.provider_ref) {
         throw new PaymentError("payment is not waiting for review", 409, "not_pending");
       }
-      let creditsGranted = 0;
+      const claimed = await claimStatus(row, "paid");
+      if (!claimed) {
+        const latest = await read(paymentId);
+        if (latest?.status === "paid") return { paymentId, status: "paid", creditsGranted: 0 };
+        throw new PaymentError("payment is not waiting for review", 409, "not_pending");
+      }
       try {
         const granted = await input.ledger.grant({
           userId: row.user_id,
@@ -236,22 +258,13 @@ export function createQrPayments(input: {
           reason: "pack_purchase",
           meta: { paymentId: row.id, packId: row.pack_id, provider: PHONEPE_PROVIDER },
         });
-        creditsGranted = granted.applied ? row.credits : 0;
+        return { paymentId, status: "paid", creditsGranted: granted.applied ? row.credits : 0 };
       } catch (error) {
         if (error instanceof LedgerError && error.code === "user_not_found") {
           throw new PaymentError("user not found", 404, "user_not_found");
         }
         throw error;
       }
-      if (input.db) {
-        await input.db.query(
-          `UPDATE payments SET status = 'paid', updated_at = now() WHERE id = $1 AND status = 'pending_verification'`,
-          [paymentId],
-        );
-      } else {
-        row.status = "paid";
-      }
-      return { paymentId, status: "paid", creditsGranted };
     },
     async rejectPayment(paymentId) {
       const row = await read(paymentId);
@@ -260,13 +273,11 @@ export function createQrPayments(input: {
       if (row.status !== "pending_verification") {
         throw new PaymentError("payment is not waiting for review", 409, "not_pending");
       }
-      if (input.db) {
-        await input.db.query(
-          `UPDATE payments SET status = 'rejected', updated_at = now() WHERE id = $1 AND status = 'pending_verification'`,
-          [paymentId],
-        );
-      } else {
-        row.status = "rejected";
+      const claimed = await claimStatus(row, "rejected");
+      if (!claimed) {
+        const latest = await read(paymentId);
+        if (latest?.status === "rejected") return { paymentId, status: "rejected" };
+        throw new PaymentError("payment is not waiting for review", 409, "not_pending");
       }
       return { paymentId, status: "rejected" };
     },

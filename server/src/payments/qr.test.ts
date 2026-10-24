@@ -4,9 +4,17 @@ import express from "express";
 import { createPostgresLedger } from "../credits/ledger.js";
 import { seedUser, withPg } from "../credits/testing.js";
 import { createApp } from "../deploy/app.js";
+import { ADMIN_COOKIE } from "../admin/routes.js";
 import { paymentsRouter } from "./routes.js";
 import { createPayments, paymentsModeFrom } from "./service.js";
 import { PHONEPE_PAYEE } from "./qr.js";
+
+const ADMIN_TOKEN = "test-admin-token";
+process.env.ADMIN_TOKEN = ADMIN_TOKEN;
+
+function adminCookie(): string {
+  return `${ADMIN_COOKIE}=${encodeURIComponent(ADMIN_TOKEN)}`;
+}
 
 test("PAYMENTS_MODE defaults to qr and leaves Pine Labs dormant", () => {
   assert.equal(paymentsModeFrom({}), "qr");
@@ -48,6 +56,15 @@ test("PhonePe UTR stays pending until admin approval, and a second approve grant
       assert.match(html, /I've paid/);
       assert.match(html, /\/payments\/phonepe-qr\.jpg/);
       assert.equal(html.includes("sk-"), false);
+      assert.equal(html.includes("chotu_payer"), false);
+      assert.equal(html.includes('name="user_id"'), false);
+
+      const forged = await fetch(`${base}/v1/packs/phonepe`, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ packId: "starter", utr: "strangerutr111", userId: crypto.randomUUID() }),
+      });
+      assert.equal(forged.status, 401);
 
       const declared = await fetch(`${base}/v1/packs/phonepe`, {
         method: "POST",
@@ -117,13 +134,28 @@ test("the admin payments page approves a PhonePe row once", async () => {
       });
       const body = (await declared.json()) as { paymentId: string; creditsGranted: number };
       assert.equal(body.creditsGranted, 0);
-      const review = await fetch(`${base}/admin/payments`);
+      const blocked = await fetch(`${base}/admin/payments/approve`, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ paymentId: body.paymentId }),
+      });
+      assert.equal(blocked.status, 401);
+      const unchanged = await pg.db.query<{ credit_balance: number }>(
+        "SELECT credit_balance FROM users WHERE id = $1",
+        [userId],
+      );
+      assert.equal(unchanged.rows[0]?.credit_balance, 40);
+      const review = await fetch(`${base}/admin/payments`, { headers: { cookie: adminCookie() } });
       const html = await review.text();
       assert.match(html, /width=device-width, initial-scale=1/);
       assert.match(html, /adminutr12345/i);
       const approved = await fetch(`${base}/admin/payments/approve`, {
         method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json" },
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json",
+          cookie: adminCookie(),
+        },
         body: JSON.stringify({ paymentId: body.paymentId }),
       });
       const approvedBody = (await approved.json()) as { creditsGranted: number; status: string };

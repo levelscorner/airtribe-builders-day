@@ -275,7 +275,7 @@ async function submitQr(payments: PaymentsService, req: Request, res: Response):
     return;
   }
   const body = (req.body ?? {}) as Record<string, unknown>;
-  const userId = req.header("x-user-id")?.trim() || textField(body.user_id) || textField(body.userId);
+  const userId = req.header("x-user-id")?.trim() || req.browserSession?.userId || "";
   const paymentId = textField(body.payment_id) || textField(body.paymentId) || paymentIdFrom(req);
   const packId = textField(body.pack_id) || textField(body.packId);
   const utr = textField(body.utr) || textField(body.upi_ref);
@@ -329,21 +329,9 @@ function renderQrPage(input: {
 ${input.notice ? `<p>${escapeHtml(input.notice)}</p>` : ""}
 <form method="post" action="/v1/packs/qr">
 ${hiddenPayment}
-<input type="hidden" id="user_id" name="user_id" value=""/>
 <fieldset>${choices}</fieldset>
 <label>UPI ref / UTR <input name="utr" autocomplete="off" inputmode="text" required/></label>
 <button type="submit">I've paid</button>
 </form>
-<script>
-  const key = "chotu_payer";
-  let id = "";
-  try { id = localStorage.getItem(key) || ""; } catch (e) { id = ""; }
-  if (!id && crypto.randomUUID) id = crypto.randomUUID();
-  if (id) {
-    try { localStorage.setItem(key, id); } catch (e) {}
-    const field = document.getElementById("user_id");
-    if (field) field.value = id;
-  }
-</script>
 </body></html>`;
 }
