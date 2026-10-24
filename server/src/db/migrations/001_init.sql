@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS artefacts (
                   )),
   state           text NOT NULL DEFAULT 'pending' CHECK (state IN (
                     'pending', 'generating', 'awaiting_approval',
-                    'approved', 'rejected'
+                    'approved', 'rejected', 'failed'
                   )),
   payload         jsonb NOT NULL DEFAULT '{}',
   credit_cost     integer NOT NULL DEFAULT 0,
