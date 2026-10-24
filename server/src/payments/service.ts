@@ -4,13 +4,29 @@ import type { Ledger } from "../credits/ledger.js";
 import { PaymentError } from "./errors.js";
 import { CREDIT_PACKS, inrToPaise, type CreditPack } from "./packs.js";
 import { createPineLabsClient, type PineLabsClient } from "./pine.js";
+import { createQrPayments, type PendingPayment, type QrSubmission } from "./qr.js";
 import { decodeWebhookSecret, verifyPineLabsWebhook } from "./signature.js";
+
+export type PaymentsMode = "qr" | "pinelabs" | "mock";
+
+/** Default is PhonePe QR. Pine Labs runs only when this is `pinelabs`. */
+export function paymentsModeFrom(source: Record<string, unknown>): PaymentsMode {
+  const raw = source.PAYMENTS_MODE ?? source.paymentsMode;
+  if (typeof raw !== "string") return "qr";
+  const value = raw.trim().toLowerCase();
+  if (value === "pinelabs" || value === "pine_labs" || value === "pine") return "pinelabs";
+  if (value === "mock") return "mock";
+  return "qr";
+}
 
 export interface CheckoutResponse {
   paymentId: string;
   status: "pending" | "paid" | "mocked";
   checkoutUrl?: string;
   creditsGranted?: number;
+  payee?: string;
+  amountInr?: number;
+  credits?: number;
 }
 
 export interface WebhookResult {
@@ -27,16 +43,20 @@ export interface Payments {
 
 export interface CallbackResult {
   paymentId: string;
-  status: "paid" | "failed" | "pending" | "mocked";
+  status: "paid" | "failed" | "pending" | "mocked" | "pending_verification" | "rejected";
   creditsGranted: number;
 }
 
 export interface PaymentsService extends Payments {
-  readonly mode: "mock" | "pine_labs";
+  readonly mode: "mock" | "pine_labs" | "qr";
   confirmCallback(paymentId: string): Promise<CallbackResult>;
   findPayment(paymentId: string): Promise<PaymentRow | null>;
   /** Simulated capture. Credits through settlePackPurchase, same ref as a real webhook. */
   mockPay(paymentId: string): Promise<WebhookResult>;
+  submitUtr?(input: { userId?: string; paymentId?: string; packId?: string; utr: string }): Promise<QrSubmission>;
+  listPending?(): Promise<PendingPayment[]>;
+  approvePayment?(paymentId: string): Promise<{ paymentId: string; status: "paid"; creditsGranted: number }>;
+  rejectPayment?(paymentId: string): Promise<{ paymentId: string; status: "rejected" }>;
 }
 
 const PAID = new Set(["PAID", "CAPTURED", "PROCESSED", "SUCCESS", "ORDER_CAPTURED"]);
@@ -49,7 +69,7 @@ interface PaymentRow {
   credits: number;
   amount_inr: number;
   provider_ref: string | null;
-  status: "pending" | "paid" | "failed" | "mocked";
+  status: "pending" | "paid" | "failed" | "mocked" | "pending_verification" | "rejected";
 }
 
 function asPayment(record: Record<string, unknown>): PaymentRow {
@@ -440,8 +460,16 @@ export function createPayments(env: {
     throw new PaymentError("payments require a ledger", 500, "ledger_required");
   }
   const publicBase = stringEnv(env, "publicBaseUrl", "PUBLIC_BASE_URL") || "http://localhost:8787";
-  // MOCK=1 (contract) and PINE_LABS_MOCK (default on) both stay on the fake link.
-  if (env.mock === true || pineLabsMockEnabled(env)) {
+  const mode = paymentsModeFrom(env);
+  if (mode === "qr") {
+    return createQrPayments({
+      ledger: env.ledger,
+      db: env.db && typeof env.db.query === "function" ? env.db : undefined,
+      publicBaseUrl: publicBase,
+    });
+  }
+  // Pine Labs stays dormant unless PAYMENTS_MODE=pinelabs. `mock` keeps the simulated webhook.
+  if (mode === "mock" || env.mock === true || pineLabsMockEnabled(env)) {
     return createMockPayments({
       ledger: env.ledger,
       db: env.db && typeof env.db.query === "function" ? env.db : undefined,

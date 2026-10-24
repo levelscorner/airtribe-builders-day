@@ -1,19 +1,22 @@
 import { useCallback, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { CreditPack } from "@chotu/shared";
 import { getStudioClient } from "../api";
-import { createCheckout } from "../checkout";
 import { packPriceLabel, STARTER_CREDITS } from "../mock-fixtures";
+import { declarePhonePePaid, listServerPacks, PHONEPE_PAYEE } from "../phonepe";
 import { useWideLayout } from "../shell";
 import { colors, hitSlop, layout } from "../theme";
 
+import phonePeQr from "../../assets/payments/phonepe-qr.jpg";
+
 type PayState =
   | { status: "idle" }
-  | { status: "pending"; packId: string }
-  | { status: "success"; packId: string; orderId: string }
-  | { status: "failure"; packId: string; message: string };
+  | { status: "entering"; packId: string; utr: string }
+  | { status: "pending"; packId: string; utr: string }
+  | { status: "submitted"; packId: string; paymentId: string }
+  | { status: "failure"; packId: string; utr: string; message: string };
 
 function one(value: string | string[] | undefined): string {
   return typeof value === "string" ? value : "";
@@ -47,9 +50,13 @@ export function PacksScreen() {
     setMissing(false);
     try {
       const client = getStudioClient();
-      const [me, catalogue] = await Promise.all([client.getMe(), client.listPacks()]);
+      const [me, catalogue, serverPacks] = await Promise.all([
+        client.getMe(),
+        client.listPacks(),
+        listServerPacks(),
+      ]);
       setBalance(me.creditBalance);
-      setPacks(catalogue.packs);
+      setPacks(serverPacks && serverPacks.length > 0 ? serverPacks : catalogue.packs);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Packs nahi khule.";
       setMissing(message.toLowerCase().includes("shuru") || message.toLowerCase().includes("naam"));
@@ -65,19 +72,25 @@ export function PacksScreen() {
     }, [load]),
   );
 
-  async function payFor(packId: string) {
+  async function payFor(packId: string, utr: string) {
     if (pay.status === "pending") return;
-    setPay({ status: "pending", packId });
+    setPay({ status: "pending", packId, utr });
     setError(null);
     try {
-      const session = await createCheckout(packId);
       const me = await getStudioClient().getMe();
-      setBalance(me.creditBalance);
-      setPay({ status: "success", packId, orderId: session.orderId });
+      const before = me.creditBalance;
+      const declared = await declarePhonePePaid({ packId, utr, userId: me.id });
+      if (declared.creditsGranted !== 0) {
+        throw new Error("Credits tab badlenge jab admin approve kare.");
+      }
+      const after = await getStudioClient().getMe();
+      setBalance(after.creditBalance === before ? after.creditBalance : before);
+      setPay({ status: "submitted", packId, paymentId: declared.paymentId });
     } catch (err) {
       setPay({
         status: "failure",
         packId,
+        utr,
         message: err instanceof Error ? err.message : "Payment nahi hua.",
       });
     }
@@ -118,8 +131,8 @@ export function PacksScreen() {
         </Pressable>
         <Text style={styles.brand}>Credit packs</Text>
         <Text style={styles.lead}>
-          1, 3 ya 10 videos. Starter grant {STARTER_CREDITS} credits hai. Keemat abhi TBD — Mars asli price aur Pine
-          Labs checkout set karega.
+          PhonePe se {PHONEPE_PAYEE} ko pay karo. QR scan karo, UTR daalo, phir I've paid. Credits tab aayenge jab
+          admin approve kare. Starter grant {STARTER_CREDITS} credits hai.
         </Text>
         <Text accessibilityLabel={balance === null ? "Credits loading" : `${balance} credits`} style={styles.balance}>
           {balance === null ? "— credits" : `${balance} credits`}
@@ -151,13 +164,13 @@ export function PacksScreen() {
           </Text>
         ) : null}
         {pay.status === "pending" ? (
-          <Text accessibilityLiveRegion="polite" accessibilityLabel="Pine Labs order ban raha hai" style={styles.status}>
-            Pine Labs order ban raha hai…
+          <Text accessibilityLiveRegion="polite" accessibilityLabel="UTR save ho raha hai" style={styles.status}>
+            UTR save ho raha hai…
           </Text>
         ) : null}
-        {pay.status === "success" ? (
+        {pay.status === "submitted" ? (
           <Text accessibilityLiveRegion="polite" style={styles.ok}>
-            Ho gaya. Order {pay.orderId}. Balance {balance ?? "—"} credits.
+            Pending verification. Payment {pay.paymentId}. Credits abhi nahi badle.
           </Text>
         ) : null}
         {pay.status === "failure" ? (
@@ -171,12 +184,43 @@ export function PacksScreen() {
               accessibilityState={{ disabled: busy }}
               disabled={busy}
               hitSlop={hitSlop}
-              onPress={() => {
-                void payFor(pay.packId);
-              }}
+              onPress={() => setPay({ status: "entering", packId: pay.packId, utr: pay.utr })}
               style={styles.secondary}
             >
               <Text style={styles.secondaryText}>Phir se</Text>
+            </Pressable>
+          </View>
+        ) : null}
+        {pay.status === "entering" || pay.status === "pending" ? (
+          <View style={styles.stack}>
+            <Image
+              accessibilityLabel={`PhonePe QR for ${PHONEPE_PAYEE}`}
+              resizeMode="contain"
+              source={phonePeQr}
+              style={styles.qr}
+            />
+            <Text style={styles.meta}>Payee {PHONEPE_PAYEE}</Text>
+            <TextInput
+              accessibilityLabel="UPI reference"
+              autoCapitalize="characters"
+              editable={pay.status === "entering"}
+              onChangeText={(utr) => setPay({ status: "entering", packId: pay.packId, utr })}
+              placeholder="UPI ref / UTR"
+              style={styles.input}
+              value={pay.utr}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="I've paid"
+              accessibilityState={{ disabled: busy || pay.utr.trim().length < 8 }}
+              disabled={busy || pay.utr.trim().length < 8}
+              hitSlop={hitSlop}
+              onPress={() => {
+                void payFor(pay.packId, pay.utr);
+              }}
+              style={styles.primary}
+            >
+              <Text style={styles.primaryText}>I've paid</Text>
             </Pressable>
           </View>
         ) : null}
@@ -184,6 +228,7 @@ export function PacksScreen() {
           {packs.map((pack) => {
             const price = packPriceLabel(pack.amountInr);
             const pendingThis = pay.status === "pending" && pay.packId === pack.id;
+            const chosen = (pay.status === "entering" || pay.status === "pending") && pay.packId === pack.id;
             return (
               <View
                 key={pack.id}
@@ -195,16 +240,14 @@ export function PacksScreen() {
                 <Text style={styles.price}>Price {price}</Text>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`Pay with Pine Labs, ${pack.label}`}
+                  accessibilityLabel={`Pay with PhonePe, ${pack.label}`}
                   accessibilityState={{ disabled: busy, busy: pendingThis }}
                   disabled={busy}
                   hitSlop={hitSlop}
-                  onPress={() => {
-                    void payFor(pack.id);
-                  }}
+                  onPress={() => setPay({ status: "entering", packId: pack.id, utr: pay.status === "failure" ? pay.utr : "" })}
                   style={[styles.primary, busy ? styles.off : null]}
                 >
-                  <Text style={styles.primaryText}>{pendingThis ? "Ruko…" : "Pay with Pine Labs"}</Text>
+                  <Text style={styles.primaryText}>{chosen ? "QR upar hai" : pendingThis ? "Ruko…" : "Pay with PhonePe"}</Text>
                 </Pressable>
               </View>
             );
@@ -294,6 +337,21 @@ const styles = StyleSheet.create({
   stack: {
     gap: 8,
     marginBottom: 8,
+  },
+  qr: {
+    width: "100%",
+    maxWidth: 320,
+    aspectRatio: 1080 / 1860,
+    alignSelf: "center",
+  },
+  input: {
+    minHeight: layout.hit,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.card,
+    color: colors.ink,
+    fontSize: 18,
+    paddingHorizontal: 12,
   },
   flex: {
     flex: 1,

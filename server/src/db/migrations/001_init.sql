@@ -180,11 +180,16 @@ CREATE TABLE IF NOT EXISTS payments (
   provider        text NOT NULL DEFAULT 'pine_labs',
   provider_ref    text,
   status          text NOT NULL DEFAULT 'pending' CHECK (status IN (
-                    'pending', 'paid', 'failed', 'mocked'
+                    'pending', 'paid', 'failed', 'mocked',
+                    'pending_verification', 'rejected'
                   )),
   created_at      timestamptz NOT NULL DEFAULT now(),
   updated_at      timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS payments_provider_ref_key
+  ON payments (provider_ref)
+  WHERE provider_ref IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS events (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),

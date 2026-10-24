@@ -1,7 +1,22 @@
+import { existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import express, { Router, type Request, type Response } from "express";
 import { LedgerError } from "../credits/errors.js";
+import { VIEWPORT_META } from "../html.js";
 import { PaymentError } from "./errors.js";
+import { CREDIT_PACKS } from "./packs.js";
+import { PHONEPE_PAYEE } from "./qr.js";
 import type { PaymentsService } from "./service.js";
+
+const qrFile = resolve(dirname(fileURLToPath(import.meta.url)), "../../../apps/mobile/assets/payments/phonepe-qr.jpg");
+const PAGE_HEAD = `<meta charset="utf-8"/>${VIEWPORT_META}<style>
+  body{font-family:system-ui,sans-serif;margin:1rem;line-height:1.45;color:#1a1a1a}
+  img{width:min(100%,320px);height:auto}
+  input,button,select{font:inherit;min-height:44px;max-width:100%}
+  form{display:grid;gap:0.75rem;max-width:28rem}
+  @media (min-width:800px){body{margin:2rem auto;max-width:40rem}}
+</style>`;
 
 export function rawBodyOf(req: Request): string {
   const withRaw = req as Request & { rawBody?: string };
@@ -143,7 +158,7 @@ export function paymentsRouter(payments: PaymentsService, hooks?: PaymentHooks):
 </form>
 <p>Submitting posts a simulated webhook. No charge leaves this server.</p>`;
       res.type("html").send(`<!doctype html>
-<html><head><meta charset="utf-8"/><title>${title}</title></head>
+<html><head>${PAGE_HEAD}<title>${title}</title></head>
 <body>
 <h1>${title}</h1>
 <p>Payment <code>${escapeHtml(payment.id)}</code> is ${escapeHtml(payment.status)}.</p>
@@ -179,7 +194,7 @@ ${action}
       }
       const title = result.status === "failed" ? "Payment failed" : "Payment received";
       res.type("html").send(`<!doctype html>
-<html><head><meta charset="utf-8"/><title>${title}</title></head>
+<html><head>${PAGE_HEAD}<title>${title}</title></head>
 <body>
 <h1>${title}</h1>
 <p>Payment <code>${escapeHtml(result.paymentId)}</code> is ${escapeHtml(result.status)}.</p>
@@ -203,7 +218,7 @@ ${action}
       const title =
         result.status === "paid" || result.status === "mocked" ? "Payment received" : "Payment pending";
       res.type("html").send(`<!doctype html>
-<html><head><meta charset="utf-8"/><title>${title}</title></head>
+<html><head>${PAGE_HEAD}<title>${title}</title></head>
 <body>
 <h1>${title}</h1>
 <p>Payment <code>${escapeHtml(result.paymentId)}</code> is ${escapeHtml(result.status)}.</p>
@@ -214,5 +229,121 @@ ${action}
     }
   });
 
+  router.get("/payments/phonepe-qr.jpg", (_req, res) => {
+    if (!existsSync(qrFile)) {
+      res.status(404).type("text").send("phonepe-qr.jpg is not in the repo yet");
+      return;
+    }
+    res.type("jpeg").sendFile(qrFile);
+  });
+
+  router.get("/v1/packs/qr", async (req, res) => {
+    if (payments.mode !== "qr" || !payments.findPayment) {
+      res.status(404).json({ error: "qr_disabled", message: "PhonePe QR is off. PAYMENTS_MODE is not qr." });
+      return;
+    }
+    const paymentId = typeof req.query.payment_id === "string" ? req.query.payment_id.trim() : "";
+    try {
+      const payment = paymentId ? await payments.findPayment(paymentId) : null;
+      if (paymentId && !payment) {
+        res.status(404).json({ error: "payment_not_found", message: "payment not found" });
+        return;
+      }
+      const packs = payment
+        ? [{ id: payment.pack_id, label: payment.pack_id, credits: payment.credits, amountInr: payment.amount_inr }]
+        : (await payments.listPacks()).map((pack) => ({ ...pack, amountInr: pack.amountInr }));
+      res.type("html").send(renderQrPage({ paymentId, packs, notice: "" }));
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  router.post("/v1/packs/qr", express.urlencoded({ extended: false }), async (req, res) => {
+    await submitQr(payments, req, res);
+  });
+
+  router.post("/v1/packs/phonepe", async (req, res) => {
+    await submitQr(payments, req, res);
+  });
+
   return router;
+}
+
+async function submitQr(payments: PaymentsService, req: Request, res: Response): Promise<void> {
+  if (payments.mode !== "qr" || !payments.submitUtr) {
+    res.status(404).json({ error: "qr_disabled", message: "PhonePe QR is off. PAYMENTS_MODE is not qr." });
+    return;
+  }
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const userId = req.header("x-user-id")?.trim() || textField(body.user_id) || textField(body.userId);
+  const paymentId = textField(body.payment_id) || textField(body.paymentId) || paymentIdFrom(req);
+  const packId = textField(body.pack_id) || textField(body.packId);
+  const utr = textField(body.utr) || textField(body.upi_ref);
+  if (!userId && !paymentId) {
+    res.status(401).json({ error: "missing_user", message: "X-User-Id is required until session auth lands" });
+    return;
+  }
+  try {
+    const result = await payments.submitUtr({ userId, paymentId, packId, utr });
+    const wantsJson = req.is("application/json") || (req.header("accept") ?? "").includes("application/json");
+    if (wantsJson) {
+      res.status(201).json(result);
+      return;
+    }
+    const packs = CREDIT_PACKS.map((pack) => ({ ...pack }));
+    res.type("html").send(
+      renderQrPage({
+        paymentId: result.paymentId,
+        packs,
+        notice: `UTR saved. Status is pending verification. Credits applied on this visit: ${result.creditsGranted}.`,
+      }),
+    );
+  } catch (error) {
+    sendError(res, error);
+  }
+}
+
+function textField(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function renderQrPage(input: {
+  paymentId: string;
+  packs: Array<{ id: string; label: string; credits: number; amountInr: number }>;
+  notice: string;
+}): string {
+  const choices = input.packs
+    .map(
+      (pack, index) => `<label><input type="radio" name="pack_id" value="${escapeHtml(pack.id)}"${index === 0 ? " checked" : ""}/> ${escapeHtml(pack.label)} · ₹${pack.amountInr} · ${pack.credits} credits</label>`,
+    )
+    .join("");
+  const hiddenPayment = input.paymentId
+    ? `<input type="hidden" name="payment_id" value="${escapeHtml(input.paymentId)}"/>`
+    : "";
+  return `<!doctype html>
+<html><head>${PAGE_HEAD}<title>PhonePe payment</title></head>
+<body>
+<h1>Pay ${escapeHtml(PHONEPE_PAYEE)}</h1>
+<p>Scan the PhonePe QR, then enter the UPI reference. Credits stay pending until an admin approves.</p>
+<img src="/payments/phonepe-qr.jpg" alt="PhonePe QR for ${escapeHtml(PHONEPE_PAYEE)}" width="320"/>
+${input.notice ? `<p>${escapeHtml(input.notice)}</p>` : ""}
+<form method="post" action="/v1/packs/qr">
+${hiddenPayment}
+<input type="hidden" id="user_id" name="user_id" value=""/>
+<fieldset>${choices}</fieldset>
+<label>UPI ref / UTR <input name="utr" autocomplete="off" inputmode="text" required/></label>
+<button type="submit">I've paid</button>
+</form>
+<script>
+  const key = "chotu_payer";
+  let id = "";
+  try { id = localStorage.getItem(key) || ""; } catch (e) { id = ""; }
+  if (!id && crypto.randomUUID) id = crypto.randomUUID();
+  if (id) {
+    try { localStorage.setItem(key, id); } catch (e) {}
+    const field = document.getElementById("user_id");
+    if (field) field.value = id;
+  }
+</script>
+</body></html>`;
 }

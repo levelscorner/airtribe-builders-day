@@ -22,7 +22,7 @@ import type {
   RejectArtefactRequest,
   RejectArtefactResponse,
 } from "@chotu/shared";
-import { parseMediaProgress, type StudioEvent } from "./media-contract";
+import { parseMediaProgress, type RegenerateSceneRequest, type StudioEvent } from "./media-contract";
 import type { StudioClient } from "./studio-client";
 
 export class StudioHttpError extends Error {
@@ -173,9 +173,16 @@ export function createHttpStudio(baseUrl = ""): StudioClient {
         body: JSON.stringify(body),
       });
     },
-    regenerateArtefact(artefactId: string, confirm: 0 | 1, feedback?: string) {
-      const note = feedback?.trim();
-      const body = confirm === 1 && note ? JSON.stringify({ feedback: note, confirm: true }) : "{}";
+    regenerateArtefact(artefactId: string, confirm: 0 | 1, feedback?: string, scope?: RegenerateSceneRequest) {
+      const note = (scope?.feedback ?? feedback)?.trim();
+      let body = "{}";
+      if (scope) {
+        const payload: RegenerateSceneRequest = { sceneId: scope.sceneId, target: scope.target };
+        if (note) payload.feedback = note;
+        body = JSON.stringify(payload);
+      } else if (confirm === 1 && note) {
+        body = JSON.stringify({ feedback: note, confirm: true });
+      }
       return api<RegeneratePreviewResponse | RegenerateConfirmResponse>(
         `${ApiPaths.artefactRegenerate(artefactId)}?confirm=${confirm}`,
         { method: "POST", body },
