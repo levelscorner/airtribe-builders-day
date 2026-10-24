@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { QuestionMessage } from "@chotu/shared";
 import { getGenre } from "../genres/load.js";
-import { noteValue } from "./notes.js";
+import { noteValue, upsertNote } from "./notes.js";
 import {
   applyAnswer,
   applyDefaults,
@@ -119,6 +119,37 @@ test("a bad length does not change the brief", () => {
   const result = applyAnswer(brief, { field: "target_seconds", freeText: "two hours" });
   assert.ok(result.error);
   assert.equal(result.brief.targetSeconds, brief.targetSeconds);
+});
+
+test("length keeps the whole number and rejects values that are not whole seconds", () => {
+  const brief = applyDefaults(briefFromMessage("kids quiz about rain"));
+  const spoken = applyAnswer(brief, { field: "target_seconds", freeText: "45 seconds" });
+  assert.equal(spoken.error, undefined);
+  assert.equal(spoken.brief.targetSeconds, 45);
+  for (const freeText of ["120 seconds", "45.5", "-30"]) {
+    const rejected = applyAnswer(brief, { field: "target_seconds", freeText });
+    assert.ok(rejected.error, freeText);
+    assert.equal(rejected.brief.targetSeconds, brief.targetSeconds);
+  }
+});
+
+test("Hindi art text and notes survive intake", () => {
+  const brief = applyDefaults(briefFromMessage("kids quiz"));
+  const styled = applyAnswer(
+    { ...brief, artStyle: undefined, artStyleTraits: undefined, notes: "Avoid flashing lights" },
+    { field: "art_style", freeText: "नरम रोशनी" },
+  );
+  assert.equal(styled.error, undefined);
+  assert.match(styled.brief.artStyle ?? "", /नरम रोशनी/);
+  const withProduct = upsertNote(styled.brief.notes, "product", "aam ka achaar");
+  assert.match(withProduct ?? "", /Avoid flashing lights/);
+  assert.match(withProduct ?? "", /product: aam ka achaar/);
+  const monet = applyAnswer(
+    { ...brief, artStyle: undefined, artStyleTraits: undefined },
+    { field: "art_style", freeText: "in the style of Monet with soft pastel colors" },
+  );
+  assert.match(monet.brief.artStyle ?? "", /soft pastel colors/);
+  assert.doesNotMatch(monet.brief.artStyle ?? "", /monet/i);
 });
 
 test("questions map onto the shared QuestionMessage", () => {
