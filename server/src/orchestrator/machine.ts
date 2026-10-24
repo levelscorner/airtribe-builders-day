@@ -101,6 +101,15 @@ export type OrchestratorContext = {
   briefs: Map<string, Brief>;
   /** Test seam. Production uses the AgenticOrg client. */
   reviewScript?: (input: ScriptReviewInput) => Promise<AgentReview>;
+  /**
+   * When true, long stage work (cast/clips/audio/final) runs detached from the
+   * HTTP request that triggered it, so a client that switches chats, reloads or
+   * drops the connection never stops generation. Clients re-attach via SSE +
+   * GET /v1/chats/:id. Tests may leave it off to await work deterministically.
+   */
+  detachStageWork?: boolean;
+  /** In-flight detached stage work, keyed by videoId (exposed for tests). */
+  inflight?: Map<string, Promise<void>>;
 };
 
 export function createOrchestratorContext(
@@ -108,6 +117,33 @@ export function createOrchestratorContext(
   mock = true,
 ): OrchestratorContext {
   return { db, mock, briefs: new Map() };
+}
+
+/** Run stage work either awaited or detached from the caller's request. */
+async function kickStageWork(
+  ctx: OrchestratorContext,
+  chatId: string,
+  videoId: string,
+  stage: Stage,
+): Promise<void> {
+  if (!ctx.detachStageWork) {
+    await runStageWork(ctx, chatId, videoId, stage);
+    return;
+  }
+  const inflight = (ctx.inflight ??= new Map());
+  const job = runStageWork(ctx, chatId, videoId, stage)
+    .catch((error) => {
+      console.error(`[stage] ${stage} failed for ${videoId}:`, error instanceof Error ? error.message : error);
+      chatBus.publish(chatId, {
+        type: "error",
+        code: "stage_failed",
+        message: error instanceof Error ? error.message : "Stage failed.",
+      });
+    })
+    .finally(() => {
+      if (inflight.get(videoId) === job) inflight.delete(videoId);
+    });
+  inflight.set(videoId, job);
 }
 
 async function publishMessage<T extends ChatMessage>(
@@ -1274,7 +1310,7 @@ async function enterStageFrom(
 ): Promise<boolean> {
   const moved = await store.tryTransitionStage(ctx.db, videoId, from, stage);
   if (!moved) return false;
-  await runStageWork(ctx, chatId, videoId, stage);
+  await kickStageWork(ctx, chatId, videoId, stage);
   return true;
 }
 
@@ -1494,9 +1530,14 @@ export async function approveArtefact(
 ): Promise<ArtefactSummary> {
   const artefact = await store.getArtefact(ctx.db, input.artefactId);
   if (!artefact) throw new Error("artefact not found");
-  if (artefact.state !== "awaiting_approval") throw new Error("bad_state");
   const video = (await store.getVideoRow(ctx.db, artefact.videoId))!;
   assertVideoOwner(video, input.userId);
+  if (artefact.state === "failed") {
+    // A failed clip/image/voice (e.g. "ark poll timed out") can't be approved;
+    // "Approve" on it means "try again", so retry generation instead of bad_state.
+    return retryFailedArtefact(ctx, artefact, input.userId);
+  }
+  if (artefact.state !== "awaiting_approval") throw new Error("bad_state");
   if (
     video.brief.experience === "chat_canvas" &&
     !stageKinds(video.stage, video.brief.experience).includes(artefact.kind)
@@ -1522,6 +1563,26 @@ export async function approveArtefact(
   await publishArtefact(video.chatId, updated);
   await advanceIfSettled(ctx, video.chatId, artefact.videoId);
   return updated;
+}
+
+const RETRY_TARGET: Record<string, "image" | "clip" | "voice"> = {
+  image: "image",
+  clip: "clip",
+  voice: "voice",
+  audio: "voice",
+};
+
+async function retryFailedArtefact(
+  ctx: OrchestratorContext,
+  artefact: ArtefactSummary,
+  userId: string,
+): Promise<ArtefactSummary> {
+  const target = RETRY_TARGET[artefact.kind];
+  if (artefact.sceneId && target) {
+    return regenerateScene(ctx, { videoId: artefact.videoId, userId, sceneId: artefact.sceneId, target });
+  }
+  const result = await regenerateArtefact(ctx, { artefactId: artefact.id, userId, confirm: true });
+  return "artefact" in result && result.artefact ? (result.artefact as ArtefactSummary) : (await store.getArtefact(ctx.db, artefact.id))!;
 }
 
 export async function rejectArtefact(
