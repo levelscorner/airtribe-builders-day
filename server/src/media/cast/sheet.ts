@@ -3,31 +3,59 @@ import type { FetchLike } from "../ark/client.js";
 import { anchorUrlFromElementId, elementIdForAnchor } from "./reference.js";
 import type { EnvLike } from "../flags.js";
 import { moduleMock } from "../flags.js";
-import { generateCharacterSheet, usableAnchorUrl } from "../openai/images.js";
+import { FACE_SHEET_LINE, generateCharacterSheet } from "../openai/images.js";
 import { mockAssets, publicUrl } from "../placeholders.js";
 
 export interface SheetDeps {
   fetch?: FetchLike;
   saveSheet?: (castId: string, sheetUrl: string) => Promise<void>;
+  /** Video look: style label and traits, already joined. */
+  visualStyle?: string;
 }
+
+/** Scene edits attach at most this many character sheets, ahead of other refs. */
+export const MAX_SCENE_SHEETS = 4;
+
+const SHEET_BLOCK =
+  "CHARACTER SHEET — professional model/reference sheet, multiple consistent views of the SAME subject: front view, 3/4 view, side profile, back view, plus close-up detail panels (face/key features, materials/textures, signature props). Neutral background, even lighting, no scene.";
+
+const NO_TEXT = "No text, no captions, no labels.";
 
 export interface SceneCastReference {
   prompt: string;
   elementIds: string[];
 }
 
-/** Turnaround plus an expression row, grounded in the cast identity text. */
-export function characterSheetPrompt(identityText: string): string {
-  const who = identityText.trim() || "the same character";
+/**
+ * Four blocks: sheet layout, visual style, subject (name, role, look, DNA), no text.
+ * No expression row. Pass useFaceAnchor only when the sheet is an edits call.
+ */
+export function characterSheetPrompt(
+  member: Pick<CastMember, "name" | "role" | "identityText" | "dnaChips" | "artStyle">,
+  visualStyle?: string,
+  useFaceAnchor = false,
+): string {
+  const name = member.name.trim() || "Subject";
+  const role = member.role.trim() || "character";
+  const look = member.identityText.trim() || name;
+  const dna = member.dnaChips
+    .map((chip) => chip.trim())
+    .filter(Boolean)
+    .slice(0, 6)
+    .join(" · ");
+  const style = visualStyle?.trim() || member.artStyle?.trim() || "the video's look";
   return [
-    who,
-    "Character turnaround sheet of this exact person: front view, three-quarter view, side view, and back view.",
-    "Expression row on the same sheet: neutral, happy, surprised, and thinking.",
-    "Same face and the same clothes in every view. Plain background. No text, no captions, no labels.",
-  ].join(" ");
+    SHEET_BLOCK,
+    `VISUAL STYLE: ${style}`,
+    `SUBJECT: ${name}, ${role}. Look: ${look}. DNA: ${dna}`.trim(),
+    useFaceAnchor ? FACE_SHEET_LINE : "",
+    NO_TEXT,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
-function sheetsAreMock(env: EnvLike): boolean {
+export function sheetsAreMock(env: EnvLike): boolean {
   if (moduleMock(env, "IMAGE_MOCK")) return true;
   if ((env.IMAGE_PROVIDER ?? "").trim().toLowerCase() === "mock") return true;
   if (env.OPENAI_API_KEY?.trim()) return false;
@@ -35,8 +63,10 @@ function sheetsAreMock(env: EnvLike): boolean {
 }
 
 /**
- * One sheet per cast member. A stored sheetUrl is reused.
- * Narrators have no face, so they get no sheet.
+ * One sheet per cast member, from text (gpt-image-2 generations).
+ * A stored sheetUrl is reused. Narrators have no face, so they get no sheet.
+ * The face anchor stays a separate reference. Edits are only used when a caller
+ * passes an anchor into generateCharacterSheet, and that prompt includes FACE_SHEET_LINE.
  */
 export async function ensureCharacterSheet(
   env: EnvLike,
@@ -50,10 +80,7 @@ export async function ensureCharacterSheet(
     ? publicUrl(env, `${mockAssets.keyframe}?cast=${encodeURIComponent(member.id)}`)
     : await generateCharacterSheet(
         env,
-        {
-          prompt: characterSheetPrompt(member.identityText),
-          anchorUrl: usableAnchorUrl(env, member.anchorUrl),
-        },
+        { prompt: characterSheetPrompt(member, deps.visualStyle) },
         deps.fetch ?? fetch,
       );
   member.sheetUrl = url;
@@ -75,10 +102,14 @@ export async function sceneCastReference(
 ): Promise<SceneCastReference> {
   const elementIds: string[] = [];
   const identities: string[] = [];
+  let sheetCount = 0;
   for (const member of members) {
     const sheet = await ensureCharacterSheet(env, member, deps);
     if (!sheet) continue;
-    pushId(elementIds, `ref:${encodeURIComponent(sheet)}`);
+    if (sheetCount < MAX_SCENE_SHEETS) {
+      pushId(elementIds, `ref:${encodeURIComponent(sheet)}`);
+      sheetCount += 1;
+    }
     const identity = member.identityText.trim();
     if (identity && !identities.includes(identity)) identities.push(identity);
   }
@@ -119,7 +150,10 @@ export function includeCastReferences(
   members: readonly Pick<CastMember, "role" | "sheetUrl" | "anchorUrl">[],
 ): { elementIds: string[]; references: Array<"sheet" | "anchor"> } {
   const visible = members.filter((member) => member.role !== "narrator");
-  const sheetUrls = visible.map((member) => member.sheetUrl?.trim() ?? "").filter(Boolean);
+  const sheetUrls = visible
+    .map((member) => member.sheetUrl?.trim() ?? "")
+    .filter(Boolean)
+    .slice(0, MAX_SCENE_SHEETS);
   const anchorUrls = visible.map((member) => member.anchorUrl?.trim() ?? "").filter(Boolean);
   const sheets: string[] = [];
   const anchors: string[] = [];

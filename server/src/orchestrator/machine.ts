@@ -31,6 +31,7 @@ import {
   briefFromMessage,
   createPromptGen,
   createScriptGen,
+  artStylePreset,
   getGenre,
   getPresetCast,
   nextQuestion,
@@ -481,6 +482,8 @@ async function beginCast(
     "Cast bank se characters lock kar rahe hain…",
     "Cast",
   );
+  const castVideo = await store.getVideoRow(ctx.db, videoId);
+  const visualStyle = castVideo ? videoVisualStyle(castVideo) : undefined;
   for (const member of cast) {
     const existing = (await store.listArtefacts(ctx.db, videoId)).filter(
       (a) => a.payload.castId === member.id,
@@ -520,6 +523,7 @@ async function beginCast(
     if (member.role !== "narrator") {
       const sheetUrl = await ensureCharacterSheet(imageMediaEnv(ctx), member, {
         saveSheet: (castId, url) => store.updateCastSheet(ctx.db, castId, url),
+        visualStyle,
       });
       const reference = ctx.mock
         ? undefined
@@ -740,6 +744,16 @@ function mediaEnv(ctx: OrchestratorContext): NodeJS.ProcessEnv {
 }
 
 /** Scene stills and character sheets use gpt-image-2. MOCK and IMAGE_PROVIDER=mock stay on placeholders. */
+/** Style label plus traits for the character-sheet VISUAL STYLE line. */
+function videoVisualStyle(video: { genre?: string; artStyle?: string; brief: Brief }): string {
+  const id = (video.artStyle || video.brief.artStyle || "").trim();
+  const genre = video.genre === "kids" || video.genre === "ad" || video.genre === "faceless" ? video.genre : undefined;
+  const preset = genre && id ? artStylePreset(genre, id) : undefined;
+  const traits = (video.brief.artStyleTraits ?? []).map((item) => item.trim()).filter(Boolean);
+  const look = traits.length > 0 ? traits : (preset?.traits ?? []);
+  return [preset?.label || id, ...look].filter(Boolean).join(" · ");
+}
+
 function imageMediaEnv(ctx: OrchestratorContext): NodeJS.ProcessEnv {
   const env = mediaEnv(ctx);
   if (env.MOCK === "1" || env.IMAGE_PROVIDER?.trim().toLowerCase() === "mock") return env;
@@ -783,13 +797,14 @@ async function sceneImageRefs(
   prompt: string,
   sources: readonly CastImageSource[],
   extraIds: readonly string[] = [],
+  visualStyle?: string,
 ): Promise<{ prompt: string; elementIds: string[]; references: Array<"sheet" | "anchor"> }> {
   const prepared = members.map((member) => preferredCastImage(member, sources));
   const referenced = await sceneCastReference(
     imageMediaEnv(ctx),
     prepared,
     prompt,
-    { saveSheet: (castId, url) => store.updateCastSheet(ctx.db, castId, url) },
+    { saveSheet: (castId, url) => store.updateCastSheet(ctx.db, castId, url), visualStyle },
     extraIds,
   );
   const applied = includeCastReferences(referenced.elementIds, prepared);
@@ -825,6 +840,7 @@ async function beginImages(ctx: OrchestratorContext, chatId: string, videoId: st
       imagePrompt,
       castImageSources(artefacts),
       rawIds.filter((id): id is string => typeof id === "string"),
+      videoVisualStyle(video),
     );
     const pending = await store.insertArtefact(ctx.db, {
       videoId,
@@ -1983,6 +1999,7 @@ export async function regenerateArtefact(
         imagePrompt,
         castImageSources(await store.listArtefacts(ctx.db, video.id)),
         ctx.mock ? [] : direction.elementIds,
+        videoVisualStyle(video),
       );
       const generated = await createMediaPorts(imageMediaEnv(ctx)).images.generate({
         prompt: referenced.prompt,
@@ -2193,7 +2210,14 @@ export async function regenerateScene(
       const cast = scene.castIds.length
         ? (await store.listCastMembers(ctx.db, scene.castIds)).filter((member) => scene.castIds.includes(member.id))
         : [];
-      const referenced = await sceneImageRefs(ctx, cast, imagePrompt || "scene", castImageSources(artefacts));
+      const referenced = await sceneImageRefs(
+        ctx,
+        cast,
+        imagePrompt || "scene",
+        castImageSources(artefacts),
+        [],
+        videoVisualStyle(video),
+      );
       references = referenced.references;
       const generated = await media.images.generate({
         prompt: referenced.prompt,

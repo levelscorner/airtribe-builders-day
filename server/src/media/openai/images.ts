@@ -189,14 +189,25 @@ async function postImage(
   throw new Error("openai image result missing image");
 }
 
-/** Turnaround sheet. Same model as scene stills, landscape size, no 9:16 crop. */
+/** Required on an edits sheet so the portrait is not copied as the whole image. */
+export const FACE_SHEET_LINE = "use this face; draw a new multi-view sheet";
+
+/**
+ * Landscape sheet. Same model as scene stills, no 9:16 crop.
+ * Sheets are text-to-image generations. A face anchor, when one is passed,
+ * uses edits and must ask for a new multi-view sheet.
+ */
 export async function generateCharacterSheet(
   env: EnvLike,
   input: { prompt: string; anchorUrl?: string },
   fetchImpl: FetchLike,
 ): Promise<string> {
   const anchor = input.anchorUrl?.trim();
-  const bytes = await postImage(env, fetchImpl, input.prompt.trim(), OPENAI_SHEET_SIZE, anchor ? [anchor] : []);
+  let prompt = input.prompt.trim();
+  if (anchor && !prompt.toLowerCase().includes(FACE_SHEET_LINE)) {
+    prompt = `${prompt}\n${FACE_SHEET_LINE}`;
+  }
+  const bytes = await postImage(env, fetchImpl, prompt, OPENAI_SHEET_SIZE, anchor ? [anchor] : []);
   return savePng(env, randomUUID(), bytes);
 }
 

@@ -314,10 +314,11 @@ test("phone keyboard flow and Hindi content fit with reduced motion", async ({
     "inert",
     "",
   );
-  const character = page.locator(".character-art").first();
+  const character = page.locator(".character-reference.is-sheet .real-frame").first();
+  await expect(character).toBeVisible();
   const bounds = await character.boundingBox();
   expect(bounds).not.toBeNull();
-  expect(bounds!.height / bounds!.width).toBeCloseTo(2, 1);
+  expect(bounds!.width / bounds!.height).toBeCloseTo(1.5, 1);
   await page.keyboard.press("Escape");
   await expect(
     page.getByRole("textbox", { name: "Message SLB2" }),
