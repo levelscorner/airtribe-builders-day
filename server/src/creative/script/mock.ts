@@ -1,8 +1,17 @@
-import type { CastMember, Genre, ScriptGenInput, ScriptGenOutput } from "@chotu/shared";
+import type { Brief, CastMember, Genre, ScriptGenInput, ScriptGenOutput } from "@chotu/shared";
 import { getGenre } from "../genres/load.js";
 import { feedbackOf, productOf, topicOf } from "../intake/notes.js";
 import { stripBlockedNames } from "../intake/art-style.js";
 import { genericLines, libraryLines } from "./library.js";
+
+/** Omitted brief.sceneCount. One starter grant covers this many scenes. */
+export const DEFAULT_SCENE_COUNT = 2;
+
+export function sceneCountOf(brief: Pick<Brief, "sceneCount"> | undefined): number {
+  const value = brief?.sceneCount;
+  if (typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 6) return value;
+  return DEFAULT_SCENE_COUNT;
+}
 
 const EDITORIAL: Record<Genre, string> = {
   kids: "Confirm the quiz has one clear answer a child can say aloud.",
@@ -49,16 +58,18 @@ export function mockScript(input: ScriptGenInput): ScriptGenOutput {
   const library = libraryLines(input.genre, input.language, normalized, normalizeTopic(product));
   const lines = library ?? genericLines(input.genre, input.language, topic, product);
   const feedback = feedbackOf(input.feedback);
-  const timing = durations(input.targetSeconds * 1000, genre.beats.length);
+  const count = sceneCountOf(input.brief);
+  const beats = Array.from({ length: count }, (_, index) => genre.beats[index % genre.beats.length]!);
+  const timing = durations(input.targetSeconds * 1000, count);
   const outOfRange =
     input.targetSeconds < genre.minSeconds || input.targetSeconds > genre.maxSeconds;
   const castRequest = Boolean(input.brief.notes?.includes("cast_request:"));
 
   return {
-    scenes: genre.beats.map((beat, index) => {
+    scenes: beats.map((beat, index) => {
       const castIds = sceneCastIds(input.cast, beat, index);
       const doubts: string[] = [];
-      if (index === genre.beats.length - 1) doubts.push(EDITORIAL[input.genre]);
+      if (index === beats.length - 1) doubts.push(EDITORIAL[input.genre]);
       if (index === 0 && outOfRange) doubts.push("Length is outside the usual range for this genre.");
       if (index === 0 && castRequest) {
         doubts.push("A new character was requested and is not in the cast bank yet.");
@@ -77,7 +88,7 @@ export function mockScript(input: ScriptGenInput): ScriptGenOutput {
       }
       return {
         idx: index,
-        title: titleFor(beat, index, genre.beats),
+        title: titleFor(beat, index, beats),
         narration,
         durationMs: timing[index] ?? 1000,
         doubts,
@@ -87,10 +98,30 @@ export function mockScript(input: ScriptGenInput): ScriptGenOutput {
   };
 }
 
+/** Keep the first `count` scenes and rescale so durations match the brief. */
+export function fitScriptScenes(
+  output: ScriptGenOutput,
+  count: number,
+  targetSeconds: number,
+): ScriptGenOutput {
+  if (output.scenes.length < count) {
+    throw new Error(`Expected ${count} scenes.`);
+  }
+  const timing = durations(targetSeconds * 1000, count);
+  return {
+    ...output,
+    scenes: output.scenes.slice(0, count).map((scene, index) => ({
+      ...scene,
+      idx: index,
+      durationMs: timing[index] ?? 1000,
+    })),
+  };
+}
+
 export function assertScriptRules(input: ScriptGenInput, output: ScriptGenOutput): void {
-  const genre = getGenre(input.genre);
-  if (output.scenes.length !== genre.beats.length) {
-    throw new Error(`Expected ${genre.beats.length} scenes for ${input.genre}.`);
+  const count = sceneCountOf(input.brief);
+  if (output.scenes.length !== count) {
+    throw new Error(`Expected ${count} scenes.`);
   }
   const allowed = new Set(input.cast.map((member) => member.id));
   const sum = output.scenes.reduce((total, scene) => total + scene.durationMs, 0);
