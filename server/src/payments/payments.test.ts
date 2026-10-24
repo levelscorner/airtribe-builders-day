@@ -10,7 +10,7 @@ import { PaymentError } from "./errors.js";
 import { inrToPaise } from "./packs.js";
 import { assertPineLabsTestOrigin, PINE_LABS_UAT_ORIGIN } from "./pine.js";
 import { paymentsRouter } from "./routes.js";
-import { createPayments } from "./service.js";
+import { createPayments, pineLabsMockEnabled } from "./service.js";
 import { pineLabsSignature } from "./signature.js";
 
 const SECRET = Buffer.from("abc1234").toString("base64");
@@ -23,20 +23,156 @@ test("Pine Labs base URL stays on the UAT host", () => {
   );
 });
 
-test("MOCK=1 grants pack credits once and the webhook does not grant again", async () => {
+test("PINE_LABS_MOCK defaults on and only an explicit off selects the live adapter", () => {
+  const previous = process.env.PINE_LABS_MOCK;
+  delete process.env.PINE_LABS_MOCK;
+  try {
+    assert.equal(pineLabsMockEnabled({}), true);
+    assert.equal(pineLabsMockEnabled({ PINE_LABS_MOCK: "1" }), true);
+    assert.equal(pineLabsMockEnabled({ PINE_LABS_MOCK: "0" }), false);
+    assert.equal(pineLabsMockEnabled({ pineLabsMock: false }), false);
+  } finally {
+    if (previous === undefined) delete process.env.PINE_LABS_MOCK;
+    else process.env.PINE_LABS_MOCK = previous;
+  }
+});
+
+test("mock checkout stays pending until the simulated capture credits the ledger once", async () => {
+  const previous = process.env.PINE_LABS_MOCK;
+  delete process.env.PINE_LABS_MOCK;
+  try {
+    const ledger = createMockLedger();
+    const userId = crypto.randomUUID();
+    ledger.seedUser(userId, 0);
+    const payments = createPayments({ mock: false, ledger, publicBaseUrl: "http://localhost:8787" });
+    assert.equal(payments.mode, "mock");
+    const packs = await payments.listPacks();
+    assert.equal(packs[0]?.id, "starter");
+    const checkout = await payments.createCheckout({ userId, packId: "starter" });
+    assert.equal(checkout.status, "pending");
+    assert.equal(checkout.creditsGranted, 0);
+    assert.equal(await ledger.balance(userId), 0);
+    assert.equal(
+      checkout.checkoutUrl,
+      `http://localhost:8787/v1/packs/mock-pay?payment_id=${encodeURIComponent(checkout.paymentId)}`,
+    );
+
+    const paid = await payments.mockPay(checkout.paymentId);
+    assert.equal(paid.status, "mocked");
+    assert.equal(paid.creditsGranted, 500);
+    assert.equal(await ledger.balance(userId), 500);
+    const again = await payments.mockPay(checkout.paymentId);
+    assert.equal(again.creditsGranted, 0);
+    const replay = await payments.handleWebhook(
+      JSON.stringify({
+        data: {
+          merchant_payment_link_reference: checkout.paymentId,
+          status: "CAPTURED",
+          amount: { value: inrToPaise(499) },
+        },
+      }),
+    );
+    assert.equal(replay.status, "mocked");
+    assert.equal(replay.creditsGranted, 0);
+    assert.equal(await ledger.balance(userId), 500);
+
+    const second = await payments.createCheckout({ userId, packId: "creator" });
+    const viaWebhook = await payments.handleWebhook(
+      JSON.stringify({
+        data: {
+          merchant_payment_link_reference: second.paymentId,
+          status: "CAPTURED",
+          amount: { value: inrToPaise(999) },
+        },
+      }),
+    );
+    assert.equal(viaWebhook.creditsGranted, 1200);
+    assert.equal(await ledger.balance(userId), 1700);
+
+    const mismatch = await payments.createCheckout({ userId, packId: "starter" });
+    await assert.rejects(
+      () =>
+        payments.handleWebhook(
+          JSON.stringify({
+            data: {
+              merchant_payment_link_reference: mismatch.paymentId,
+              status: "CAPTURED",
+              amount: { value: 100 },
+            },
+          }),
+        ),
+      (error: unknown) => error instanceof PaymentError && error.code === "amount_mismatch",
+    );
+    assert.equal(await ledger.balance(userId), 1700);
+    assert.equal((await payments.findPayment(mismatch.paymentId))?.status, "pending");
+  } finally {
+    if (previous === undefined) delete process.env.PINE_LABS_MOCK;
+    else process.env.PINE_LABS_MOCK = previous;
+  }
+});
+
+test("PINE_LABS_MOCK off without credentials does not build the Plural client", () => {
+  const ledger = createMockLedger();
+  assert.throws(
+    () => createPayments({ mock: false, ledger, PINE_LABS_MOCK: "0" }),
+    (error: unknown) => error instanceof PaymentError && error.code === "missing_secret",
+  );
+});
+
+test("MOCK=1 keeps the fake link even when Pine Labs credentials are set", async () => {
+  let called = false;
+  const fetchImpl: typeof fetch = async () => {
+    called = true;
+    return new Response("nope", { status: 500 });
+  };
   const ledger = createMockLedger();
   const userId = crypto.randomUUID();
   ledger.seedUser(userId, 0);
-  const payments = createPayments({ mock: true, ledger });
-  const packs = await payments.listPacks();
-  assert.equal(packs[0]?.id, "starter");
+  const payments = createPayments({
+    mock: true,
+    ledger,
+    PINE_LABS_MOCK: "0",
+    merchantId: "merchant_uat",
+    apiKey: "secret_uat",
+    webhookSecret: SECRET,
+    fetchImpl,
+  });
+  assert.equal(payments.mode, "mock");
   const checkout = await payments.createCheckout({ userId, packId: "starter" });
-  assert.equal(checkout.status, "mocked");
-  assert.equal(checkout.creditsGranted, 500);
-  assert.equal(await ledger.balance(userId), 500);
-  const replay = await payments.handleWebhook(JSON.stringify({ data: { merchant_payment_link_reference: checkout.paymentId, status: "CAPTURED" } }));
-  assert.equal(replay.creditsGranted, 0);
-  assert.equal(await ledger.balance(userId), 500);
+  assert.match(checkout.checkoutUrl ?? "", /\/v1\/packs\/mock-pay\?payment_id=/);
+  assert.equal(checkout.creditsGranted, 0);
+  assert.equal(await ledger.balance(userId), 0);
+  assert.equal(called, false);
+});
+
+test("mock pay credits the Postgres ledger once", async () => {
+  const pg = await withPg();
+  try {
+    const ledger = createPostgresLedger(pg.db);
+    const userId = await seedUser(pg.db, 0);
+    const payments = createPayments({
+      mock: false,
+      ledger,
+      db: pg.db,
+      PINE_LABS_MOCK: "1",
+      publicBaseUrl: "http://localhost:8787",
+    });
+    const checkout = await payments.createCheckout({ userId, packId: "starter" });
+    assert.equal(await ledger.balance(userId), 0);
+    const paid = await payments.mockPay(checkout.paymentId);
+    const replay = await payments.mockPay(checkout.paymentId);
+    assert.equal(paid.creditsGranted, 500);
+    assert.equal(replay.creditsGranted, 0);
+    assert.equal(await ledger.balance(userId), 500);
+    const stored = await pg.db.query<{ provider: string; status: string }>(
+      "SELECT provider, status FROM payments WHERE id = $1",
+      [checkout.paymentId],
+    );
+    assert.equal(stored.rows[0]?.provider, "mock");
+    assert.equal(stored.rows[0]?.status, "mocked");
+  } finally {
+    await pg.close();
+  }
 });
 
 test("UAT webhook and callback credit the ledger once", async () => {
@@ -80,6 +216,7 @@ test("UAT webhook and callback credit the ledger once", async () => {
 
     const payments = createPayments({
       mock: false,
+      PINE_LABS_MOCK: "0",
       ledger,
       db: pg.db,
       merchantId: "merchant_uat",
@@ -184,6 +321,7 @@ test("checkout route uses X-User-Id and the webhook route verifies headers", asy
     const now = new Date();
     const payments = createPayments({
       mock: false,
+      PINE_LABS_MOCK: "0",
       ledger,
       db: pg.db,
       merchantId: "merchant_uat",
@@ -248,11 +386,78 @@ test("checkout route uses X-User-Id and the webhook route verifies headers", asy
       assert.equal(body.status, "failed");
       assert.equal(body.creditsGranted, 0);
       assert.equal(await ledger.balance(userId), 0);
+      const mockPage = await fetch(`${base}/v1/packs/mock-pay?payment_id=${checkout.paymentId}`);
+      assert.equal(mockPage.status, 404);
+      const mockBody = (await mockPage.json()) as { error: string };
+      assert.equal(mockBody.error, "mock_disabled");
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     }
   } finally {
     await pg.close();
+  }
+});
+
+test("mock pay page posts a simulated capture and a replay grants nothing", async () => {
+  const previous = process.env.PINE_LABS_MOCK;
+  delete process.env.PINE_LABS_MOCK;
+  const ledger = createMockLedger();
+  const userId = crypto.randomUUID();
+  ledger.seedUser(userId, 0);
+  const payments = createPayments({ mock: false, ledger, publicBaseUrl: "http://127.0.0.1:8787" });
+  const app = express();
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: false }));
+  app.use(paymentsRouter(payments));
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const base = `http://127.0.0.1:${port}`;
+    const created = await fetch(`${base}/v1/packs/checkout`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-user-id": userId },
+      body: JSON.stringify({ packId: "starter" }),
+    });
+    assert.equal(created.status, 201);
+    const checkout = (await created.json()) as {
+      paymentId: string;
+      checkoutUrl: string;
+      status: string;
+      creditsGranted: number;
+    };
+    assert.equal(checkout.status, "pending");
+    assert.equal(checkout.creditsGranted, 0);
+    assert.equal(await ledger.balance(userId), 0);
+    const pageUrl = new URL(checkout.checkoutUrl);
+    const page = await fetch(`${base}${pageUrl.pathname}${pageUrl.search}`);
+    assert.equal(page.status, 200);
+    const html = await page.text();
+    assert.match(html, /Pay \(simulated\)/);
+    assert.match(html, new RegExp(checkout.paymentId));
+    const paid = await fetch(`${base}/v1/packs/mock-pay`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
+      body: new URLSearchParams({ payment_id: checkout.paymentId }),
+    });
+    assert.equal(paid.status, 200);
+    const body = (await paid.json()) as { status: string; creditsGranted: number };
+    assert.equal(body.status, "mocked");
+    assert.equal(body.creditsGranted, 500);
+    const replay = await fetch(`${base}/v1/packs/mock-pay`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({ paymentId: checkout.paymentId }),
+    });
+    const replayBody = (await replay.json()) as { creditsGranted: number };
+    assert.equal(replayBody.creditsGranted, 0);
+    assert.equal(await ledger.balance(userId), 500);
+    const receipt = await fetch(`${base}/v1/packs/mock-pay?payment_id=${checkout.paymentId}`);
+    const receiptHtml = await receipt.text();
+    assert.match(receiptHtml, /already credited/);
+  } finally {
+    if (previous === undefined) delete process.env.PINE_LABS_MOCK;
+    else process.env.PINE_LABS_MOCK = previous;
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
 });
 

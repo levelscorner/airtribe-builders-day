@@ -32,7 +32,11 @@ export interface CallbackResult {
 }
 
 export interface PaymentsService extends Payments {
+  readonly mode: "mock" | "pine_labs";
   confirmCallback(paymentId: string): Promise<CallbackResult>;
+  findPayment(paymentId: string): Promise<PaymentRow | null>;
+  /** Simulated capture. Credits through settlePackPurchase, same ref as a real webhook. */
+  mockPay(paymentId: string): Promise<WebhookResult>;
 }
 
 const PAID = new Set(["PAID", "CAPTURED", "PROCESSED", "SUCCESS", "ORDER_CAPTURED"]);
@@ -62,6 +66,46 @@ function asPayment(record: Record<string, unknown>): PaymentRow {
 
 function packPurchaseRef(paymentId: string): string {
   return `pack:${paymentId}`;
+}
+
+/** Shared by the Plural webhook and the mock pay page. The ledger ref makes a replay a no-op. */
+export async function settlePackPurchase(
+  ledger: Ledger,
+  payment: Pick<PaymentRow, "id" | "user_id" | "pack_id" | "credits" | "amount_inr" | "status">,
+  amountPaise: number | undefined,
+): Promise<number> {
+  if (amountPaise !== undefined && amountPaise !== inrToPaise(payment.amount_inr)) {
+    throw new PaymentError("webhook amount does not match the pack", 400, "amount_mismatch");
+  }
+  if (payment.status === "paid" || payment.status === "mocked") return 0;
+  try {
+    const granted = await ledger.grant({
+      userId: payment.user_id,
+      amount: payment.credits,
+      ref: packPurchaseRef(payment.id),
+      reason: "pack_purchase",
+      meta: { paymentId: payment.id, packId: payment.pack_id },
+    });
+    return granted.applied ? payment.credits : 0;
+  } catch (error) {
+    if (error instanceof LedgerError && error.code === "user_not_found") {
+      throw new PaymentError("user not found", 404, "user_not_found");
+    }
+    throw error;
+  }
+}
+
+const MOCK_OFF = new Set(["0", "false", "off", "no"]);
+
+/** Defaults to on. Only an explicit off value selects the real Plural adapter. */
+export function pineLabsMockEnabled(source: Record<string, unknown>): boolean {
+  const hasOwn =
+    Object.prototype.hasOwnProperty.call(source, "PINE_LABS_MOCK") ||
+    Object.prototype.hasOwnProperty.call(source, "pineLabsMock");
+  const raw = hasOwn ? (source.PINE_LABS_MOCK ?? source.pineLabsMock) : process.env.PINE_LABS_MOCK;
+  if (raw === undefined || raw === null || raw === "") return true;
+  if (typeof raw === "boolean") return raw;
+  return !MOCK_OFF.has(String(raw).trim().toLowerCase());
 }
 
 function classify(status: string): "paid" | "failed" | "pending" {
@@ -135,29 +179,16 @@ export function createPinePayments(input: {
   }
 
   async function creditIfPaid(payment: PaymentRow, amountPaise: number | undefined): Promise<number> {
-    if (amountPaise !== undefined && amountPaise !== inrToPaise(payment.amount_inr)) {
-      throw new PaymentError("webhook amount does not match the pack", 400, "amount_mismatch");
-    }
-    if (payment.status === "paid" || payment.status === "mocked") return 0;
-    try {
-      const granted = await input.ledger.grant({
-        userId: payment.user_id,
-        amount: payment.credits,
-        ref: packPurchaseRef(payment.id),
-        reason: "pack_purchase",
-        meta: { paymentId: payment.id, packId: payment.pack_id },
-      });
+    const creditsGranted = await settlePackPurchase(input.ledger, payment, amountPaise);
+    if (payment.status !== "paid" && payment.status !== "mocked") {
       await input.db.query("UPDATE payments SET status = 'paid', updated_at = now() WHERE id = $1", [payment.id]);
-      return granted.applied ? payment.credits : 0;
-    } catch (error) {
-      if (error instanceof LedgerError && error.code === "user_not_found") {
-        throw new PaymentError("user not found", 404, "user_not_found");
-      }
-      throw error;
+      payment.status = "paid";
     }
+    return creditsGranted;
   }
 
   return {
+    mode: "pine_labs",
     async listPacks() {
       return [...packs];
     },
@@ -242,15 +273,93 @@ export function createPinePayments(input: {
       }
       return { paymentId: payment.id, status: "pending", creditsGranted: 0 };
     },
+
+    async findPayment(paymentId) {
+      const found = await input.db.query("SELECT * FROM payments WHERE id = $1", [paymentId]);
+      return found.rows[0] ? asPayment(found.rows[0]) : null;
+    },
+
+    async mockPay() {
+      throw new PaymentError("Pine Labs mock checkout is off", 404, "mock_disabled");
+    },
   };
 }
 
-export function createMockPayments(input: { ledger: Ledger; publicBaseUrl?: string }): PaymentsService {
+export function createMockPayments(input: {
+  ledger: Ledger;
+  db?: Db;
+  publicBaseUrl?: string;
+}): PaymentsService {
   const packs = [...CREDIT_PACKS];
   const rows = new Map<string, PaymentRow>();
   const base = (input.publicBaseUrl ?? "http://localhost:8787").replace(/\/$/, "");
 
+  function checkoutUrl(paymentId: string): string {
+    return `${base}/v1/packs/mock-pay?payment_id=${encodeURIComponent(paymentId)}`;
+  }
+
+  async function remember(row: PaymentRow): Promise<void> {
+    rows.set(row.id, row);
+    if (!input.db) return;
+    await input.db.query(
+      `INSERT INTO payments (id, user_id, pack_id, credits, amount_inr, provider, provider_ref, status)
+       VALUES ($1, $2, $3, $4, $5, 'mock', $6, $7)`,
+      [row.id, row.user_id, row.pack_id, row.credits, row.amount_inr, row.provider_ref, row.status],
+    );
+  }
+
+  async function find(notice: { paymentId?: string; providerRef?: string }): Promise<PaymentRow | null> {
+    if (notice.paymentId && rows.has(notice.paymentId)) return rows.get(notice.paymentId) ?? null;
+    for (const row of rows.values()) {
+      if (notice.providerRef && row.provider_ref === notice.providerRef) return row;
+    }
+    if (!input.db) return null;
+    if (notice.paymentId) {
+      const byId = await input.db.query("SELECT * FROM payments WHERE id = $1", [notice.paymentId]);
+      if (byId.rows[0]) {
+        const row = asPayment(byId.rows[0]);
+        rows.set(row.id, row);
+        return row;
+      }
+    }
+    if (notice.providerRef) {
+      const byRef = await input.db.query("SELECT * FROM payments WHERE provider_ref = $1", [notice.providerRef]);
+      if (byRef.rows[0]) {
+        const row = asPayment(byRef.rows[0]);
+        rows.set(row.id, row);
+        return row;
+      }
+    }
+    return null;
+  }
+
+  async function mark(payment: PaymentRow, status: PaymentRow["status"]): Promise<void> {
+    payment.status = status;
+    rows.set(payment.id, payment);
+    if (input.db) {
+      await input.db.query("UPDATE payments SET status = $1, updated_at = now() WHERE id = $2", [status, payment.id]);
+    }
+  }
+
+  async function handleWebhook(rawBody: string): Promise<WebhookResult> {
+    const notice = readNotice(rawBody);
+    const payment = await find(notice);
+    if (!payment) throw new PaymentError("payment not found", 404, "payment_not_found");
+    const outcome = classify(notice.status);
+    if (outcome === "failed") {
+      if (payment.status === "pending") await mark(payment, "failed");
+      return { paymentId: payment.id, status: "failed", creditsGranted: 0 };
+    }
+    if (outcome !== "paid") {
+      throw new PaymentError(`webhook status ${notice.status} is not final`, 400, "ignored_status");
+    }
+    const creditsGranted = await settlePackPurchase(input.ledger, payment, notice.amountPaise);
+    if (payment.status === "pending") await mark(payment, "mocked");
+    return { paymentId: payment.id, status: "mocked", creditsGranted };
+  }
+
   return {
+    mode: "mock",
     async listPacks() {
       return packs.map((pack) => ({ ...pack }));
     },
@@ -258,42 +367,51 @@ export function createMockPayments(input: { ledger: Ledger; publicBaseUrl?: stri
       const pack = packs.find((item) => item.id === packId);
       if (!pack) throw new PaymentError(`unknown pack: ${packId}`, 400, "unknown_pack");
       const paymentId = crypto.randomUUID();
-      const granted = await input.ledger.grant({
-        userId,
-        amount: pack.credits,
-        ref: packPurchaseRef(paymentId),
-        reason: "pack_purchase",
-        meta: { paymentId, packId, mode: "mock" },
-      });
-      rows.set(paymentId, {
+      const row: PaymentRow = {
         id: paymentId,
         user_id: userId,
         pack_id: pack.id,
         credits: pack.credits,
         amount_inr: pack.amountInr,
-        provider_ref: null,
-        status: "mocked",
-      });
+        provider_ref: `mock_${paymentId}`,
+        status: "pending",
+      };
+      try {
+        await remember(row);
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        if (code === "23503") throw new PaymentError("user not found", 404, "user_not_found");
+        throw error;
+      }
       return {
         paymentId,
-        status: "mocked",
-        checkoutUrl: `${base}/v1/packs/callback?payment_id=${paymentId}`,
-        creditsGranted: granted.applied ? pack.credits : 0,
+        status: "pending",
+        checkoutUrl: checkoutUrl(paymentId),
+        creditsGranted: 0,
       };
     },
-    async handleWebhook(rawBody) {
-      const notice = readNotice(rawBody);
-      const paymentId = notice.paymentId;
-      if (!paymentId || !rows.has(paymentId)) {
-        throw new PaymentError("payment not found", 404, "payment_not_found");
-      }
-      const payment = rows.get(paymentId)!;
-      return { paymentId: payment.id, status: "mocked", creditsGranted: 0 };
-    },
+    handleWebhook,
     async confirmCallback(paymentId) {
-      const payment = rows.get(paymentId);
+      const payment = await find({ paymentId });
       if (!payment) throw new PaymentError("payment not found", 404, "payment_not_found");
       return { paymentId, status: payment.status, creditsGranted: 0 };
+    },
+    async findPayment(paymentId) {
+      return find({ paymentId });
+    },
+    async mockPay(paymentId) {
+      const payment = await find({ paymentId });
+      if (!payment) throw new PaymentError("payment not found", 404, "payment_not_found");
+      const rawBody = JSON.stringify({
+        event: "ORDER_CAPTURED",
+        data: {
+          payment_link_id: payment.provider_ref,
+          merchant_payment_link_reference: payment.id,
+          status: "CAPTURED",
+          amount: { value: inrToPaise(payment.amount_inr), currency: "INR" },
+        },
+      });
+      return handleWebhook(rawBody);
     },
   };
 }
@@ -307,22 +425,28 @@ export function createPayments(env: {
   if (!env.ledger || typeof env.ledger.grant !== "function") {
     throw new PaymentError("payments require a ledger", 500, "ledger_required");
   }
-  if (env.mock) {
+  const publicBase = stringEnv(env, "publicBaseUrl", "PUBLIC_BASE_URL") || "http://localhost:8787";
+  // MOCK=1 (contract) and PINE_LABS_MOCK (default on) both stay on the fake link.
+  if (env.mock === true || pineLabsMockEnabled(env)) {
     return createMockPayments({
       ledger: env.ledger,
-      publicBaseUrl: typeof env.publicBaseUrl === "string" ? env.publicBaseUrl : undefined,
+      db: env.db && typeof env.db.query === "function" ? env.db : undefined,
+      publicBaseUrl: publicBase,
     });
-  }
-  if (!env.db || typeof env.db.query !== "function") {
-    throw new PaymentError("Pine Labs payments require db", 500, "db_required");
   }
   const merchantId = stringEnv(env, "merchantId", "PINE_LABS_MERCHANT_ID");
   const apiKey = stringEnv(env, "apiKey", "PINE_LABS_API_KEY");
   const webhookSecret = stringEnv(env, "webhookSecret", "PINE_LABS_WEBHOOK_SECRET");
   if (!merchantId || !apiKey || !webhookSecret) {
-    throw new PaymentError("Pine Labs TEST MODE needs merchant id, api key, and webhook secret", 500, "missing_secret");
+    throw new PaymentError(
+      "PINE_LABS_MOCK is off but Pine Labs credentials are not set",
+      500,
+      "missing_secret",
+    );
   }
-  const publicBaseUrl = stringEnv(env, "publicBaseUrl", "PUBLIC_BASE_URL") || "http://localhost:8787";
+  if (!env.db || typeof env.db.query !== "function") {
+    throw new PaymentError("Pine Labs payments require db", 500, "db_required");
+  }
   const fetchImpl = typeof env.fetchImpl === "function" ? (env.fetchImpl as typeof fetch) : undefined;
   const baseUrl = typeof env.pineBaseUrl === "string" ? env.pineBaseUrl : undefined;
   return createPinePayments({
@@ -330,7 +454,7 @@ export function createPayments(env: {
     ledger: env.ledger,
     client: createPineLabsClient({ clientId: merchantId, clientSecret: apiKey, fetchImpl, baseUrl }),
     webhookSecret,
-    publicBaseUrl,
+    publicBaseUrl: publicBase,
     now: typeof env.now === "function" ? (env.now as () => Date) : undefined,
   });
 }
