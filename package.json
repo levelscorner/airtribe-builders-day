@@ -1,0 +1,16 @@
+{
+  "name": "chotu-mini",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chotu mini — kids explainer short-video maker (Expo + Node)",
+  "scripts": {
+    "server": "npm --prefix server run start",
+    "server:dev": "npm --prefix server run dev",
+    "app": "npm --prefix app run start",
+    "app:web": "npm --prefix app run web",
+    "typecheck": "npm --prefix server run typecheck && npm --prefix app run typecheck",
+    "lint": "npm --prefix server run lint && npm --prefix app run lint",
+    "test:mock": "npm --prefix server run test:mock",
+    "install:all": "npm --prefix server install && npm --prefix app install"
+  }
+}

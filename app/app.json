@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "Chotu mini",
+    "slug": "chotu-mini",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#1B3A4B"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "studio.chotu.mini"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1B3A4B"
+      },
+      "package": "studio.chotu.mini"
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "apiBaseUrl": "http://localhost:8787"
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-font"
+    ]
+  }
+}

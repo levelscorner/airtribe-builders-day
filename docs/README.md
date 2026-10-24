@@ -22,6 +22,7 @@ Portfolio notes for Airtribe AI Builders Day. The full index, event facts, and l
 | [08 Shopping components](08-shopping-ai-saturday-components.md) | Named boxes and 2-coder ownership. Replit-only host |
 | [09 Shared orchestration](09-shared-orchestration.md) | Lite DAG. Shopping: Ranker / Checkout / Verify. Chotu: Script / Voice / Verify |
 | [10 Tomorrow’s approach](10-tomorrow-problem-approach.md) | Eight steps if a booth card changes the product |
+| [11 Chotu mini](11-chotu-mini.md) | Runnable Expo + Node kids explainer short-video maker (mock mode, Replit + Expo Go) |
 
 ## Research archive
 
