@@ -63,3 +63,8 @@ export {
   topicOf,
   withFeedback,
 } from "./intake/notes.js";
+export { createScriptGen } from "./script/create.js";
+export { createPromptGen } from "./prompts/create.js";
+export { buildGenreSample, writeGenreSamples } from "./sample.js";
+export type { GenreSample } from "./sample.js";
+export { loadSkillPacks } from "./skills/load.js";

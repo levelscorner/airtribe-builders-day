@@ -1,0 +1,173 @@
+{
+  "genre": "kids",
+  "brief": {
+    "notes": "topic: why bees make honey",
+    "genre": "kids",
+    "resolution": "1080p",
+    "aspectRatio": "9:16",
+    "targetSeconds": 45,
+    "language": "hi",
+    "audience": "Parents and children aged 5 to 9",
+    "artStyle": "bright-2d-cartoon",
+    "artStyleTraits": [
+      "bright flat colours",
+      "bold clean outlines",
+      "simple shapes",
+      "even friendly light"
+    ],
+    "castIds": [
+      "preset_chintu",
+      "preset_mini"
+    ]
+  },
+  "cast": [
+    {
+      "id": "preset_chintu",
+      "name": "Chintu",
+      "role": "mascot",
+      "identityText": "Chintu is an 8-year-old cartoon boy with a round face, short black hair, a small gap in his front teeth, a yellow kurta, and a red backpack worn on one shoulder.",
+      "dnaChips": [
+        "8-year-old boy",
+        "round face",
+        "short black hair",
+        "yellow kurta",
+        "red backpack",
+        "gap-tooth smile"
+      ],
+      "artStyle": "bright-2d-cartoon",
+      "higgsfieldElementId": "el_chintu",
+      "voiceId": "playful_young_male",
+      "version": 1,
+      "status": "approved",
+      "isPreset": true
+    },
+    {
+      "id": "preset_mini",
+      "name": "Mini",
+      "role": "mascot",
+      "identityText": "Mini is an 8-year-old cartoon girl with a round face, two black braids tied with blue bands, bright curious eyes, a green frock over leggings, and a tiny star clip above her left ear.",
+      "dnaChips": [
+        "8-year-old girl",
+        "two black braids",
+        "blue hair bands",
+        "green frock",
+        "star clip",
+        "curious eyes"
+      ],
+      "artStyle": "bright-2d-cartoon",
+      "higgsfieldElementId": "el_mini",
+      "voiceId": "warm_kid_female",
+      "version": 1,
+      "status": "approved",
+      "isPreset": true
+    }
+  ],
+  "captionStyle": "Large rounded high-contrast captions, one short line",
+  "script": {
+    "scenes": [
+      {
+        "idx": 0,
+        "title": "hook",
+        "narration": "Chintu और Mini जानना चाहते हैं कि मधुमक्खियाँ शहद क्यों बनाती हैं। आओ देखें।",
+        "durationMs": 9000,
+        "doubts": [],
+        "castIds": [
+          "preset_chintu",
+          "preset_mini"
+        ]
+      },
+      {
+        "idx": 1,
+        "title": "fact 1",
+        "narration": "मधुमक्खियाँ फूलों से मीठा रस लेती हैं। इसे नेक्टर कहते हैं।",
+        "durationMs": 9000,
+        "doubts": [],
+        "castIds": [
+          "preset_mini"
+        ]
+      },
+      {
+        "idx": 2,
+        "title": "fact 2",
+        "narration": "वे रस को छत्ते में लाती हैं, और पंखों से सुखाती हैं, जब तक वह गाढ़ा शहद बन जाता है।",
+        "durationMs": 9000,
+        "doubts": [],
+        "castIds": [
+          "preset_chintu"
+        ]
+      },
+      {
+        "idx": 3,
+        "title": "fact 3",
+        "narration": "यह शहद उनका खाना है, सर्दी के लिए। इसलिए वे इतनी मेहनत करती हैं।",
+        "durationMs": 9000,
+        "doubts": [],
+        "castIds": [
+          "preset_mini"
+        ]
+      },
+      {
+        "idx": 4,
+        "title": "quiz",
+        "narration": "क्विज़! शहद दूध से बनता है, नेक्टर से, या पत्तों से? ज़ोर से बताओ।",
+        "durationMs": 9000,
+        "doubts": [
+          "Confirm the quiz has one clear answer a child can say aloud."
+        ],
+        "castIds": [
+          "preset_chintu",
+          "preset_mini"
+        ]
+      }
+    ]
+  },
+  "prompts": [
+    {
+      "sceneIdx": 0,
+      "imagePrompt": "bright flat colours, bold clean outlines, simple shapes, even friendly light. One still frame, aspect 9:16, no text, no letters, no logo, no watermark. Two children lean toward a small friendly object that shows why bees make honey, on a low table, curious and safe. Chintu is an 8-year-old cartoon boy with a round face, short black hair, a small gap in his front teeth, a yellow kurta, and a red backpack worn on one shoulder. Mini is an 8-year-old cartoon girl with a round face, two black braids tied with blue bands, bright curious eyes, a green frock over leggings, and a tiny star clip above her left ear. <<<el_chintu>>> <<<el_mini>>> AI-generated scene.",
+      "videoPrompt": "Motion continues from the still. Two children lean toward a small friendly object that shows why bees make honey, on a low table, curious and safe. Camera: slow push-in. Pace: gentle and readable, no sudden cuts. Duration 9000 milliseconds. No burned-in text. Chintu is an 8-year-old cartoon boy with a round face, short black hair, a small gap in his front teeth, a yellow kurta, and a red backpack worn on one shoulder. Mini is an 8-year-old cartoon girl with a round face, two black braids tied with blue bands, bright curious eyes, a green frock over leggings, and a tiny star clip above her left ear. <<<el_chintu>>> <<<el_mini>>> AI-generated scene.",
+      "elementIds": [
+        "el_chintu",
+        "el_mini"
+      ]
+    },
+    {
+      "sceneIdx": 1,
+      "imagePrompt": "bright flat colours, bold clean outlines, simple shapes, even friendly light. One still frame, aspect 9:16, no text, no letters, no logo, no watermark. One clear example of why bees make honey with one or two everyday props, uncluttered. Mini is an 8-year-old cartoon girl with a round face, two black braids tied with blue bands, bright curious eyes, a green frock over leggings, and a tiny star clip above her left ear. <<<el_mini>>> AI-generated scene.",
+      "videoPrompt": "Motion continues from the still. One clear example of why bees make honey with one or two everyday props, uncluttered. Camera: locked medium shot. Pace: gentle and readable, no sudden cuts. Duration 9000 milliseconds. No burned-in text. Mini is an 8-year-old cartoon girl with a round face, two black braids tied with blue bands, bright curious eyes, a green frock over leggings, and a tiny star clip above her left ear. <<<el_mini>>> AI-generated scene.",
+      "elementIds": [
+        "el_mini"
+      ]
+    },
+    {
+      "sceneIdx": 2,
+      "imagePrompt": "bright flat colours, bold clean outlines, simple shapes, even friendly light. One still frame, aspect 9:16, no text, no letters, no logo, no watermark. A closer look at the middle step of why bees make honey, still bright and calm. Chintu is an 8-year-old cartoon boy with a round face, short black hair, a small gap in his front teeth, a yellow kurta, and a red backpack worn on one shoulder. <<<el_chintu>>> AI-generated scene.",
+      "videoPrompt": "Motion continues from the still. A closer look at the middle step of why bees make honey, still bright and calm. Camera: locked medium shot. Pace: gentle and readable, no sudden cuts. Duration 9000 milliseconds. No burned-in text. Chintu is an 8-year-old cartoon boy with a round face, short black hair, a small gap in his front teeth, a yellow kurta, and a red backpack worn on one shoulder. <<<el_chintu>>> AI-generated scene.",
+      "elementIds": [
+        "el_chintu"
+      ]
+    },
+    {
+      "sceneIdx": 3,
+      "imagePrompt": "bright flat colours, bold clean outlines, simple shapes, even friendly light. One still frame, aspect 9:16, no text, no letters, no logo, no watermark. A memory game on the floor about why bees make honey, no writing anywhere. Mini is an 8-year-old cartoon girl with a round face, two black braids tied with blue bands, bright curious eyes, a green frock over leggings, and a tiny star clip above her left ear. <<<el_mini>>> AI-generated scene.",
+      "videoPrompt": "Motion continues from the still. A memory game on the floor about why bees make honey, no writing anywhere. Camera: locked medium shot. Pace: gentle and readable, no sudden cuts. Duration 9000 milliseconds. No burned-in text. Mini is an 8-year-old cartoon girl with a round face, two black braids tied with blue bands, bright curious eyes, a green frock over leggings, and a tiny star clip above her left ear. <<<el_mini>>> AI-generated scene.",
+      "elementIds": [
+        "el_mini"
+      ]
+    },
+    {
+      "sceneIdx": 4,
+      "imagePrompt": "bright flat colours, bold clean outlines, simple shapes, even friendly light. One still frame, aspect 9:16, no text, no letters, no logo, no watermark. A cheerful pause for a quiz about why bees make honey, ready to answer, no letters in frame. Chintu is an 8-year-old cartoon boy with a round face, short black hair, a small gap in his front teeth, a yellow kurta, and a red backpack worn on one shoulder. Mini is an 8-year-old cartoon girl with a round face, two black braids tied with blue bands, bright curious eyes, a green frock over leggings, and a tiny star clip above her left ear. <<<el_chintu>>> <<<el_mini>>> AI-generated scene.",
+      "videoPrompt": "Motion continues from the still. A cheerful pause for a quiz about why bees make honey, ready to answer, no letters in frame. Camera: locked medium shot with a small nod. Pace: gentle and readable, no sudden cuts. Duration 9000 milliseconds. No burned-in text. Chintu is an 8-year-old cartoon boy with a round face, short black hair, a small gap in his front teeth, a yellow kurta, and a red backpack worn on one shoulder. Mini is an 8-year-old cartoon girl with a round face, two black braids tied with blue bands, bright curious eyes, a green frock over leggings, and a tiny star clip above her left ear. <<<el_chintu>>> <<<el_mini>>> AI-generated scene.",
+      "elementIds": [
+        "el_chintu",
+        "el_mini"
+      ]
+    }
+  ],
+  "skillLoad": {
+    "mounted": false,
+    "loaded": 0,
+    "missing": 50
+  }
+}
