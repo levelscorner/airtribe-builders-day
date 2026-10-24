@@ -100,8 +100,9 @@ export function PacksScreen() {
 
   return (
     <View style={styles.screen}>
-      <View
-        style={[
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={[
           styles.column,
           wide ? styles.columnWide : null,
           { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom, 8) },
@@ -224,7 +225,7 @@ export function PacksScreen() {
             </Pressable>
           </View>
         ) : null}
-        <ScrollView style={styles.flex} contentContainerStyle={[styles.list, wide ? styles.listWide : null]}>
+        <View style={[styles.list, wide ? styles.listWide : null]}>
           {packs.map((pack) => {
             const price = packPriceLabel(pack.amountInr);
             const pendingThis = pay.status === "pending" && pay.packId === pack.id;
@@ -252,8 +253,8 @@ export function PacksScreen() {
               </View>
             );
           })}
-        </ScrollView>
-      </View>
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -265,10 +266,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.paper,
   },
   column: {
-    flex: 1,
     width: "100%",
     maxWidth: layout.maxWidth,
     paddingHorizontal: layout.pad,
+    alignSelf: "center",
   },
   columnWide: {
     maxWidth: 960,
@@ -341,7 +342,7 @@ const styles = StyleSheet.create({
   qr: {
     width: "100%",
     maxWidth: 320,
-    aspectRatio: 1080 / 1860,
+    height: 420,
     alignSelf: "center",
   },
   input: {

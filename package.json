@@ -4,7 +4,7 @@
   "private": true,
   "description": "Chotu mini \u2014 kids explainer short-video maker (Expo + Node)",
   "scripts": {
-    "start": "MOCK=1 npm --prefix server run start",
+    "start": "npm run mobile:export && MOCK=1 npm --prefix server run start",
     "start:legacy": "npm --prefix server run start:legacy",
     "server": "npm --prefix server run start",
     "server:dev": "npm --prefix server run dev",
@@ -15,7 +15,7 @@
     "mobile": "npm --prefix apps/mobile run start",
     "mobile:web": "npm --prefix apps/mobile run web",
     "mobile:typecheck": "npm --prefix apps/mobile run typecheck",
-    "mobile:export": "EXPO_PUBLIC_STUDIO_MODE=http EXPO_PUBLIC_API_URL= npm --prefix apps/mobile run export:web",
+    "mobile:export": "CI=1 EXPO_PUBLIC_STUDIO_MODE=http EXPO_PUBLIC_API_URL= npm --prefix apps/mobile run export:web",
     "preview:build": "npm run mobile:export",
     "typecheck": "npm --prefix server run typecheck && npm --prefix app run typecheck && npm --prefix apps/mobile run typecheck",
     "lint": "npm --prefix server run lint && npm --prefix app run lint",

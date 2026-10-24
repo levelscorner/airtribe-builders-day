@@ -438,11 +438,12 @@ A skill router (`server/src/creative/skills/router.ts`) picks vendored chotu-cra
 2. **Import** the GitHub repo into a Replit Node repl (or connect GitHub).
 3. Attach **Replit Postgres**; copy its URL into Secret `DATABASE_URL`. Run Saturn migrations on boot (or `npm run db:migrate`).
 4. Set Secrets for keys; set `MOCK=1` until keys exist.
-5. **Single start command** (Mars `server/src/deploy`):
-   - build Expo web into `server/public/` (or symlink `apps/mobile` dist),
-   - start Express on `PORT`,
-   - serve `/v1/*` API + SSE, static web at `/`, media under `/media`.
-6. Example: `"start": "node server/dist/deploy/start.js"` after `tsc` + `expo export -p web`.
+5. **Single start command** from the repo root: `npm start`.
+   - runs `expo export --platform web` into `apps/mobile/dist` with `EXPO_PUBLIC_API_URL` empty, so the web app calls `/v1` on the same origin,
+   - starts Express on `PORT` (`server/src/deploy/start.ts`),
+   - serves `/v1/*` API + SSE, `/admin`, `/payments`, and the Expo web bundle at `/`,
+   - sends other HTML routes to `index.html` (SPA fallback). `/v1`, `/api`, `/admin`, `/payments`, and `/mock` stay on the API.
+6. Same-origin fetches avoid a second host, so the browser does not hit a CORS failure between the web app and the API.
 7. Share the Replit URL as the demo link (web). Expo Go points `EXPO_PUBLIC_API_URL` at the same host.
 
 ---

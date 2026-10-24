@@ -12,7 +12,7 @@ import type { PaymentsService } from "./service.js";
 const qrFile = resolve(dirname(fileURLToPath(import.meta.url)), "../../../apps/mobile/assets/payments/phonepe-qr.jpg");
 const PAGE_HEAD = `<meta charset="utf-8"/>${VIEWPORT_META}<style>
   body{font-family:system-ui,sans-serif;margin:1rem;line-height:1.45;color:#1a1a1a}
-  img{width:min(100%,320px);height:auto}
+  img{width:min(100%,320px);height:auto;max-height:70vh;object-fit:contain}
   input,button,select{font:inherit;min-height:44px;max-width:100%}
   form{display:grid;gap:0.75rem;max-width:28rem}
   @media (min-width:800px){body{margin:2rem auto;max-width:40rem}}

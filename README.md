@@ -8,8 +8,7 @@ Documentation for the ideas Abhinav is keeping in play for **Airtribe AI Builder
 
 ```bash
 npm run install:all
-npm run mobile:export          # Expo web → apps/mobile/dist
-MOCK=1 npm start               # /v1 API + static Expo web (default PORT 8787)
+npm start                      # expo export --platform web, then /v1 + Expo web on PORT 8787
 ```
 
 Legacy Chotu mini (`app/` → `/api/jobs`) is still available via a separate process:

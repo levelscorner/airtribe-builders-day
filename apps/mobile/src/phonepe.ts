@@ -4,12 +4,18 @@ export const PHONEPE_PAYEE = "ABHINAV RANA";
 
 type EnvLike = Record<string, string | undefined>;
 
+// Direct read so Expo inlines this into the web bundle. Empty means same-origin.
+const inlinedApiUrl = process.env.EXPO_PUBLIC_API_URL;
+
 /** Empty EXPO_PUBLIC_API_URL means same-origin, which is how the web build talks to npm start. */
-export function paymentsApiBase(env: EnvLike = envRecord()): string {
-  if (Object.prototype.hasOwnProperty.call(env, "EXPO_PUBLIC_API_URL") && env.EXPO_PUBLIC_API_URL !== undefined) {
+export function paymentsApiBase(env?: EnvLike): string {
+  if (env && Object.prototype.hasOwnProperty.call(env, "EXPO_PUBLIC_API_URL") && env.EXPO_PUBLIC_API_URL !== undefined) {
     return env.EXPO_PUBLIC_API_URL.replace(/\/$/, "");
   }
-  return (env.PUBLIC_BASE_URL || "http://localhost:8787").replace(/\/$/, "");
+  if (inlinedApiUrl !== undefined) return inlinedApiUrl.replace(/\/$/, "");
+  if (env?.PUBLIC_BASE_URL) return env.PUBLIC_BASE_URL.replace(/\/$/, "");
+  if (typeof document !== "undefined") return "";
+  return "http://localhost:8787";
 }
 
 export interface PhonePeDeclaration {
@@ -27,6 +33,7 @@ export async function declarePhonePePaid(input: {
 }): Promise<PhonePeDeclaration> {
   const response = await (input.fetchImpl ?? fetch)(`${input.base ?? paymentsApiBase()}/v1/packs/phonepe`, {
     method: "POST",
+    credentials: "include",
     headers: {
       "content-type": "application/json",
       accept: "application/json",
@@ -47,15 +54,13 @@ export async function declarePhonePePaid(input: {
 
 export async function listServerPacks(input?: { base?: string; fetchImpl?: typeof fetch }): Promise<CreditPack[] | null> {
   try {
-    const response = await (input?.fetchImpl ?? fetch)(`${input?.base ?? paymentsApiBase()}/v1/packs`);
+    const response = await (input?.fetchImpl ?? fetch)(`${input?.base ?? paymentsApiBase()}/v1/packs`, {
+      credentials: "include",
+    });
     if (!response.ok) return null;
     const body = (await response.json()) as { packs?: CreditPack[] };
     return Array.isArray(body.packs) ? body.packs : null;
   } catch {
     return null;
   }
-}
-
-function envRecord(): EnvLike {
-  return process.env as EnvLike;
 }

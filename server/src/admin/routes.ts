@@ -103,18 +103,20 @@ function renderPaymentsHtml(pending: PendingPayment[], enabled: boolean): string
 <html><head><meta charset="utf-8"/>${VIEWPORT_META}<title>Chotu payments</title>
 <style>
   body{font-family:system-ui,sans-serif;margin:1rem;line-height:1.4;color:#1a1a1a}
+  .table-wrap{overflow-x:auto}
   table{border-collapse:collapse;width:100%}
   th,td{border-bottom:1px solid #ddd;text-align:left;padding:0.4rem;vertical-align:top}
+  form{display:inline-block;margin:0 0.4rem 0.4rem 0}
   button{font:inherit;min-height:44px}
-  @media (min-width:800px){body{margin:2rem}}
+  @media (min-width:800px){body{margin:2rem auto;max-width:1100px}}
 </style></head>
 <body>
 <p><a href="/admin">Traction</a></p>
 <h1>Payments</h1>
 <p>Approve credits the ledger once. The ledger ref is the UTR.</p>
-<table>
+<div class="table-wrap"><table>
 <thead><tr><th>Payment</th><th>Pack</th><th>Amount</th><th>Credits</th><th>UTR</th><th></th></tr></thead>
 <tbody>${rows}</tbody>
-</table>
+</table></div>
 </body></html>`;
 }

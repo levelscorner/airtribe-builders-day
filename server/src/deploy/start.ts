@@ -122,7 +122,7 @@ export async function startServer(options?: { port?: number; listen?: boolean })
   }
   const server = app.listen(port, () => {
     console.log(
-      `Chotu Studio on http://localhost:${port} (mock=${mock}, llm=${resolveLlmProvider()}, memory=${db.memory})`,
+      `Chotu Studio on http://localhost:${port} (mock=${mock}, llm=${resolveLlmProvider()}, memory=${db.memory}, web=${existsSync(expoWeb) ? "expo" : "missing"})`,
     );
   });
   return { app, db, sessions, port, mock, server };

@@ -8,11 +8,10 @@ Status snapshot for Builders Day (chat-first video studio). Derived from [`docs/
 
 ```bash
 npm run install:all
-npm run mobile:export   # Expo web → apps/mobile/dist (HTTP client, same-origin /v1)
-MOCK=1 npm start        # migrate (pg-mem) + /v1 + static web on PORT (default 8787)
+npm start               # expo export --platform web, then API + Expo web on PORT (default 8787)
 ```
 
-Replit: import this GitHub repo → set Secrets (`MOCK=1` until keys exist; optional `DATABASE_URL`) → start command `MOCK=1 npm start`.
+Replit: import this GitHub repo → set Secrets (`MOCK=1` until keys exist; optional `DATABASE_URL`) → start command `npm start`. That command builds the web export and serves it with the API.
 
 Live Claude (brief, script, prompts, regenerate) without forcing samples:
 
