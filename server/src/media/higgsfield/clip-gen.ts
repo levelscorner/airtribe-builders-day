@@ -8,6 +8,9 @@ import { moduleMock } from "../flags.js";
 import { completedJob, failedJob, JobStore, newJobId, type MediaJob } from "../job.js";
 import { mockAssets, publicUrl } from "../placeholders.js";
 import type { ClipGenPort, SubmitOpts } from "../ports.js";
+import type { HiggsfieldClient } from "./client.js";
+import { createHiggsfieldClient } from "./client.js";
+import { LiveClipGen } from "./live.js";
 import { buildClipSubmission } from "./request.js";
 
 class MockClipGen implements ClipGenPort {
@@ -61,11 +64,11 @@ class MockClipGen implements ClipGenPort {
 
 export interface ClipGenDeps {
   cast?: CastReferenceAdapter;
+  higgsfield?: HiggsfieldClient;
 }
 
 export function createClipGen(env: EnvLike = process.env, deps: ClipGenDeps = {}): ClipGenPort {
-  if (!moduleMock(env, "CLIP_MOCK")) {
-    throw new Error("ClipGen live Higgsfield adapter is not configured. Set MOCK=1 or CLIP_MOCK=1.");
-  }
-  return new MockClipGen(env, deps.cast ?? createCastAdapter(env));
+  const cast = deps.cast ?? createCastAdapter(env);
+  if (moduleMock(env, "CLIP_MOCK")) return new MockClipGen(env, cast);
+  return new LiveClipGen(env.CLIP_RESOLUTION, cast, deps.higgsfield ?? createHiggsfieldClient(env));
 }

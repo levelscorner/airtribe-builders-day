@@ -8,6 +8,9 @@ import { moduleMock } from "../flags.js";
 import { completedJob, failedJob, JobStore, newJobId, type MediaJob } from "../job.js";
 import { mockAssets, publicUrl } from "../placeholders.js";
 import type { ImageGenPort, SubmitOpts } from "../ports.js";
+import type { HiggsfieldClient } from "./client.js";
+import { createHiggsfieldClient } from "./client.js";
+import { LiveImageGen } from "./live.js";
 import { buildImageSubmission } from "./request.js";
 
 class MockImageGen implements ImageGenPort {
@@ -61,11 +64,11 @@ class MockImageGen implements ImageGenPort {
 
 export interface ImageGenDeps {
   cast?: CastReferenceAdapter;
+  higgsfield?: HiggsfieldClient;
 }
 
 export function createImageGen(env: EnvLike = process.env, deps: ImageGenDeps = {}): ImageGenPort {
-  if (!moduleMock(env, "IMAGE_MOCK")) {
-    throw new Error("ImageGen live Higgsfield adapter is not configured. Set MOCK=1 or IMAGE_MOCK=1.");
-  }
-  return new MockImageGen(env, deps.cast ?? createCastAdapter(env));
+  const cast = deps.cast ?? createCastAdapter(env);
+  if (moduleMock(env, "IMAGE_MOCK")) return new MockImageGen(env, cast);
+  return new LiveImageGen(cast, deps.higgsfield ?? createHiggsfieldClient(env));
 }

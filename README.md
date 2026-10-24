@@ -24,7 +24,8 @@ Voice presets are provisional Hindi library ids (Mini, Chintu, Riya, Narrator). 
 | `CLIP_RESOLUTION` | Seedance tier when the clip port has no resolution field. `480p`, `720p` (default), `1080p`, or `4k`. |
 | `PUBLIC_BASE_URL` | Prefix for mock and stored media URLs. |
 | `MEDIA_CONCURRENCY` | Higgsfield submit limit. Default `4`. Polling does not take a slot. |
-| `MEDIA_DIR` | Directory for live voice bytes. Mock mode does not write it. |
+| `MEDIA_DIR` | Directory for live voice bytes. Default `server/data/media/voice`. Mock mode does not write it. |
+| `HF_POLL_TIMEOUT_MS` | Stop polling a Higgsfield request after this many milliseconds. Default `180000`. |
 
 Image credit placeholders on the job are 8 for a still, 40 for a clip, 5 for a final line, and 2 for a voice sample. They are not Higgsfield console prices. Mars replaces them with the ledger quote.
 

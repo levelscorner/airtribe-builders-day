@@ -8,6 +8,7 @@ import { mockAssets, publicUrl } from "../placeholders.js";
 import type { VoiceGenPort, VoiceLineOutput, VoiceSubmitOpts } from "../ports.js";
 import { alignmentDurationMs, mockAlignment } from "./alignment.js";
 import { loadVoicePresets } from "./presets.js";
+import { LiveVoiceGen, type ElevenLabsDeps } from "./live.js";
 import { buildVoiceRequest } from "./request.js";
 
 class MockVoiceGen implements VoiceGenPort {
@@ -74,9 +75,9 @@ class MockVoiceGen implements VoiceGenPort {
   }
 }
 
-export function createVoiceGen(env: EnvLike = process.env): VoiceGenPort {
-  if (!moduleMock(env, "VOICE_MOCK")) {
-    throw new Error("VoiceGen live ElevenLabs adapter is not configured. Set MOCK=1 or VOICE_MOCK=1.");
-  }
-  return new MockVoiceGen(env);
+export type VoiceGenDeps = ElevenLabsDeps;
+
+export function createVoiceGen(env: EnvLike = process.env, deps: VoiceGenDeps = {}): VoiceGenPort {
+  if (moduleMock(env, "VOICE_MOCK")) return new MockVoiceGen(env);
+  return new LiveVoiceGen(env, deps);
 }

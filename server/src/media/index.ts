@@ -1,8 +1,10 @@
 import { createCastAdapter, type CastAdapterDeps, type CastReferenceAdapter } from "./cast/reference.js";
 import { createClipGen } from "./higgsfield/clip-gen.js";
 import { createImageGen } from "./higgsfield/image-gen.js";
-import { createVoiceGen } from "./elevenlabs/voice-gen.js";
+import { createHiggsfieldClient, type HiggsfieldClient, type HiggsfieldClientDeps } from "./higgsfield/client.js";
+import { createVoiceGen, type VoiceGenDeps } from "./elevenlabs/voice-gen.js";
 import type { EnvLike } from "./flags.js";
+import { moduleMock } from "./flags.js";
 import type { ClipGenPort, ImageGenPort, VoiceGenPort } from "./ports.js";
 
 export interface MediaPorts {
@@ -12,14 +14,30 @@ export interface MediaPorts {
   voice: VoiceGenPort;
 }
 
+export interface MediaPortDeps extends CastAdapterDeps {
+  higgsfield?: HiggsfieldClient;
+  higgsfieldDeps?: HiggsfieldClientDeps;
+  voice?: VoiceGenDeps;
+}
+
 /** One cast registry shared by keyframes and clips. */
-export function createMediaPorts(env: EnvLike = process.env, deps: CastAdapterDeps = {}): MediaPorts {
-  const cast = createCastAdapter(env, deps);
+export function createMediaPorts(env: EnvLike = process.env, deps: MediaPortDeps = {}): MediaPorts {
+  const needsHiggsfield =
+    !moduleMock(env, "IMAGE_MOCK") || !moduleMock(env, "CLIP_MOCK") || !moduleMock(env, "CAST_MOCK");
+  const higgsfield = needsHiggsfield
+    ? (deps.higgsfield ?? createHiggsfieldClient(env, deps.higgsfieldDeps))
+    : undefined;
+  const uploadAnchor =
+    deps.uploadAnchor ??
+    (higgsfield && !moduleMock(env, "CAST_MOCK")
+      ? (bytes: Uint8Array, contentType: string) => higgsfield.upload(bytes, contentType)
+      : undefined);
+  const cast = createCastAdapter(env, { uploadAnchor });
   return {
     cast,
-    images: createImageGen(env, { cast }),
-    clips: createClipGen(env, { cast }),
-    voice: createVoiceGen(env),
+    images: createImageGen(env, { cast, higgsfield }),
+    clips: createClipGen(env, { cast, higgsfield }),
+    voice: createVoiceGen(env, deps.voice),
   };
 }
 

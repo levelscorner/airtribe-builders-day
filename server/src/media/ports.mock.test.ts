@@ -390,9 +390,9 @@ test("VOICE_PRESETS_JSON replaces the provisional catalogue", async () => {
 
 test("per-module mock flags override MOCK", () => {
   assert.equal(createImageGen({ IMAGE_MOCK: "1" }).mode, "mock");
-  assert.throws(() => createImageGen({ MOCK: "1", IMAGE_MOCK: "0" }), /IMAGE_MOCK=1/);
+  assert.throws(() => createImageGen({ MOCK: "1", IMAGE_MOCK: "0" }), /credentials missing/);
   assert.equal(createClipGen({ CLIP_MOCK: "1" }).mode, "mock");
-  assert.throws(() => createVoiceGen({ MOCK: "1", VOICE_MOCK: "0" }), /VOICE_MOCK=1/);
+  assert.throws(() => createVoiceGen({ MOCK: "1", VOICE_MOCK: "0" }), /ELEVENLABS_API_KEY/);
   assert.equal(createCastAdapter({ MOCK: "1", CAST_MOCK: "0" }).kind, "rest");
 
   const previous = process.env.MOCK;
