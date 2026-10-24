@@ -1,12 +1,6 @@
 import { StyleSheet, Text, View } from "react-native";
-import {
-  reviewFixes,
-  reviewNote,
-  reviewScoreLabel,
-  reviewStatusLabel,
-  reviewTone,
-  type AgentReview,
-} from "../agent-review";
+import type { AgentReview } from "@chotu/shared";
+import { reviewFixes, reviewNote, reviewScoreLabel, reviewStatusLabel, reviewTone } from "../agent-review";
 import { colors } from "../theme";
 
 /** Hidden entirely when the script artefact has no agentReview. */
@@ -15,11 +9,13 @@ export function AgentReviewPanel({ review }: { review: AgentReview }) {
   const warn = tone === "warn";
   const score = reviewScoreLabel(review.confidence);
   const note = reviewNote(review.status);
+  const warning = review.warning?.trim();
   const fixes = reviewFixes(review);
   const label = [
     "Pine Labs agent review",
     reviewStatusLabel(review.status),
     score ? `score ${score}` : "",
+    warning ? `warning ${warning}` : "",
   ]
     .filter(Boolean)
     .join(", ");
@@ -33,6 +29,7 @@ export function AgentReviewPanel({ review }: { review: AgentReview }) {
         </View>
       </View>
       {score ? <Text style={[styles.score, warn ? styles.warn : null]}>Score {score}</Text> : null}
+      {warning ? <Text style={styles.warn}>{warning}</Text> : null}
       {note ? <Text style={warn ? styles.warn : styles.note}>{note}</Text> : null}
       {fixes.length > 0 ? (
         <View style={styles.fixes}>

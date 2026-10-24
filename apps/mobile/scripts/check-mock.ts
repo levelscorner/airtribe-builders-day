@@ -1,5 +1,5 @@
 import type { ArtefactKind, ChatMessage, QuestionMessage } from "@chotu/shared";
-import { readAgentReview, reviewFeedback, reviewFixes, reviewTone } from "../src/agent-review";
+import { readAgentReview, reviewFeedback, reviewFixes, reviewStatusLabel, reviewTone } from "../src/agent-review";
 import { openQuestion } from "../src/chat/open-question";
 import { STARTER_CREDITS } from "../src/mock-fixtures";
 import { createMockStudio } from "../src/mock-studio";
@@ -114,6 +114,23 @@ function agentReviewCases(): void {
   assert(reviewTone(hitl.status) === "hitl", "hitl is a note, not a warning");
   assert(reviewFeedback(hitl).includes("Check the claim."), "hitl output becomes regenerate feedback");
   assert(readAgentReview({ agentReview: { status: "nope", output: "x" } }) === undefined, "unknown status is ignored");
+
+  const mocked = readAgentReview({
+    agentReview: { status: "mocked", confidence: 1, output: ["Demo fix."], warning: "Live review skipped." },
+  });
+  assert(mocked !== undefined && mocked.status === "mocked", "mocked review parses");
+  assert(reviewTone(mocked.status) === "ready", "mocked stays a neutral chip");
+  assert(reviewStatusLabel(mocked.status) === "Demo review", "mocked chip says demo review");
+  assert(mocked.warning === "Live review skipped.", "warning is kept on the review");
+  const fromPayload = readAgentReview({
+    payload: { agentReview: { status: "mocked", output: "From the payload", warning: "Budget note" } },
+  });
+  assert(fromPayload?.status === "mocked" && fromPayload.warning === "Budget note", "payload.agentReview is read");
+  const fromTop = readAgentReview({
+    agentReview: { status: "completed", output: "On the artefact" },
+    payload: { agentReview: { status: "failed", output: "On the payload", warning: "ignore" } },
+  });
+  assert(fromTop?.status === "completed", "ScriptArtefact.agentReview wins when both are set");
 }
 
 async function main(): Promise<void> {

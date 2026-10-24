@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import type { ApprovalCardMessage, ArtefactState, RegeneratePreviewResponse } from "@chotu/shared";
+import type { ApprovalCardMessage, ArtefactState, ArtefactSummary, RegeneratePreviewResponse } from "@chotu/shared";
 import { readAgentReview, reviewFeedback } from "../agent-review";
 import { MockMeter } from "../screens/PlayerCard";
 import { readRejectNote } from "../reject-note";
@@ -155,6 +155,7 @@ function PreviewBody({ message }: { message: ApprovalCardMessage }) {
 export function ApprovalCard({
   message,
   liveState,
+  artefact,
   onApprove,
   onReject,
   onPreviewRegenerate,
@@ -163,6 +164,7 @@ export function ApprovalCard({
 }: {
   message: ApprovalCardMessage;
   liveState: ArtefactState;
+  artefact?: ArtefactSummary;
   onApprove: () => void;
   onReject: (note: string) => void;
   onPreviewRegenerate: () => Promise<RegeneratePreviewResponse>;
@@ -176,7 +178,8 @@ export function ApprovalCard({
   const [pendingFeedback, setPendingFeedback] = useState<string | undefined>(undefined);
   const version = num(message.preview.version) ?? 1;
   const rejectionNote = readRejectNote(message);
-  const review = message.artefactKind === "script" ? readAgentReview(message.preview) : undefined;
+  const review =
+    message.artefactKind === "script" ? readAgentReview(artefact) ?? readAgentReview(message.preview) : undefined;
   const fixFeedback = review ? reviewFeedback(review) : "";
   const generating = liveState === "generating";
   const approved = !generating && (liveState === "approved" || message.state === "approved");

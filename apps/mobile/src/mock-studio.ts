@@ -16,7 +16,7 @@ import type {
   User,
   VideoSummary,
 } from "@chotu/shared";
-import { SAMPLE_SCRIPT_REVIEW } from "./agent-review";
+import { readAgentReview, SAMPLE_SCRIPT_REVIEW } from "./agent-review";
 import { applyRejectNote } from "./reject-note";
 import type { StudioClient } from "./studio-client";
 import {
@@ -354,6 +354,13 @@ export function createMockStudio(options?: {
     const cards = cardsForStage(bundle, stage);
     for (const card of cards) {
       const artefact = addArtefact(bundle, card);
+      if (artefact.kind === "script") {
+        const review = readAgentReview(artefact.payload);
+        if (review) {
+          artefact.agentReview = review;
+          artefact.payload.agentReview = review;
+        }
+      }
       publishArtefact(chat, artefact, card.title);
     }
     emitText(chat, "assistant", "Dekho. Theek lage to Approve, note ke saath Reject, ya Regenerate.");

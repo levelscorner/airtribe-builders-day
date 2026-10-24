@@ -23,11 +23,13 @@ const Row = memo(function Row({
   message,
   open,
   liveState,
+  artefact,
   actions,
 }: {
   message: ChatMessage;
   open: boolean;
   liveState?: ArtefactState;
+  artefact?: ArtefactSummary;
   actions: Actions;
 }) {
   if (message.kind === "text") {
@@ -56,6 +58,7 @@ const Row = memo(function Row({
       <ApprovalCard
         message={message}
         liveState={liveState ?? message.state}
+        artefact={artefact}
         onApprove={() => actions.onApprove(message.artefactId)}
         onReject={(note) => actions.onReject(message.artefactId, note)}
         onPreviewRegenerate={() => actions.onPreviewRegenerate(message.artefactId)}
@@ -135,6 +138,7 @@ export function MessageList({
           message={message}
           open={message.kind === "question" && message.id === active}
           liveState={message.kind === "approval" ? artefacts[message.artefactId]?.state : undefined}
+          artefact={message.kind === "approval" ? artefacts[message.artefactId] : undefined}
           actions={actions}
         />
       ))}

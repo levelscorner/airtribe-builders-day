@@ -1,21 +1,14 @@
-/**
- * AgenticOrg review attached to a script artefact.
- * TODO: switch to the shared field when Neptune adds `agentReview` on the
- * script artefact in packages/shared/types.ts. Until then this local shape
- * is the contract: `{ status, confidence?, output }`.
- */
-export type AgentReviewStatus = "completed" | "failed" | "hitl_triggered" | "budget_exceeded";
-
-export interface AgentReview {
-  status: AgentReviewStatus;
-  confidence?: number;
-  /** A single note, or one suggested fix per entry. */
-  output: string | string[];
-}
+import type { AgentReview, AgentReviewStatus } from "@chotu/shared";
 
 export type ReviewTone = "ready" | "warn" | "hitl";
 
-const STATUSES = new Set<AgentReviewStatus>(["completed", "failed", "hitl_triggered", "budget_exceeded"]);
+const STATUSES = new Set<AgentReviewStatus>([
+  "completed",
+  "failed",
+  "hitl_triggered",
+  "budget_exceeded",
+  "mocked",
+]);
 
 /** Sample the mock attaches to the script card under MOCK=1. */
 export const SAMPLE_SCRIPT_REVIEW: AgentReview = {
@@ -40,6 +33,8 @@ export function reviewStatusLabel(status: AgentReviewStatus): string {
       return "Needs a person";
     case "budget_exceeded":
       return "Budget exceeded";
+    case "mocked":
+      return "Demo review";
   }
 }
 
@@ -74,8 +69,7 @@ export function reviewFeedback(review: AgentReview): string {
 function parseOutput(value: unknown): string | string[] | undefined {
   if (typeof value === "string") return value;
   if (!Array.isArray(value)) return undefined;
-  const lines = value.filter((item): item is string => typeof item === "string");
-  return lines;
+  return value.filter((item): item is string => typeof item === "string");
 }
 
 function parseReview(value: unknown): AgentReview | undefined {
@@ -86,10 +80,14 @@ function parseReview(value: unknown): AgentReview | undefined {
   if (output === undefined) return undefined;
   const confidence =
     typeof row.confidence === "number" && Number.isFinite(row.confidence) ? row.confidence : undefined;
-  return { status: row.status as AgentReviewStatus, confidence, output };
+  const warning = typeof row.warning === "string" && row.warning.trim() ? row.warning.trim() : undefined;
+  return { status: row.status as AgentReviewStatus, confidence, output, warning };
 }
 
-/** Reads `agentReview` from an artefact or from its payload / card preview. */
+/**
+ * Script reviews live on `ScriptArtefact.agentReview` and, for script rows,
+ * on `payload.agentReview`. Either location is enough.
+ */
 export function readAgentReview(source: unknown): AgentReview | undefined {
   if (!source || typeof source !== "object") return undefined;
   const record = source as Record<string, unknown>;
