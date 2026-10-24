@@ -16,6 +16,7 @@ import type {
   User,
   VideoSummary,
 } from "@chotu/shared";
+import { readAgentReview, SAMPLE_SCRIPT_REVIEW } from "./agent-review";
 import { applyRejectNote } from "./reject-note";
 import type { StudioClient } from "./studio-client";
 import {
@@ -353,6 +354,13 @@ export function createMockStudio(options?: {
     const cards = cardsForStage(bundle, stage);
     for (const card of cards) {
       const artefact = addArtefact(bundle, card);
+      if (artefact.kind === "script") {
+        const review = readAgentReview(artefact.payload);
+        if (review) {
+          artefact.agentReview = review;
+          artefact.payload.agentReview = review;
+        }
+      }
       publishArtefact(chat, artefact, card.title);
     }
     emitText(chat, "assistant", "Dekho. Theek lage to Approve, note ke saath Reject, ya Regenerate.");
@@ -447,6 +455,10 @@ export function createMockStudio(options?: {
               narration: scene.narration ?? "",
               doubts: scene.doubts,
             })),
+            agentReview: {
+              ...SAMPLE_SCRIPT_REVIEW,
+              output: [...(SAMPLE_SCRIPT_REVIEW.output as string[])],
+            },
           },
         },
       ];
@@ -718,6 +730,16 @@ export function createMockStudio(options?: {
     }
   }
 
+  function applyScriptFeedback(payload: Record<string, unknown>, feedback?: string): void {
+    const note = feedback?.trim();
+    if (!note || !Array.isArray(payload.scenes)) return;
+    const first = payload.scenes[0];
+    if (!first || typeof first !== "object") return;
+    const scene = first as Record<string, unknown>;
+    const narration = typeof scene.narration === "string" ? scene.narration : "";
+    scene.narration = `${narration} ${note}`.trim();
+  }
+
   function bumpPayload(kind: ArtefactKind, payload: Record<string, unknown>, version: number): Record<string, unknown> {
     const next: Record<string, unknown> = { ...payload, version };
     delete next.rejectNote;
@@ -971,7 +993,7 @@ export function createMockStudio(options?: {
       return { artefact: snapshot };
     },
 
-    async regenerateArtefact(artefactId, confirm) {
+    async regenerateArtefact(artefactId, confirm, feedback) {
       const current = mustUser();
       const { artefact, chat } = mustArtefact(artefactId);
       if (confirm === 0) {
@@ -1010,7 +1032,10 @@ export function createMockStudio(options?: {
         artefact.version += 1;
         artefact.state = "awaiting_approval";
         artefact.payload = bumpPayload(artefact.kind, artefact.payload, artefact.version);
-        if (artefact.kind === "script") syncScriptScenes(artefact);
+        if (artefact.kind === "script") {
+          applyScriptFeedback(artefact.payload, feedback);
+          syncScriptScenes(artefact);
+        }
         artefact.updatedAt = now();
         patchApproval(chat, artefact);
         emit(chat, { type: "artefact", artefact: { ...artefact, payload: { ...artefact.payload } } });

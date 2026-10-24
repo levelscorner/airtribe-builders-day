@@ -1,4 +1,5 @@
 import type { ArtefactKind, ChatMessage, QuestionMessage } from "@chotu/shared";
+import { readAgentReview, reviewFeedback, reviewFixes, reviewStatusLabel, reviewTone } from "../src/agent-review";
 import { openQuestion } from "../src/chat/open-question";
 import { STARTER_CREDITS } from "../src/mock-fixtures";
 import { createMockStudio } from "../src/mock-studio";
@@ -92,7 +93,48 @@ function isQuestion(message: ChatMessage | undefined): message is QuestionMessag
   return message?.kind === "question";
 }
 
+function agentReviewCases(): void {
+  assert(readAgentReview({ payload: {} }) === undefined, "a card without a review stays blank");
+  const failed = readAgentReview({ agentReview: { status: "failed", output: "Hook is missing." } });
+  assert(failed !== undefined && failed.status === "failed", "failed review parses");
+  assert(reviewTone(failed.status) === "warn", "failed uses the warning style");
+  assert(reviewFixes(failed).join() === "Hook is missing.", "a string output is one fix");
+
+  const budget = readAgentReview({
+    agentReview: { status: "budget_exceeded", output: "Stopped before scene 3.\nRetry the ending." },
+  });
+  assert(budget !== undefined && budget.status === "budget_exceeded", "budget review parses");
+  assert(reviewTone(budget.status) === "warn", "budget exceeded uses the warning style");
+  assert(reviewFixes(budget).length === 2, "a newline string splits into fixes");
+
+  const hitl = readAgentReview({
+    agentReview: { status: "hitl_triggered", confidence: 0.41, output: ["Check the claim.", "Check the name."] },
+  });
+  assert(hitl !== undefined && hitl.status === "hitl_triggered", "hitl review parses");
+  assert(reviewTone(hitl.status) === "hitl", "hitl is a note, not a warning");
+  assert(reviewFeedback(hitl).includes("Check the claim."), "hitl output becomes regenerate feedback");
+  assert(readAgentReview({ agentReview: { status: "nope", output: "x" } }) === undefined, "unknown status is ignored");
+
+  const mocked = readAgentReview({
+    agentReview: { status: "mocked", confidence: 1, output: ["Demo fix."], warning: "Live review skipped." },
+  });
+  assert(mocked !== undefined && mocked.status === "mocked", "mocked review parses");
+  assert(reviewTone(mocked.status) === "ready", "mocked stays a neutral chip");
+  assert(reviewStatusLabel(mocked.status) === "Demo review", "mocked chip says demo review");
+  assert(mocked.warning === "Live review skipped.", "warning is kept on the review");
+  const fromPayload = readAgentReview({
+    payload: { agentReview: { status: "mocked", output: "From the payload", warning: "Budget note" } },
+  });
+  assert(fromPayload?.status === "mocked" && fromPayload.warning === "Budget note", "payload.agentReview is read");
+  const fromTop = readAgentReview({
+    agentReview: { status: "completed", output: "On the artefact" },
+    payload: { agentReview: { status: "failed", output: "On the payload", warning: "ignore" } },
+  });
+  assert(fromTop?.status === "completed", "ScriptArtefact.agentReview wins when both are set");
+}
+
 async function main(): Promise<void> {
+  agentReviewCases();
   await composerDuringChipQuestions();
 
   const api = createMockStudio({ delayMs: 0 });
@@ -299,8 +341,19 @@ async function briefEdges(): Promise<void> {
   assert(scriptSnap.video.brief.topic === "barish kaise banti hai", "typed topic should lock on the brief");
   const script = scriptSnap.artefacts.find((item) => item.kind === "script");
   assert(script, "script card missing");
+  const review = readAgentReview(script);
+  assert(review !== undefined && review.status === "completed", "mock script carries a completed agent review");
+  assert(review.confidence === 0.74, "mock script review includes a confidence");
+  assert(reviewFixes(review).length === 3, "mock script review lists three fixes");
+  const feedback = reviewFeedback(review);
   const before = JSON.stringify(script.payload);
-  await api.regenerateArtefact(script.id, 1);
+  await api.regenerateArtefact(script.id, 1, feedback);
+  await pump();
+  const withFeedback = (await api.getVideo(opened.videoId)).artefacts.find((item) => item.id === script.id);
+  const firstScene = Array.isArray(withFeedback?.payload.scenes) ? withFeedback.payload.scenes[0] : undefined;
+  const narration =
+    firstScene && typeof firstScene === "object" && "narration" in firstScene ? String(firstScene.narration) : "";
+  assert(narration.includes("Shorten the hook"), "regenerate feedback should land on the script");
   await pump();
   const regenerated = (await api.getVideo(opened.videoId)).artefacts.find((item) => item.id === script.id);
   assert(regenerated?.state === "awaiting_approval", "regenerated script should wait for approval");

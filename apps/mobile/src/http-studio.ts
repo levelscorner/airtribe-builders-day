@@ -171,10 +171,12 @@ export function createHttpStudio(baseUrl = ""): StudioClient {
         body: JSON.stringify(body),
       });
     },
-    regenerateArtefact(artefactId: string, confirm: 0 | 1) {
+    regenerateArtefact(artefactId: string, confirm: 0 | 1, feedback?: string) {
+      const note = feedback?.trim();
+      const body = confirm === 1 && note ? JSON.stringify({ feedback: note, confirm: true }) : "{}";
       return api<RegeneratePreviewResponse | RegenerateConfirmResponse>(
         `${ApiPaths.artefactRegenerate(artefactId)}?confirm=${confirm}`,
-        { method: "POST", body: "{}" },
+        { method: "POST", body },
       );
     },
     approveAllRemaining(videoId: string) {

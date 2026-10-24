@@ -47,8 +47,8 @@ export function ChatScreen({ chatId }: { chatId: string }) {
         void stream.reject(artefactId, note);
       },
       onPreviewRegenerate: (artefactId: string) => stream.previewRegenerate(artefactId),
-      onConfirmRegenerate: (artefactId: string) => {
-        void stream.confirmRegenerate(artefactId);
+      onConfirmRegenerate: (artefactId: string, feedback?: string) => {
+        void stream.confirmRegenerate(artefactId, feedback);
       },
       onNeedCredits: () => {
         router.push(`/packs?from=${encodeURIComponent(`/chat/${chatId}`)}`);

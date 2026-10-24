@@ -323,7 +323,7 @@ export function useChatStream(chatId: string) {
   );
 
   const confirmRegenerate = useCallback(
-    (artefactId: string) =>
+    (artefactId: string, feedback?: string) =>
       run(artefactId, async () => {
         const previous = artefactsRef.current[artefactId];
         const cost = previous?.creditCost ?? 0;
@@ -333,7 +333,7 @@ export function useChatStream(chatId: string) {
         const debit = balanceNow !== null && cost > 0 ? cost : 0;
         if (debit > 0 && balanceNow !== null) writeCredits(balanceNow - debit);
         try {
-          const result = await client.regenerateArtefact(artefactId, 1);
+          const result = await client.regenerateArtefact(artefactId, 1, feedback);
           if ("artefact" in result) {
             writeArtefact(result.artefact, false);
             writeCredits(result.balance);

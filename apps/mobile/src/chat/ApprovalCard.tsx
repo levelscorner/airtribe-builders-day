@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import type { ApprovalCardMessage, ArtefactState, RegeneratePreviewResponse } from "@chotu/shared";
+import type { ApprovalCardMessage, ArtefactState, ArtefactSummary, RegeneratePreviewResponse } from "@chotu/shared";
+import { readAgentReview, reviewFeedback } from "../agent-review";
 import { MockMeter } from "../screens/PlayerCard";
 import { readRejectNote } from "../reject-note";
 import { colors, hitSlop, layout } from "../theme";
+import { AgentReviewPanel } from "./AgentReviewPanel";
 import { KIND_LABEL, STAGE_LABEL } from "./labels";
 
 function str(value: unknown): string | undefined {
@@ -153,6 +155,7 @@ function PreviewBody({ message }: { message: ApprovalCardMessage }) {
 export function ApprovalCard({
   message,
   liveState,
+  artefact,
   onApprove,
   onReject,
   onPreviewRegenerate,
@@ -161,23 +164,39 @@ export function ApprovalCard({
 }: {
   message: ApprovalCardMessage;
   liveState: ArtefactState;
+  artefact?: ArtefactSummary;
   onApprove: () => void;
   onReject: (note: string) => void;
   onPreviewRegenerate: () => Promise<RegeneratePreviewResponse>;
-  onConfirmRegenerate: () => void;
+  onConfirmRegenerate: (feedback?: string) => void;
   onNeedCredits: () => void;
 }) {
   const [rejecting, setRejecting] = useState(false);
   const [note, setNote] = useState("");
   const [quote, setQuote] = useState<RegeneratePreviewResponse | null>(null);
   const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [pendingFeedback, setPendingFeedback] = useState<string | undefined>(undefined);
   const version = num(message.preview.version) ?? 1;
   const rejectionNote = readRejectNote(message);
+  const review =
+    message.artefactKind === "script" ? readAgentReview(artefact) ?? readAgentReview(message.preview) : undefined;
+  const fixFeedback = review ? reviewFeedback(review) : "";
   const generating = liveState === "generating";
   const approved = !generating && (liveState === "approved" || message.state === "approved");
   const rejected = !generating && (liveState === "rejected" || message.state === "rejected");
   const waiting = !approved && !rejected && !generating;
   const stateWord = generating ? "generating" : approved ? "approved" : rejected ? "rejected" : "waiting";
+
+  function askQuote(feedback?: string) {
+    setQuoteError(null);
+    setPendingFeedback(feedback);
+    void onPreviewRegenerate()
+      .then(setQuote)
+      .catch((err: unknown) => {
+        setPendingFeedback(undefined);
+        setQuoteError(err instanceof Error ? err.message : "Cost nahi mili.");
+      });
+  }
 
   return (
     <View style={styles.card} accessibilityLabel={`${message.title}, ${stateWord}`}>
@@ -192,6 +211,7 @@ export function ApprovalCard({
         {version > 1 ? ` · v${version}` : ""}
       </Text>
       <PreviewBody message={message} />
+      {review ? <AgentReviewPanel review={review} /> : null}
       {rejectionNote ? <Text style={styles.doubt}>Note: {rejectionNote}</Text> : null}
       {generating ? <Text style={styles.meta}>Dobara bana rahe hain.</Text> : null}
       {waiting || rejected ? (
@@ -257,8 +277,10 @@ export function ApprovalCard({
                   accessibilityLabel={`Haan, ${quote.creditCost} credits kaato, ${message.title}`}
                   hitSlop={hitSlop}
                   onPress={() => {
+                    const feedback = pendingFeedback;
                     setQuote(null);
-                    onConfirmRegenerate();
+                    setPendingFeedback(undefined);
+                    onConfirmRegenerate(feedback);
                   }}
                   style={styles.primary}
                 >
@@ -279,29 +301,38 @@ export function ApprovalCard({
                 accessibilityRole="button"
                 accessibilityLabel={`Rehne do, ${message.title}`}
                 hitSlop={hitSlop}
-                onPress={() => setQuote(null)}
+                onPress={() => {
+                  setQuote(null);
+                  setPendingFeedback(undefined);
+                }}
                 style={styles.secondary}
               >
                 <Text style={styles.secondaryText}>Rehne do</Text>
               </Pressable>
             </View>
           ) : (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Regenerate ${message.title}, ${message.regenerateCreditCost} credits, pehle cost dikhao`}
-              hitSlop={hitSlop}
-              onPress={() => {
-                setQuoteError(null);
-                void onPreviewRegenerate()
-                  .then(setQuote)
-                  .catch((err: unknown) => {
-                    setQuoteError(err instanceof Error ? err.message : "Cost nahi mili.");
-                  });
-              }}
-              style={styles.secondary}
-            >
-              <Text style={styles.secondaryText}>Regenerate · {message.regenerateCreditCost} credits</Text>
-            </Pressable>
+            <View style={styles.stack}>
+              {fixFeedback ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Apply fixes and regenerate ${message.title}`}
+                  hitSlop={hitSlop}
+                  onPress={() => askQuote(fixFeedback)}
+                  style={styles.secondary}
+                >
+                  <Text style={styles.secondaryText}>Apply fixes & regenerate</Text>
+                </Pressable>
+              ) : null}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Regenerate ${message.title}, ${message.regenerateCreditCost} credits, pehle cost dikhao`}
+                hitSlop={hitSlop}
+                onPress={() => askQuote()}
+                style={styles.secondary}
+              >
+                <Text style={styles.secondaryText}>Regenerate · {message.regenerateCreditCost} credits</Text>
+              </Pressable>
+            </View>
           )}
           {quoteError ? <Text style={styles.doubt}>{quoteError}</Text> : null}
         </View>
