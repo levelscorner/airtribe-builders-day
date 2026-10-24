@@ -41,6 +41,7 @@ export interface StudioClient {
   regenerateArtefact(
     artefactId: string,
     confirm: 0 | 1,
+    feedback?: string,
   ): Promise<RegeneratePreviewResponse | RegenerateConfirmResponse>;
   approveAllRemaining(videoId: string): Promise<ApproveAllRemainingResponse>;
   listCast(): Promise<ListCastResponse>;

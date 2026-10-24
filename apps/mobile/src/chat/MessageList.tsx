@@ -15,7 +15,7 @@ interface Actions {
   onApprove: (artefactId: string) => void;
   onReject: (artefactId: string, note: string) => void;
   onPreviewRegenerate: (artefactId: string) => Promise<RegeneratePreviewResponse>;
-  onConfirmRegenerate: (artefactId: string) => void;
+  onConfirmRegenerate: (artefactId: string, feedback?: string) => void;
   onNeedCredits: () => void;
 }
 
@@ -59,7 +59,7 @@ const Row = memo(function Row({
         onApprove={() => actions.onApprove(message.artefactId)}
         onReject={(note) => actions.onReject(message.artefactId, note)}
         onPreviewRegenerate={() => actions.onPreviewRegenerate(message.artefactId)}
-        onConfirmRegenerate={() => actions.onConfirmRegenerate(message.artefactId)}
+        onConfirmRegenerate={(feedback) => actions.onConfirmRegenerate(message.artefactId, feedback)}
         onNeedCredits={actions.onNeedCredits}
       />
     );
