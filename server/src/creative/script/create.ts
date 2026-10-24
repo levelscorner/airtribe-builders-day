@@ -20,7 +20,7 @@ function userPrompt(input: ScriptGenInput): string {
     topic: topicOf(input.brief, genre.defaultTopic),
     product: productOf(input.brief, genre.defaultProduct ?? ""),
     audience: input.brief.audience,
-    feedback: feedbackOf(input.brief) ?? "",
+    feedback: feedbackOf(input.feedback) ?? "",
     cast: input.cast.map((member) => ({
       id: member.id,
       name: member.name,

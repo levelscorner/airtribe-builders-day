@@ -144,6 +144,8 @@ export interface User {
 }
 
 export interface Brief {
+  /** Creator topic / subject line from chat intake. */
+  topic?: string;
   genre?: Genre;
   language?: Language;
   aspectRatio?: string;
@@ -153,6 +155,11 @@ export interface Brief {
   artStyle?: string;
   artStyleTraits?: string[];
   castIds?: string[];
+  /**
+   * Free-form intake leftovers only (product, cast_request, skipped fields).
+   * Do not store topic or regenerate feedback here — use `topic` and
+   * `RegenerateRequest.feedback` / `ScriptGenInput.feedback`.
+   */
   notes?: string;
 }
 
@@ -277,7 +284,16 @@ export interface PostMessageResponse {
 }
 
 export interface RejectArtefactRequest {
-  note: string;
+  /** Creator note explaining the rejection (HITL). */
+  rejectNote: string;
+}
+
+/** Body for POST /v1/artefacts/:id/regenerate (?confirm=0 preview, confirm=1 run). */
+export interface RegenerateRequest {
+  /** Optional guidance for the next generation. */
+  feedback?: string;
+  /** When false/omitted with preview semantics, return credit cost only. */
+  confirm?: boolean;
 }
 
 export interface RegeneratePreviewResponse {
@@ -339,6 +355,8 @@ export interface ScriptGenInput {
   genre: Genre;
   language: Language;
   targetSeconds: number;
+  /** From RegenerateRequest.feedback when the creator regenerates. */
+  feedback?: string;
 }
 
 export interface ScriptGenOutput {
@@ -363,6 +381,8 @@ export interface PromptGenInput {
   brief: Brief;
   cast: CastMember[];
   artStyle?: string;
+  /** From RegenerateRequest.feedback when the creator regenerates. */
+  feedback?: string;
 }
 
 export interface PromptGenOutput {

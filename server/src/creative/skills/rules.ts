@@ -17,7 +17,7 @@ export const SCRIPT_TASK = [
   "castIds may only use ids from the cast you were given.",
   "Put real doubts in the doubts array. Use an empty array when a scene is clear.",
   "durationMs values are positive integers and sum to targetSeconds * 1000.",
-  "If brief.notes contains a feedback line, revise the script to honour it.",
+  "If feedback is set on the request, revise the script to honour it.",
 ].join("\n");
 
 export const PROMPT_TASK = [

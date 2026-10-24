@@ -22,7 +22,7 @@ test("guessGenre reads a single clear hint", () => {
 test("a first message becomes a topic and can guess the genre", () => {
   const brief = briefFromMessage("Why do bees make honey, for kids");
   assert.equal(brief.genre, "kids");
-  assert.match(noteValue(brief.notes, "topic") ?? "", /bees/i);
+  assert.match(brief.topic ?? "", /bees/i);
 });
 
 test("questions cover resolution, length, language, audience, art style, and cast", () => {
@@ -100,7 +100,7 @@ test("ad intake asks for a product, kids intake can pick both mascots", () => {
   }
   assert.ok(fields.includes("product"));
 
-  const kids = applyAnswer({ notes: "topic: bees" }, { field: "genre", optionId: "kids" }).brief;
+  const kids = applyAnswer({ topic: "bees" }, { field: "genre", optionId: "kids" }).brief;
   let partial = kids;
   while (nextQuestion(partial) && nextQuestion(partial)?.field !== "cast_ids") {
     const question = nextQuestion(partial);

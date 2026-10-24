@@ -18,9 +18,10 @@ test("parseBrief returns the shared Brief shape", () => {
     artStyle: "bright-2d-cartoon",
     artStyleTraits: ["bright flat colours"],
     castIds: ["preset_chintu"],
-    notes: "topic: why bees make honey",
+    topic: "why bees make honey",
   });
   assert.equal(brief.genre, "kids");
+  assert.equal(brief.topic, "why bees make honey");
   assert.equal(brief.resolution, "720p");
   assert.deepEqual(brief.castIds, ["preset_chintu"]);
 });

@@ -26,7 +26,7 @@ test("image and video prompts repeat identity text and embed element ids", async
     genre: "kids",
     language: "en",
     targetSeconds: 45,
-    brief: { genre: "kids", language: "en", notes: "topic: why bees make honey", artStyle: "bright-2d-cartoon", artStyleTraits: ["bright flat colours", "bold clean outlines"] },
+    brief: { topic: "why bees make honey", genre: "kids", language: "en", artStyle: "bright-2d-cartoon", artStyleTraits: ["bright flat colours", "bold clean outlines"] },
     cast,
   });
   const hook = script.scenes[0];
@@ -34,11 +34,11 @@ test("image and video prompts repeat identity text and embed element ids", async
   const prompts = await createPromptGen({ mock: true }).generate({
     videoId: "video_kids",
     brief: {
+      topic: "why bees make honey",
       genre: "kids",
       aspectRatio: "9:16",
       artStyle: "bright-2d-cartoon",
       artStyleTraits: ["bright flat colours", "bold clean outlines"],
-      notes: "topic: why bees make honey",
     },
     artStyle: "bright-2d-cartoon",
     cast,
@@ -66,7 +66,7 @@ test("faceless prompts keep the narrator off screen", async () => {
   assert.ok(narrator);
   const prompts = await createPromptGen({ mock: true }).generate({
     videoId: "video_faceless",
-    brief: { genre: "faceless", aspectRatio: "9:16", artStyle: "cinematic-realistic", notes: "topic: how the Indian monsoon starts" },
+    brief: { topic: "how the Indian monsoon starts", genre: "faceless", aspectRatio: "9:16", artStyle: "cinematic-realistic" },
     cast: [narrator],
     scene: scene({
       idx: 0,
@@ -87,7 +87,12 @@ test("live PromptGen does not copy skill text into the prompt", async () => {
   assert.ok(riya);
   const request: PromptGenInput = {
     videoId: "video_ad",
-    brief: { genre: "ad", aspectRatio: "9:16", notes: "topic: a weekend offer\nproduct: a small glass jar of mango pickle" },
+    brief: {
+      topic: "a weekend offer",
+      genre: "ad",
+      aspectRatio: "9:16",
+      notes: "product: a small glass jar of mango pickle",
+    },
     cast: [riya],
     scene: scene({ idx: 2, title: "product", videoId: "video_ad", castIds: [riya.id], durationMs: 5000 }),
   };

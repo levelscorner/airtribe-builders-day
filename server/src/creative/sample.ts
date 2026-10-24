@@ -40,17 +40,20 @@ export interface GenreSample {
 export async function buildGenreSample(genre: Genre): Promise<GenreSample> {
   const spec = SAMPLE_SPEC[genre];
   const config = getGenre(genre);
-  let brief = applyAnswer(
-    { notes: upsertNote(undefined, "topic", spec.topic) },
-    { field: "genre", optionId: genre },
-  ).brief;
+  let brief = applyAnswer({ topic: spec.topic }, { field: "genre", optionId: genre }).brief;
   brief = applyDefaults(brief);
   brief = {
     ...brief,
+    topic: spec.topic,
     genre,
     language: spec.language,
-    notes: spec.product ? upsertNote(brief.notes, "product", spec.product) : brief.notes,
   };
+  if (spec.product) {
+    brief = { ...brief, notes: upsertNote(brief.notes, "product", spec.product) };
+  } else if (brief.notes === undefined) {
+    const { notes: _drop, ...rest } = brief;
+    brief = rest;
+  }
   const cast = getPresets(brief.castIds ?? config.defaultCastIds);
   const script = await createScriptGen({ mock: true }).generate({
     videoId: `sample_${genre}`,

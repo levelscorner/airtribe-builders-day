@@ -48,7 +48,7 @@ export function mockScript(input: ScriptGenInput): ScriptGenOutput {
   const normalized = normalizeTopic(topic);
   const library = libraryLines(input.genre, input.language, normalized, normalizeTopic(product));
   const lines = library ?? genericLines(input.genre, input.language, topic, product);
-  const feedback = feedbackOf(input.brief);
+  const feedback = feedbackOf(input.feedback);
   const timing = durations(input.targetSeconds * 1000, genre.beats.length);
   const outOfRange =
     input.targetSeconds < genre.minSeconds || input.targetSeconds > genre.maxSeconds;

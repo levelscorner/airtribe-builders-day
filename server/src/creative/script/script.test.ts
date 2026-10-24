@@ -5,7 +5,6 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import type { CastMember, ScriptGenInput } from "@chotu/shared";
 import { getPresetCast } from "../genres/load.js";
-import { withFeedback } from "../intake/notes.js";
 import type { CompleteRequest } from "../llm.js";
 import { createScriptGen } from "./create.js";
 import { mockScript } from "./mock.js";
@@ -15,6 +14,7 @@ function input(overrides: Partial<ScriptGenInput> = {}): ScriptGenInput {
   return {
     videoId: "video_kids",
     brief: {
+      topic: "why bees make honey",
       genre: "kids",
       language: "hi",
       aspectRatio: "9:16",
@@ -23,7 +23,6 @@ function input(overrides: Partial<ScriptGenInput> = {}): ScriptGenInput {
       audience: "children",
       artStyle: "bright-2d-cartoon",
       castIds: cast.map((member) => member.id),
-      notes: "topic: why bees make honey",
     },
     cast,
     genre: "kids",
@@ -48,11 +47,7 @@ test("mock script returns one cast list per scene and durations that add up", as
 });
 
 test("regenerate feedback is applied to the hook", async () => {
-  const base = input();
-  const script = await createScriptGen({ mock: true }).generate({
-    ...base,
-    brief: withFeedback(base.brief, "ZARQON"),
-  });
+  const script = await createScriptGen({ mock: true }).generate(input({ feedback: "ZARQON" }));
   assert.match(script.scenes[0]?.narration ?? "", /ZARQON/);
   assert.doesNotMatch(script.scenes[1]?.narration ?? "", /ZARQON/);
 });
@@ -92,10 +87,10 @@ test("faceless scenes keep the narrator and nobody else", async () => {
     language: "en",
     targetSeconds: 50,
     brief: {
+      topic: "how the Indian monsoon starts",
       genre: "faceless",
       language: "en",
       targetSeconds: 50,
-      notes: "topic: how the Indian monsoon starts",
     },
     cast: [narrator],
   });

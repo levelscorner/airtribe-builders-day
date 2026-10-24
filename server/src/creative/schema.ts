@@ -91,6 +91,7 @@ export const GenreConfigSchema = z
 export type GenreConfig = z.infer<typeof GenreConfigSchema>;
 
 export const BriefSchema = z.object({
+  topic: z.string().min(1).optional(),
   genre: GenreSchema.optional(),
   language: LanguageSchema.optional(),
   aspectRatio: z.string().min(3).optional(),

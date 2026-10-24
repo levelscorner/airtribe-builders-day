@@ -1,7 +1,7 @@
 {
   "genre": "ad",
   "brief": {
-    "notes": "topic: a weekend offer on mango pickle\nproduct: a small glass jar of mango pickle",
+    "topic": "a weekend offer on mango pickle",
     "genre": "ad",
     "resolution": "1080p",
     "aspectRatio": "9:16",
@@ -17,7 +17,8 @@
     ],
     "castIds": [
       "preset_riya"
-    ]
+    ],
+    "notes": "product: a small glass jar of mango pickle"
   },
   "cast": [
     {

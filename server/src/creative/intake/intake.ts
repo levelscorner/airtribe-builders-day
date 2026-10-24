@@ -23,7 +23,7 @@ export function briefFromMessage(text: string): Brief {
   const trimmed = text.trim().replace(/\s+/g, " ");
   return parseBrief({
     genre: trimmed ? guessGenre(trimmed) : undefined,
-    notes: trimmed ? upsertNote(undefined, "topic", trimmed) : undefined,
+    topic: trimmed || undefined,
   });
 }
 
@@ -157,7 +157,7 @@ function isAnswered(brief: Brief, field: string): boolean {
     case "genre":
       return Boolean(brief.genre);
     case "topic":
-      return Boolean(noteValue(brief.notes, "topic"));
+      return Boolean(brief.topic?.trim());
     case "product":
       return Boolean(noteValue(brief.notes, "product"));
     case "resolution":
@@ -271,7 +271,7 @@ function fillField(brief: Brief, field: string, raw: string): { brief: Brief; er
     }
     case "topic": {
       const value = useDefault ? (genre?.defaultTopic ?? "a short video") : raw.trim();
-      return { brief: { ...brief, notes: upsertNote(brief.notes, "topic", value.slice(0, 200)) } };
+      return { brief: { ...brief, topic: value.slice(0, 200) } };
     }
     case "product": {
       const source = useDefault ? (genre?.defaultProduct ?? "the product") : raw;

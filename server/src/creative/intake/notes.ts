@@ -1,7 +1,8 @@
 import type { Brief } from "@chotu/shared";
 
 const NOTE_LINE = /^([a-z_]+):\s*(.*)$/;
-const KEY_ORDER = ["topic", "product", "feedback", "cast_request", "skipped"];
+/** Topic and regenerate feedback are real Brief / ScriptGenInput fields — not notes keys. */
+const KEY_ORDER = ["product", "cast_request", "skipped"];
 
 export function readNotes(notes?: string): Record<string, string> {
   const fields: Record<string, string> = {};
@@ -58,19 +59,20 @@ export function markSkipped(notes: string | undefined, field: string): string | 
 }
 
 export function topicOf(brief: Brief, fallback = "a short video"): string {
-  return noteValue(brief.notes, "topic") ?? fallback;
+  const topic = brief.topic?.trim();
+  return topic && topic.length > 0 ? topic : fallback;
 }
 
 export function productOf(brief: Brief, fallback = "the product"): string {
   return noteValue(brief.notes, "product") ?? fallback;
 }
 
-export function feedbackOf(brief: Brief): string | undefined {
-  return noteValue(brief.notes, "feedback");
+export function feedbackOf(feedback?: string): string | undefined {
+  const clean = feedback?.trim().replace(/\s+/g, " ").slice(0, 280);
+  return clean && clean.length > 0 ? clean : undefined;
 }
 
-/** Regenerate feedback rides in Brief.notes. The shared ScriptGen input has no feedback field. */
-export function withFeedback(brief: Brief, feedback: string): Brief {
-  const clean = feedback.trim().replace(/\s+/g, " ").slice(0, 280);
-  return { ...brief, notes: upsertNote(brief.notes, "feedback", clean) };
+/** Normalize regenerate feedback for ScriptGenInput / PromptGenInput.feedback. */
+export function normalizeFeedback(feedback: string): string {
+  return feedback.trim().replace(/\s+/g, " ").slice(0, 280);
 }
