@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS artefacts (
   scene_id        uuid REFERENCES scenes(id) ON DELETE CASCADE,
   kind            text NOT NULL CHECK (kind IN (
                     'identity', 'sheet', 'anchor', 'voice_sample',
-                    'script', 'prompt', 'image', 'clip', 'audio', 'final'
+                    'script', 'prompt', 'image', 'clip', 'audio', 'voice', 'final'
                   )),
   state           text NOT NULL DEFAULT 'pending' CHECK (state IN (
                     'pending', 'generating', 'awaiting_approval',

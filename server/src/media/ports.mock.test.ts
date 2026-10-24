@@ -303,10 +303,17 @@ test("voice presets are config and lines return caption alignment", async () => 
   assert.deepEqual(
     voice.listPresets().map((preset) => preset.elevenlabsVoiceId),
     [
-      "T536A2SFCG4AEDVTRucQ",
-      "srEfhy4AF67Mw9SpTVFd",
-      "mActWQg9kibLro6Z2ouY",
-      "qsz5tTEjPvsiIJZIpM8S",
+      "FZkK3TvQ0pjyDmT8fzIW",
+      "RABOvaPec1ymXz02oDQi",
+      "Sm1seazb4gs7RSlUVw7c",
+      "7b9mYhmnp0y2qSH1FnBL",
+      "iBRcUZbbi4hxPMzDCm71",
+      "ZthnDvLLxYzM9qeFVSJe",
+      "d0grukerEzs069eKIauC",
+      "1qEiC6qsybMkmnNdVMbK",
+      "MF4J4IDTRo0AxOO4dpFR",
+      "siw1N9V8LmYeEWKyWBxv",
+      "4O1sYUnmtThcBoSBrri7",
     ],
   );
   assert.equal(voice.listPresets()[0]?.style, 0.3);
@@ -345,7 +352,7 @@ test("voice presets are config and lines return caption alignment", async () => 
   assert.equal(previewRequest.query.output_format, "mp3_44100_128");
   assert.equal(
     previewRequest.path,
-    "/v1/text-to-speech/T536A2SFCG4AEDVTRucQ/with-timestamps",
+    "/v1/text-to-speech/RABOvaPec1ymXz02oDQi/with-timestamps",
   );
 
   const finalRequest = buildVoiceRequest(

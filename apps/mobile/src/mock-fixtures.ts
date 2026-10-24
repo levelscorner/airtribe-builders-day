@@ -24,6 +24,7 @@ export const REGEN_COST: Record<ArtefactKind, number> = {
   image: 4,
   clip: 8,
   audio: 3,
+  voice: 3,
   final: 5,
 };
 

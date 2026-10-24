@@ -10,6 +10,8 @@ import type {
   ChatMessage,
   Genre,
   Language,
+  MediaProgressEvent,
+  MediaProviderName,
   ProgressMessage,
   QuestionMessage,
   RegenerateConfirmResponse,
@@ -41,10 +43,11 @@ import { PROMPT_JSON_HINT, SCENE_PLAN_HINT, SCRIPT_JSON_HINT, creativeGenEnv } f
 import { artefactCreditCost, debitRegenerate } from "../credits/stub.js";
 import type { SqlClient } from "../db/client.js";
 import { createMediaPorts } from "../media/index.js";
-import { mockAssets } from "../media/placeholders.js";
+import { mockAssets, publicUrl } from "../media/placeholders.js";
 import { ensureBlockingWarning, scriptArtefactState } from "../integrations/agenticorg/parse.js";
 import { runScriptReview, type ScriptReviewInput } from "../integrations/agenticorg/run.js";
 import { chatBus } from "./bus.js";
+import { clipDurationMs } from "./storyboard.js";
 import * as store from "./store.js";
 
 const STAGE_ORDER: Stage[] = [
@@ -257,7 +260,7 @@ function stageKinds(stage: Stage): ArtefactKind[] {
     case "clips":
       return ["clip"];
     case "audio":
-      return ["audio"];
+      return ["audio", "voice"];
     case "final":
       return ["final"];
     default:
@@ -441,38 +444,104 @@ async function beginPrompts(ctx: OrchestratorContext, chatId: string, videoId: s
   }
 }
 
+function mediaEnv(ctx: OrchestratorContext): NodeJS.ProcessEnv {
+  return { ...process.env, MOCK: ctx.mock ? "1" : "0" };
+}
+
+function asMediaProvider(value: string | undefined): MediaProviderName {
+  if (value === "openai" || value === "ark" || value === "higgsfield" || value === "elevenlabs" || value === "mock") {
+    return value;
+  }
+  return "mock";
+}
+
+function publishMedia(chatId: string, event: Omit<MediaProgressEvent, "type">): void {
+  chatBus.publish(chatId, { type: "media.progress", ...event });
+}
+
 async function beginImages(ctx: OrchestratorContext, chatId: string, videoId: string): Promise<void> {
   const video = (await store.getVideoRow(ctx.db, videoId))!;
-  const media = createMediaPorts({ MOCK: ctx.mock ? "1" : "0" });
+  const media = createMediaPorts(mediaEnv(ctx));
   const prompts = (await store.listArtefacts(ctx.db, videoId)).filter(
     (a) => a.kind === "prompt" && a.state === "approved",
   );
   await progress(ctx, chatId, "images", "Keyframes…", "Images");
   for (const prompt of prompts) {
-    // Venus embeds <<<el_*>>> tokens; Neptune REST mock expects ref: URLs.
-    // Strip tokens for MOCK text-to-image; identity text stays in the prompt.
+    // Venus embeds <<<el_*>>> tokens. Only http(s) and ref: anchors go to edits.
     const imagePrompt = String(prompt.payload.imagePrompt ?? "").replace(/<<<[^>]+>>>/g, " ").trim();
-    const generated = await media.images.generate({
-      prompt: imagePrompt,
-      elementIds: [],
-      aspectRatio: video.aspectRatio,
-      resolution: video.resolution,
-    });
-    const artefact = await store.insertArtefact(ctx.db, {
+    const rawIds = Array.isArray(prompt.payload.elementIds) ? prompt.payload.elementIds : [];
+    const elementIds = rawIds.filter(
+      (id): id is string =>
+        typeof id === "string" && (id.startsWith("ref:") || id.startsWith("http://") || id.startsWith("https://")),
+    );
+    const pending = await store.insertArtefact(ctx.db, {
       videoId,
       sceneId: prompt.sceneId,
       kind: "image",
-      state: "awaiting_approval",
+      state: "generating",
       creditCost: artefactCreditCost("image"),
-      payload: { url: generated.url, provider: generated.provider, promptId: prompt.id },
+      payload: { promptId: prompt.id },
     });
-    await approvalCard(ctx, chatId, "images", artefact, `Image · scene`);
+    publishMedia(chatId, {
+      jobId: pending.id,
+      artefactId: pending.id,
+      kind: "image",
+      status: "generating",
+      percent: 10,
+      sceneId: prompt.sceneId,
+      provider: "mock",
+      model: "",
+    });
+    try {
+      const generated = await media.images.generate({
+        prompt: imagePrompt,
+        elementIds,
+        aspectRatio: video.aspectRatio,
+        resolution: video.resolution,
+      });
+      const provider = asMediaProvider(generated.provider);
+      const model = generated.model ?? "";
+      const providerLabel = generated.providerLabel ?? (provider === "mock" ? "Mock" : provider);
+      const artefact = await store.updateArtefact(ctx.db, pending.id, {
+        state: "awaiting_approval",
+        payload: { url: generated.url, provider, model, providerLabel, promptId: prompt.id },
+      });
+      publishMedia(chatId, {
+        jobId: pending.id,
+        artefactId: artefact.id,
+        kind: "image",
+        status: "done",
+        percent: 100,
+        url: generated.url,
+        sceneId: prompt.sceneId,
+        provider,
+        model,
+      });
+      await approvalCard(ctx, chatId, "images", artefact, `Image · scene`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "image failed";
+      await store.updateArtefact(ctx.db, pending.id, {
+        state: "failed",
+        payload: { promptId: prompt.id, error: message, provider: "mock" },
+      });
+      publishMedia(chatId, {
+        jobId: pending.id,
+        artefactId: pending.id,
+        kind: "image",
+        status: "failed",
+        error: message,
+        sceneId: prompt.sceneId,
+        provider: "mock",
+        model: "",
+      });
+      throw error;
+    }
   }
 }
 
 async function beginClips(ctx: OrchestratorContext, chatId: string, videoId: string): Promise<void> {
   const video = (await store.getVideoRow(ctx.db, videoId))!;
-  const media = createMediaPorts({ MOCK: ctx.mock ? "1" : "0" });
+  const media = createMediaPorts(mediaEnv(ctx));
   const images = (await store.listArtefacts(ctx.db, videoId)).filter(
     (a) => a.kind === "image" && a.state === "approved",
   );
@@ -486,20 +555,48 @@ async function beginClips(ctx: OrchestratorContext, chatId: string, videoId: str
     const scene = image.sceneId
       ? (await store.listScenes(ctx.db, videoId)).find((s) => s.id === image.sceneId)
       : undefined;
+    const pending = await store.insertArtefact(ctx.db, {
+      videoId,
+      sceneId: image.sceneId,
+      kind: "clip",
+      state: "generating",
+      creditCost: artefactCreditCost("clip"),
+      payload: { imageId: image.id },
+    });
+    publishMedia(chatId, {
+      jobId: pending.id,
+      artefactId: pending.id,
+      kind: "clip",
+      status: "generating",
+      percent: 10,
+      sceneId: image.sceneId,
+      provider: "mock",
+      model: "",
+    });
     const generated = await media.clips.generate({
       imageUrl: String(image.payload.url ?? mockAssets.keyframe),
       videoPrompt,
       elementIds: [],
-      durationMs: scene?.durationMs ?? 3000,
+      durationMs: clipDurationMs(scene?.durationMs),
       aspectRatio: video.aspectRatio,
     });
-    const artefact = await store.insertArtefact(ctx.db, {
-      videoId,
-      sceneId: image.sceneId,
-      kind: "clip",
+    const provider = asMediaProvider(generated.provider);
+    const model = generated.model ?? "";
+    const providerLabel = generated.providerLabel ?? (provider === "mock" ? "Mock" : provider);
+    const artefact = await store.updateArtefact(ctx.db, pending.id, {
       state: "awaiting_approval",
-      creditCost: artefactCreditCost("clip"),
-      payload: { url: generated.url, provider: generated.provider, imageId: image.id },
+      payload: { url: generated.url, provider, model, providerLabel, imageId: image.id },
+    });
+    publishMedia(chatId, {
+      jobId: pending.id,
+      artefactId: artefact.id,
+      kind: "clip",
+      status: "done",
+      percent: 100,
+      url: generated.url,
+      sceneId: image.sceneId,
+      provider,
+      model,
     });
     await approvalCard(ctx, chatId, "clips", artefact, `Clip · scene`);
   }
@@ -509,31 +606,61 @@ async function beginAudio(ctx: OrchestratorContext, chatId: string, videoId: str
   const video = (await store.getVideoRow(ctx.db, videoId))!;
   const scenes = await store.listScenes(ctx.db, videoId);
   const cast = await store.listCastMembers(ctx.db, video.brief.castIds);
-  const media = createMediaPorts({ MOCK: ctx.mock ? "1" : "0" });
+  const media = createMediaPorts(mediaEnv(ctx));
   await progress(ctx, chatId, "audio", "Voice lines…", "Voice");
   for (const scene of scenes) {
     const speaker = cast.find((m) => scene.castIds.includes(m.id)) ?? cast[0];
     const voiceId = speaker?.voiceId ?? "deep_storyteller_male";
+    const pending = await store.insertArtefact(ctx.db, {
+      videoId,
+      sceneId: scene.id,
+      kind: "voice",
+      state: "generating",
+      creditCost: artefactCreditCost("voice"),
+      payload: { voiceId, narration: scene.narration },
+    });
+    publishMedia(chatId, {
+      jobId: pending.id,
+      artefactId: pending.id,
+      kind: "voice",
+      status: "generating",
+      percent: 10,
+      sceneId: scene.id,
+      provider: "mock",
+      model: "",
+    });
     const generated = await media.voice.generate({
       text: scene.narration ?? "",
       voiceId,
       language: video.language,
     });
-    const artefact = await store.insertArtefact(ctx.db, {
-      videoId,
-      sceneId: scene.id,
-      kind: "audio",
+    const provider = asMediaProvider(generated.provider);
+    const model = generated.model ?? "";
+    const providerLabel = generated.providerLabel ?? (provider === "elevenlabs" ? "ElevenLabs" : "Mock");
+    const artefact = await store.updateArtefact(ctx.db, pending.id, {
       state: "awaiting_approval",
-      creditCost: artefactCreditCost("audio"),
       payload: {
         url: generated.url,
         durationMs: generated.durationMs,
-        provider: generated.provider,
+        provider,
+        model,
+        providerLabel,
         voiceId,
         narration: scene.narration,
       },
     });
-    await approvalCard(ctx, chatId, "audio", artefact, `Audio · ${scene.title ?? scene.idx}`);
+    publishMedia(chatId, {
+      jobId: pending.id,
+      artefactId: artefact.id,
+      kind: "voice",
+      status: "done",
+      percent: 100,
+      url: generated.url,
+      sceneId: scene.id,
+      provider,
+      model,
+    });
+    await approvalCard(ctx, chatId, "audio", artefact, `Voice · ${scene.title ?? scene.idx}`);
   }
 }
 
@@ -542,12 +669,13 @@ async function beginFinal(ctx: OrchestratorContext, chatId: string, videoId: str
   const scenes = await store.listScenes(ctx.db, videoId);
   const durationMs = scenes.reduce((sum, scene) => sum + (scene.durationMs ?? 0), 0);
   const url = `mock://videos/${videoId}.mp4`;
+  const downloadUrl = publicUrl(process.env, `/v1/videos/${videoId}/download`);
   const artefact = await store.insertArtefact(ctx.db, {
     videoId,
     kind: "final",
     state: "awaiting_approval",
     creditCost: artefactCreditCost("final"),
-    payload: { url, durationMs, captions: true },
+    payload: { url, downloadUrl, durationMs, captions: true },
   });
   await store.updateVideo(ctx.db, videoId, { outputUrl: url });
   await approvalCard(ctx, chatId, "final", artefact, "Final cut");
@@ -983,6 +1111,183 @@ export async function regenerateArtefact(
     balance,
     artefact: updated,
   };
+}
+
+const SCENE_TARGET_KIND = {
+  image: ["image"],
+  clip: ["clip"],
+  voice: ["voice", "audio"],
+} as const;
+
+/** Rebuild one scene's still, clip, or voice line. POST /v1/videos/:id/regenerate. */
+export async function regenerateScene(
+  ctx: OrchestratorContext,
+  input: {
+    videoId: string;
+    userId: string;
+    sceneId: string;
+    target: "image" | "clip" | "voice";
+    feedback?: string;
+  },
+): Promise<ArtefactSummary> {
+  const video = await store.getVideoRow(ctx.db, input.videoId);
+  if (!video) throw new Error("video not found");
+  assertVideoOwner(video, input.userId);
+  const scenes = await store.listScenes(ctx.db, input.videoId);
+  const scene = scenes.find((item) => item.id === input.sceneId);
+  if (!scene) throw new Error("scene not found");
+  const artefacts = await store.listArtefacts(ctx.db, input.videoId);
+  const kinds = new Set<string>(SCENE_TARGET_KIND[input.target]);
+  const current = [...artefacts].reverse().find((item) => item.sceneId === input.sceneId && kinds.has(item.kind));
+  if (!current) throw new Error("scene artefact not found");
+
+  const feedback = input.feedback?.trim();
+  const cost = current.creditCost;
+  const nextVersion = current.version + 1;
+  const balance = await debitRegenerate(ctx.db, {
+    userId: input.userId,
+    videoId: input.videoId,
+    amount: cost,
+    ref: `regen:${current.id}:v${nextVersion}`,
+  });
+  void balance;
+  let updated = await store.updateArtefact(ctx.db, current.id, {
+    state: "generating",
+    version: nextVersion,
+    payload: { ...current.payload, feedback, version: nextVersion, error: undefined },
+  });
+  publishMedia(video.chatId, {
+    jobId: current.id,
+    artefactId: current.id,
+    kind: input.target,
+    status: "generating",
+    percent: 10,
+    sceneId: scene.id,
+    provider: "mock",
+    model: "",
+  });
+
+  try {
+    const media = createMediaPorts(mediaEnv(ctx));
+    const prompt = artefacts.find((item) => item.kind === "prompt" && item.sceneId === scene.id);
+    let generatedUrl = "";
+    let provider: MediaProviderName = "mock";
+    let model = "";
+    let providerLabel = "Mock";
+    if (input.target === "image") {
+      const imagePrompt = `${String(prompt?.payload.imagePrompt ?? current.payload.prompt ?? "")}${feedback ? `\n${feedback}` : ""}`
+        .replace(/<<<[^>]+>>>/g, " ")
+        .trim();
+      const generated = await media.images.generate({
+        prompt: imagePrompt || "scene",
+        elementIds: [],
+        aspectRatio: video.aspectRatio,
+        resolution: video.resolution,
+      });
+      generatedUrl = generated.url;
+      provider = asMediaProvider(generated.provider);
+      model = generated.model ?? "";
+      providerLabel = generated.providerLabel ?? providerLabel;
+    } else if (input.target === "clip") {
+      const image = [...artefacts].reverse().find((item) => item.kind === "image" && item.sceneId === scene.id);
+      const motion = `${String(prompt?.payload.videoPrompt ?? "gentle motion")}${feedback ? `\n${feedback}` : ""}`
+        .replace(/<<<[^>]+>>>/g, " ")
+        .trim();
+      const generated = await media.clips.generate({
+        imageUrl: String(image?.payload.url ?? current.payload.imageUrl ?? mockAssets.keyframe),
+        videoPrompt: motion || "gentle motion",
+        elementIds: [],
+        durationMs: clipDurationMs(scene.durationMs),
+        aspectRatio: video.aspectRatio,
+      });
+      generatedUrl = generated.url;
+      provider = asMediaProvider(generated.provider);
+      model = generated.model ?? "";
+      providerLabel = generated.providerLabel ?? providerLabel;
+    } else {
+      const cast = await store.listCastMembers(ctx.db, scene.castIds);
+      const speaker = cast.find((member) => member.voiceId) ?? cast[0];
+      const voiceId = String(current.payload.voiceId ?? speaker?.voiceId ?? "deep_storyteller_male");
+      const text = feedback || scene.narration || String(current.payload.narration ?? "");
+      const generated = await media.voice.generate({
+        text,
+        voiceId,
+        language: video.language,
+      });
+      generatedUrl = generated.url;
+      provider = asMediaProvider(generated.provider);
+      model = generated.model ?? "";
+      providerLabel = generated.providerLabel ?? (provider === "elevenlabs" ? "ElevenLabs" : "Mock");
+      updated = await store.updateArtefact(ctx.db, current.id, {
+        state: "awaiting_approval",
+        payload: {
+          ...updated.payload,
+          url: generatedUrl,
+          provider,
+          model,
+          providerLabel,
+          voiceId,
+          narration: text,
+          regenerated: true,
+        },
+      });
+      publishMedia(video.chatId, {
+        jobId: current.id,
+        artefactId: current.id,
+        kind: "voice",
+        status: "done",
+        percent: 100,
+        url: generatedUrl,
+        sceneId: scene.id,
+        provider,
+        model,
+      });
+      await patchApprovalCard(ctx, video.chatId, updated);
+      await publishArtefact(video.chatId, updated);
+      return updated;
+    }
+    updated = await store.updateArtefact(ctx.db, current.id, {
+      state: "awaiting_approval",
+      payload: {
+        ...updated.payload,
+        url: generatedUrl,
+        provider,
+        model,
+        providerLabel,
+        regenerated: true,
+      },
+    });
+    publishMedia(video.chatId, {
+      jobId: current.id,
+      artefactId: current.id,
+      kind: input.target,
+      status: "done",
+      percent: 100,
+      url: generatedUrl,
+      sceneId: scene.id,
+      provider,
+      model,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "regen_failed";
+    updated = await store.updateArtefact(ctx.db, current.id, {
+      state: "failed",
+      payload: { ...updated.payload, generationFailed: true, error: message },
+    });
+    publishMedia(video.chatId, {
+      jobId: current.id,
+      artefactId: current.id,
+      kind: input.target,
+      status: "failed",
+      error: message,
+      sceneId: scene.id,
+      provider: "mock",
+      model: "",
+    });
+  }
+  await patchApprovalCard(ctx, video.chatId, updated);
+  await publishArtefact(video.chatId, updated);
+  return updated;
 }
 
 export async function approveAllRemaining(

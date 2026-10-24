@@ -25,30 +25,33 @@ Four ideas stay first-class in the portfolio. A short backlog records earlier de
 
 ## Chotu Studio media ports
 
-Neptune's adapters live in `server/src/media`. They implement `ImageGen`, `ClipGen`, and `VoiceGen` from [`packages/shared/types.ts`](packages/shared/types.ts). `createMediaPorts(env)` returns those ports plus a cast reference adapter. `MOCK=1` completes a job immediately with the same job fields the live adapters use (`jobId`, `provider`, `status`, `result`, `error`, `costCredits`, `idempotencyKey`) and a placeholder file under `server/public/mock/`.
+Adapters live in `server/src/media`. `createMediaPorts(env)` returns `ImageGen`, `ClipGen`, and `VoiceGen`. `MOCK=1` (or a missing key) returns placeholder files under `server/public/mock/` and does not call a provider.
 
-Cast stays REST-only. Higgsfield Reference Elements are not on the public REST API, so `higgsfieldElementId` is `ref:` plus the encoded face-anchor URL. Keyframes call `alibaba/qwen-image-3/edit` with that anchor and the identity text. A scene with no cast calls `alibaba/qwen-image-3/text-to-image`. One character clip calls `bytedance/seedance-2.0/image-to-video` from the approved keyframe. Two or more characters call `bytedance/seedance-2.0/reference-to-video`. `generate_audio` is false because ElevenLabs owns the soundtrack. An MCP Elements adapter can replace `createCastAdapter` later without renaming the field.
+Live images default to OpenAI `gpt-image-2` (`POST /v1/images/generations`, body `model`, `prompt`, `size: 1024x1536`, `n: 1`). The response is `data[0].b64_json`. The server decodes it, center-crops 1024×1536 to 864×1536 (9:16), and serves the PNG at `/media/images/{id}.png`. A cast anchor uses `/v1/images/edits` at the same size, then the same crop. If the OpenAI key is missing or the call fails, images fall back to BytePlus Seedream (`seedream-5-0-260128`).
 
-Voice presets are provisional Hindi library ids (Mini, Chintu, Riya, Narrator). Final lines use `eleven_multilingual_v2`. Cast-gate samples use `eleven_flash_v2_5`. Both go through `/v1/text-to-speech/{voice_id}/with-timestamps`, and the result includes character alignment in milliseconds for captions. Replace the catalogue with `VOICE_PRESETS_JSON` after the voices are confirmed in the ElevenLabs account.
+Live clips are Seedance 2.5 (`dreamina-seedance-2-5-260628`) image-to-video. The first frame is `role: first_frame`. A still stored on this server is sent as `data:image/png;base64,...` so BytePlus does not have to fetch localhost. Do not send `ratio` or `--ratio` with a first frame (400 `TaskTypeConstraint`); the clip follows the image. The body sets `duration`, `resolution` (default `720p`), and `generate_audio: false`. Poll `GET /contents/generations/tasks/{id}` about every 8 seconds until `succeeded`, then read `content.video_url`.
+
+Voice is the ElevenLabs bank in `packages/shared/voicePresets.ts` (`VOICE_PRESETS`, type `VoiceBankPreset`). All eleven lines use `eleven_multilingual_v2`. `VoicePreset` is the older persisted `/v1/voices` row and is not replaced. `VOICE_PRESETS_JSON` still overrides the live catalogue. Narration for a 5 second scene should stay around 15 words. The ffmpeg assembler freezes the last frame (`tpad=stop_mode=clone`) so a short clip lasts as long as the voiceover.
+
+`GET /v1/videos/:id` includes `scenePlan` (`ScenePlan` / `PlannedScene` from the craft-skill plan). `POST /v1/videos/:id/regenerate` takes `{ sceneId, target: image|clip|voice, feedback? }`. A final artefact has `url` and `downloadUrl`. `GET /v1/videos/:id/download` sends `Content-Disposition: attachment`.
 
 `npm run test:media` runs the ports with `MOCK=1`.
 
 | Variable | Role |
 |---|---|
-| `MOCK` | `1` mocks ImageGen, ClipGen, VoiceGen, and the cast adapter. No provider calls. |
+| `MOCK` | `1` mocks ImageGen, ClipGen, VoiceGen, and the cast adapter. |
 | `IMAGE_MOCK`, `CLIP_MOCK`, `VOICE_MOCK`, `CAST_MOCK` | Per-port override. `1` forces mock, `0` forces the live adapter. |
-| `HIGGSFIELD_API_KEY` | Higgsfield REST credential as `KEY_ID:KEY_SECRET`. Server-side only. `HF_CREDENTIALS` or `HF_KEY` are the same shape. `HF_API_KEY_ID` and `HF_API_KEY_SECRET` are the split form. Sent as `Authorization: Key ID:SECRET`. |
+| `OPENAI_API_KEY` | Bearer token for gpt-image-2. Server-side only. |
+| `ARK_API_KEY` | Bearer token for Seedance and Seedream. Server-side only. |
+| `IMAGE_PROVIDER` | `openai` (default), `ark`, or `mock`. |
+| `SEEDREAM_MODEL` | Seedream model id. Default `seedream-5-0-260128`. |
+| `SEEDANCE_MODEL` | Seedance model id. Default `dreamina-seedance-2-5-260628`. |
 | `ELEVENLABS_API_KEY` | ElevenLabs `xi-api-key`. Server-side only. |
-| `VOICE_PRESETS_JSON` | JSON array that replaces the provisional presets. Each item needs `id` and `elevenlabsVoiceId`. |
-| `CLIP_RESOLUTION` | Seedance tier when the clip port has no resolution field. `480p`, `720p` (default), `1080p`, or `4k`. |
-| `PUBLIC_BASE_URL` | Prefix for mock and stored media URLs. |
-| `MEDIA_CONCURRENCY` | Higgsfield submit limit. Default `4`. Polling does not take a slot. |
-| `MEDIA_DIR` | Directory for live voice bytes. Default `server/data/media/voice`. Mock mode does not write it. |
-| `HF_POLL_TIMEOUT_MS` | Stop polling a Higgsfield request after this many milliseconds. Default `180000`. |
-
-Image credit placeholders on the job are 8 for a still, 40 for a clip, 5 for a final line, and 2 for a voice sample. They are not Higgsfield console prices. Mars replaces them with the ledger quote.
-
-The older `server/src/visuals` path still talks to Higgsfield over MCP for Chotu mini. New studio work should use `server/src/media` and the API key.
+| `VOICE_PRESETS_JSON` | JSON array that replaces the voice catalogue. Each item needs `id` and `elevenlabsVoiceId`. |
+| `CLIP_RESOLUTION` | Seedance tier. `480p`, `720p` (default), `1080p`, or `4k`. |
+| `PUBLIC_BASE_URL` | Prefix for stored media and the final download URL. |
+| `MEDIA_ROOT` | Directory for generated images. Default `server/data/media`. |
+| `MEDIA_DIR` | Directory for live voice bytes. Default `server/data/media/voice`. |
 
 ## Saturday primary build
 

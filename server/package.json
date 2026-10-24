@@ -13,7 +13,7 @@
     "test:mock": "tsx src/scripts/smoke-mock.ts",
     "test:creative": "tsx --test src/creative/*.test.ts src/creative/**/*.test.ts",
     "sample:creative": "tsx src/creative/sample.ts",
-    "test:media": "MOCK=1 tsx --test src/media/ports.mock.test.ts src/media/live.test.ts",
+    "test:media": "MOCK=1 tsx --test src/media/ports.mock.test.ts src/media/live.test.ts src/media/providers.test.ts src/routes/scene.test.ts",
     "db:migrate": "tsx src/db/migrate.ts",
     "test:db": "MOCK=1 tsx --test src/db/*.test.ts",
     "test:e2e": "MOCK=1 tsx --test src/scripts/e2e-kids-mock.ts",

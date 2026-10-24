@@ -33,6 +33,8 @@ export type ArtefactKind =
   | 'image'
   | 'clip'
   | 'audio'
+  /** Per-scene voiceover. `audio` remains valid for older rows. */
+  | 'voice'
   | 'final';
 
 export type ArtefactState =
@@ -125,13 +127,31 @@ export type ChatMessage =
   | ProgressMessage
   | VideoMessage;
 
+/** SSE frame while a still, clip, or voice line is in flight. */
+export interface MediaProgressEvent {
+  type: 'media.progress';
+  jobId: string;
+  artefactId: string;
+  kind: 'image' | 'clip' | 'voice';
+  status: 'queued' | 'generating' | 'done' | 'failed';
+  /** 0–100 */
+  percent?: number;
+  url?: string;
+  error?: string;
+  provider: MediaProviderName;
+  model: string;
+  /** Scene this still, clip, or voice line belongs to. */
+  sceneId?: string;
+}
+
 /** SSE event frame (text/event-stream). */
 export type SseEvent =
   | { type: 'message'; message: ChatMessage }
   | { type: 'stage'; videoId: string; stage: Stage }
   | { type: 'artefact'; artefact: ArtefactSummary }
   | { type: 'heartbeat'; ts: string }
-  | { type: 'error'; code: string; message: string };
+  | { type: 'error'; code: string; message: string }
+  | MediaProgressEvent;
 
 // ---------------------------------------------------------------------------
 // Core entities (API shapes)
@@ -233,6 +253,14 @@ export interface ArtefactSummary {
    * The same object is stored on `payload.agentReview`.
    */
   agentReview?: AgentReview;
+  /** Set for image, clip, and voice artefacts. */
+  provider?: MediaProviderName;
+  model?: string;
+  providerLabel?: string;
+  /** Playback URL when the payload has one. Final cuts also set `downloadUrl`. */
+  url?: string;
+  /** Attachment URL. The response sets Content-Disposition: attachment. */
+  downloadUrl?: string;
 }
 
 /** Whole-video script artefact (`kind: 'script'`). */
@@ -258,6 +286,9 @@ export interface CastMember {
   isPreset: boolean;
 }
 
+/** Live media backends. Ken Burns / ffmpeg stay on their own output types. */
+export type MediaProviderName = 'openai' | 'ark' | 'higgsfield' | 'elevenlabs' | 'mock';
+
 export interface VoicePreset {
   id: string;
   elevenlabsVoiceId: string;
@@ -267,6 +298,14 @@ export interface VoicePreset {
   style: number;
   defaultCastName?: string;
   isPreset: true;
+  /** Picker fields. The catalogue const is `VOICE_PRESETS` (`VoiceBankPreset`). */
+  voiceId?: string;
+  lang?: 'hi' | 'hinglish' | 'en-IN';
+  gender?: 'male' | 'female' | 'neutral';
+  age?: 'kid' | 'young' | 'adult' | 'old';
+  role?: string;
+  model?: string;
+  sampleUrl?: string;
 }
 
 export interface CreditPack {
@@ -338,6 +377,17 @@ export interface RegenerateRequest {
   confirm?: boolean;
 }
 
+/** Body for POST /v1/videos/:id/regenerate. Rebuilds one scene's still, clip, or voice line. */
+export interface SceneRegenerateRequest {
+  sceneId: string;
+  target: 'image' | 'clip' | 'voice';
+  feedback?: string;
+}
+
+export interface SceneRegenerateResponse {
+  artefact: ArtefactSummary;
+}
+
 /** POST /v1/artefacts/:id/approve — body may be empty. SSE still broadcasts. */
 export interface ApproveArtefactResponse {
   artefact: ArtefactSummary;
@@ -392,6 +442,8 @@ export interface GetVideoResponse {
   video: VideoSummary;
   scenes: Scene[];
   artefacts: ArtefactSummary[];
+  /** Claude scene plan from #41 (`PlannedScene`). Present once the script artefact stores it. */
+  scenePlan?: ScenePlan;
 }
 
 export interface ListPacksResponse {
@@ -491,8 +543,9 @@ export interface ImageGenInput {
 
 export interface ImageGenOutput {
   url: string;
-  provider: 'higgsfield' | 'mock';
+  provider: MediaProviderName;
   model?: string;
+  providerLabel?: string;
 }
 
 export interface ImageGen {
@@ -509,8 +562,9 @@ export interface ClipGenInput {
 
 export interface ClipGenOutput {
   url: string;
-  provider: 'higgsfield' | 'mock' | 'kenburns';
+  provider: MediaProviderName | 'kenburns';
   model?: string;
+  providerLabel?: string;
 }
 
 export interface ClipGen {
@@ -527,6 +581,8 @@ export interface VoiceGenOutput {
   url: string;
   durationMs: number;
   provider: 'elevenlabs' | 'mock';
+  model?: string;
+  providerLabel?: string;
 }
 
 export interface VoiceGen {
@@ -638,6 +694,7 @@ export const ApiPaths = {
   cast: '/v1/cast',
   voices: '/v1/voices',
   video: (id: string) => `/v1/videos/${id}`,
+  videoRegenerate: (id: string) => `/v1/videos/${id}/regenerate`,
   videoDownload: (id: string) => `/v1/videos/${id}/download`,
   packs: '/v1/packs',
   packsCheckout: '/v1/packs/checkout',
@@ -645,3 +702,6 @@ export const ApiPaths = {
   admin: '/admin',
   adminExport: '/admin/export.csv',
 } as const;
+
+export type { VoiceBankPreset } from './voicePresets.ts';
+export { VOICE_PRESETS } from './voicePresets.ts';

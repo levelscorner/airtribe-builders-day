@@ -1,4 +1,5 @@
 import type { VoicePreset } from "../../../../packages/shared/types.ts";
+import { VOICE_PRESETS, type VoiceBankPreset } from "../../../../packages/shared/voicePresets.ts";
 import { MediaInputError } from "../errors.js";
 import type { EnvLike } from "../flags.js";
 
@@ -15,65 +16,43 @@ const DEFAULT_SETTINGS = {
   useSpeakerBoost: true,
 } as const;
 
-/**
- * Provisional Hindi library voices. Confirm in the ElevenLabs account before
- * a live demo (library voices must be added). Replace the whole list with
- * VOICE_PRESETS_JSON.
- */
-export const DEFAULT_VOICE_PRESETS: StudioVoicePreset[] = [
-  {
-    id: "kid_female",
-    key: "kid_female",
-    elevenlabsVoiceId: "T536A2SFCG4AEDVTRucQ",
-    label: "Mini",
-    languageHint: "hi",
+/** Fixture cast voiceIds from before the shared bank. */
+const LEGACY_VOICE_IDS: Record<string, string> = {
+  playful_young_male: "hi-male-young",
+  warm_kid_female: "hi-female-young",
+  confident_presenter_female: "hi-female-young",
+  deep_storyteller_male: "narrator-male",
+  kid_female: "hi-female-young",
+  kid_male: "hi-male-young",
+  presenter_female: "hi-female-young",
+  narrator_male: "narrator-male",
+};
+
+function fromBank(preset: VoiceBankPreset): StudioVoicePreset {
+  const expressive = preset.age === "kid" || preset.age === "young" || preset.role === "cartoon";
+  return {
+    id: preset.id,
+    key: preset.id,
+    elevenlabsVoiceId: preset.voiceId,
+    voiceId: preset.voiceId,
+    label: preset.label,
+    languageHint: preset.lang,
+    lang: preset.lang,
+    gender: preset.gender,
+    age: preset.age,
+    role: preset.role,
+    model: preset.model,
+    sampleUrl: preset.sampleUrl,
     stability: 0.5,
-    style: 0.3,
+    style: expressive ? 0.3 : 0.15,
     similarityBoost: 0.75,
     useSpeakerBoost: true,
-    defaultCastName: "Mini",
     isPreset: true,
-  },
-  {
-    id: "kid_male",
-    key: "kid_male",
-    elevenlabsVoiceId: "srEfhy4AF67Mw9SpTVFd",
-    label: "Chintu",
-    languageHint: "hi",
-    stability: 0.5,
-    style: 0.3,
-    similarityBoost: 0.75,
-    useSpeakerBoost: true,
-    defaultCastName: "Chintu",
-    isPreset: true,
-  },
-  {
-    id: "presenter_female",
-    key: "presenter_female",
-    elevenlabsVoiceId: "mActWQg9kibLro6Z2ouY",
-    label: "Riya",
-    languageHint: "hi",
-    stability: 0.5,
-    style: 0.15,
-    similarityBoost: 0.75,
-    useSpeakerBoost: true,
-    defaultCastName: "Riya",
-    isPreset: true,
-  },
-  {
-    id: "narrator_male",
-    key: "narrator_male",
-    elevenlabsVoiceId: "qsz5tTEjPvsiIJZIpM8S",
-    label: "Narrator",
-    languageHint: "hi",
-    stability: 0.5,
-    style: 0.15,
-    similarityBoost: 0.75,
-    useSpeakerBoost: true,
-    defaultCastName: "Narrator",
-    isPreset: true,
-  },
-];
+  };
+}
+
+/** ElevenLabs catalogue. Replace the whole list with VOICE_PRESETS_JSON. */
+export const DEFAULT_VOICE_PRESETS: StudioVoicePreset[] = VOICE_PRESETS.map(fromBank);
 
 function num(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -121,7 +100,8 @@ export function loadVoicePresets(env: EnvLike): StudioVoicePreset[] {
 }
 
 export function findPreset(presets: readonly StudioVoicePreset[], voiceId: string): StudioVoicePreset | undefined {
-  return presets.find((preset) => preset.elevenlabsVoiceId === voiceId || preset.id === voiceId);
+  const key = LEGACY_VOICE_IDS[voiceId] ?? voiceId;
+  return presets.find((preset) => preset.elevenlabsVoiceId === key || preset.id === key || preset.elevenlabsVoiceId === voiceId || preset.id === voiceId);
 }
 
 export { DEFAULT_SETTINGS };
