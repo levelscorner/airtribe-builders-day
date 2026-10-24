@@ -48,7 +48,7 @@ test("mock checkout stays pending until the simulated capture credits the ledger
     const ledger = createMockLedger();
     const userId = crypto.randomUUID();
     ledger.seedUser(userId, 0);
-    const payments = createPayments({ mock: false, ledger, publicBaseUrl: "http://localhost:8787" });
+    const payments = createPayments({ PAYMENTS_MODE: "mock", mock: false, ledger, publicBaseUrl: "http://localhost:8787" });
     assert.equal(payments.mode, "mock");
     const packs = await payments.listPacks();
     assert.equal(packs[0]?.id, "starter");
@@ -118,7 +118,7 @@ test("mock checkout stays pending until the simulated capture credits the ledger
 test("PINE_LABS_MOCK off without credentials does not build the Plural client", () => {
   const ledger = createMockLedger();
   assert.throws(
-    () => createPayments({ mock: false, ledger, PINE_LABS_MOCK: "0" }),
+    () => createPayments({ PAYMENTS_MODE: "pinelabs", mock: false, ledger, PINE_LABS_MOCK: "0" }),
     (error: unknown) => error instanceof PaymentError && error.code === "missing_secret",
   );
 });
@@ -133,6 +133,7 @@ test("MOCK=1 keeps the fake link even when Pine Labs credentials are set", async
   const userId = crypto.randomUUID();
   ledger.seedUser(userId, 0);
   const payments = createPayments({
+    PAYMENTS_MODE: "pinelabs",
     mock: true,
     ledger,
     PINE_LABS_MOCK: "0",
@@ -155,6 +156,7 @@ test("mock pay credits the Postgres ledger once", async () => {
     const ledger = createPostgresLedger(pg.db);
     const userId = await seedUser(pg.db, 0);
     const payments = createPayments({
+      PAYMENTS_MODE: "pinelabs",
       mock: false,
       ledger,
       db: pg.db,
@@ -224,6 +226,7 @@ test("UAT webhook and callback credit the ledger once", async () => {
     };
 
     const payments = createPayments({
+      PAYMENTS_MODE: "pinelabs",
       mock: false,
       PINE_LABS_MOCK: "0",
       ledger,
@@ -344,6 +347,7 @@ test("checkout route uses X-User-Id and the webhook route verifies headers", asy
     };
     const now = new Date();
     const payments = createPayments({
+      PAYMENTS_MODE: "pinelabs",
       mock: false,
       PINE_LABS_MOCK: "0",
       ledger,
@@ -428,7 +432,7 @@ test("mock pay page posts a simulated capture and a replay grants nothing", asyn
   const ledger = createMockLedger();
   const userId = crypto.randomUUID();
   ledger.seedUser(userId, 0);
-  const payments = createPayments({ mock: false, ledger, publicBaseUrl: "http://127.0.0.1:8787" });
+  const payments = createPayments({ PAYMENTS_MODE: "mock", mock: false, ledger, publicBaseUrl: "http://127.0.0.1:8787" });
   const app = express();
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
@@ -456,6 +460,7 @@ test("mock pay page posts a simulated capture and a replay grants nothing", asyn
     const page = await fetch(`${base}${pageUrl.pathname}${pageUrl.search}`);
     assert.equal(page.status, 200);
     const html = await page.text();
+    assert.match(html, /width=device-width, initial-scale=1/);
     assert.match(html, /Pay \(simulated\)/);
     assert.match(html, new RegExp(checkout.paymentId));
     const paid = await fetch(`${base}/v1/packs/mock-pay`, {

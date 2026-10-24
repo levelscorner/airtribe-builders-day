@@ -1,8 +1,10 @@
 export interface DeployConfig {
   port: number;
   mock: boolean;
-  /** Fake Pine Labs link. Defaults on unless PINE_LABS_MOCK is explicitly off. */
+  /** Fake Pine Labs link. Defaults on unless PINE_LABS_MOCK is explicitly off. Used only when paymentsMode is pinelabs. */
   pineLabsMock: boolean;
+  /** qr (default) | pinelabs | mock. Pine Labs stays dormant unless this is pinelabs. */
+  paymentsMode: "qr" | "pinelabs" | "mock";
   databaseUrl: string;
   publicBaseUrl: string;
   pineMerchantId: string;
@@ -20,6 +22,7 @@ export function readDeployConfig(env: NodeJS.ProcessEnv): DeployConfig {
     port: Number.isFinite(port) && port >= 0 ? port : 8787,
     mock: env.MOCK === "1",
     pineLabsMock: pineLabsMockFrom(env.PINE_LABS_MOCK),
+    paymentsMode: paymentsModeFromEnv(env.PAYMENTS_MODE),
     databaseUrl: env.DATABASE_URL?.trim() ?? "",
     publicBaseUrl: (env.PUBLIC_BASE_URL || `http://localhost:${env.PORT || 8787}`).replace(/\/$/, ""),
     pineMerchantId: env.PINE_LABS_MERCHANT_ID?.trim() ?? "",
@@ -37,6 +40,7 @@ export function deployLogLine(config: DeployConfig, database: boolean): string {
     `mock=${config.mock}`,
     `db=${database}`,
     `pineMock=${config.pineLabsMock}`,
+    `pay=${config.paymentsMode}`,
     `pine=${Boolean(config.pineMerchantId && config.pineApiKey && config.pineWebhookSecret)}`,
     `render=${Boolean(config.renderApiKey)}`,
     `starterCredits=${config.starterCredits}`,
@@ -44,6 +48,13 @@ export function deployLogLine(config: DeployConfig, database: boolean): string {
 }
 
 const PINE_MOCK_OFF = new Set(["0", "false", "off", "no"]);
+
+function paymentsModeFromEnv(value: string | undefined): "qr" | "pinelabs" | "mock" {
+  const raw = value?.trim().toLowerCase();
+  if (raw === "pinelabs" || raw === "pine_labs" || raw === "pine") return "pinelabs";
+  if (raw === "mock") return "mock";
+  return "qr";
+}
 
 function pineLabsMockFrom(value: string | undefined): boolean {
   if (value === undefined || value.trim() === "") return true;

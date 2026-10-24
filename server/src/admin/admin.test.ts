@@ -34,6 +34,7 @@ test("deploy config reads env names and the log line hides secrets", () => {
   const line = deployLogLine(config, true);
   assert.match(line, /mock=true/);
   assert.match(line, /pineMock=true/);
+  assert.match(line, /pay=qr/);
   assert.match(line, /pine=true/);
   assert.match(line, /starterCredits=40/);
   assert.equal(line.includes("super-secret"), false);
@@ -52,6 +53,7 @@ test(".env.example documents the contract variables and the start command", asyn
     "ANTHROPIC_API_KEY",
     "CLAUDE_MODEL",
     "LLM_PROVIDER",
+    "PAYMENTS_MODE",
     "PINE_LABS_MOCK",
     "PINE_LABS_MERCHANT_ID",
     "PINE_LABS_API_KEY",
@@ -72,6 +74,7 @@ test(".env.example documents the contract variables and the start command", asyn
 test("checkout stays on the fake Pine Labs link until PINE_LABS_MOCK is off", async () => {
   const app = await createApp({
     env: {
+      PAYMENTS_MODE: "mock",
       PORT: "0",
       PUBLIC_BASE_URL: "http://127.0.0.1:9",
       PINE_LABS_MERCHANT_ID: "merchant",
@@ -114,7 +117,7 @@ test("checkout stays on the fake Pine Labs link until PINE_LABS_MOCK is off", as
   }
 
   const liveOff = await createApp({
-    env: { PINE_LABS_MOCK: "0", PORT: "0", PUBLIC_BASE_URL: "http://127.0.0.1:9" },
+    env: { PAYMENTS_MODE: "pinelabs", PINE_LABS_MOCK: "0", PORT: "0", PUBLIC_BASE_URL: "http://127.0.0.1:9" },
   });
   const offBase = await listen(liveOff);
   try {
@@ -148,7 +151,7 @@ test("admin HTML and CSV come from the events table", async () => {
     await writeFile(join(workDir, videoId, "final.mp4"), "fake-mp4");
 
     const app = await createApp({
-      env: { MOCK: "1", PORT: "0", PUBLIC_BASE_URL: "http://127.0.0.1:9" },
+      env: { PAYMENTS_MODE: "mock", MOCK: "1", PORT: "0", PUBLIC_BASE_URL: "http://127.0.0.1:9" },
       db: pg.db,
       workDir,
     });
@@ -175,6 +178,7 @@ test("admin HTML and CSV come from the events table", async () => {
       const page = await fetch(`${base}/admin`);
       const html = await page.text();
       assert.equal(page.status, 200);
+      assert.match(html, /width=device-width, initial-scale=1/);
       assert.match(html, /render_done/);
       assert.match(html, /payment/);
       assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
