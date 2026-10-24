@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.expo/
+.expo-shared/
+web-build/
+*.log
+.env
+server/data/
+server/.env
+.DS_Store
+*.tsbuildinfo
+app/.expo/
+coverage/
