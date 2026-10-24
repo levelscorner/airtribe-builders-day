@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { buildSeedreamBody } from "./ark/request.js";
 import { lockFaceAnchor } from "./cast/lock.js";
 import { createCastAdapter, elementIdForAnchor } from "./cast/reference.js";
 import { buildVoiceRequest, VoiceModels } from "./elevenlabs/request.js";
@@ -12,6 +15,7 @@ import { createImageGen } from "./higgsfield/image-gen.js";
 import { createMediaPorts } from "./index.js";
 import type { MediaJob } from "./job.js";
 import { mockAssetDir, mockAssets } from "./placeholders.js";
+import { remoteHttpAnchors, usableAnchorUrl } from "./openai/images.js";
 import { loadVoicePresets } from "./elevenlabs/presets.js";
 
 const JOB_STATUSES = ["queued", "in_progress", "completed", "failed", "nsfw", "canceled"];
@@ -410,4 +414,64 @@ test("per-module mock flags override MOCK", () => {
     if (previous === undefined) delete process.env.MOCK;
     else process.env.MOCK = previous;
   }
+});
+
+test("Seedream and Higgsfield keep http anchors and leave local stills to OpenAI", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "chotu-anchor-"));
+  await mkdir(join(dir, "images"), { recursive: true });
+  await writeFile(join(dir, "images", "face.png"), "png");
+  const env = { MEDIA_ROOT: dir };
+  const local = "/media/images/face.png";
+  assert.equal(usableAnchorUrl(env, local), local);
+  assert.equal(usableAnchorUrl(env, "data:image/png;base64,aaaa"), "data:image/png;base64,aaaa");
+  const anchors = [local, "data:image/png;base64,aaaa", "https://cdn.example/mini.png", "el_chintu"];
+  assert.deepEqual(remoteHttpAnchors(env, anchors), ["https://cdn.example/mini.png"]);
+  const body = buildSeedreamBody(
+    { prompt: "scene", elementIds: [], aspectRatio: "9:16", resolution: "720p" },
+    { prompt: "scene", anchorUrls: anchors, elementIds: [], unresolvedIds: [] },
+    env,
+  );
+  assert.deepEqual(body.image, ["https://cdn.example/mini.png"]);
+  const textOnly = buildSeedreamBody(
+    { prompt: "scene", elementIds: [], aspectRatio: "9:16", resolution: "720p" },
+    { prompt: "scene", anchorUrls: [local, "data:image/png;base64,aaaa"], elementIds: [], unresolvedIds: [] },
+    env,
+  );
+  assert.equal("image" in textOnly, false);
+
+  const cast = createCastAdapter({ CAST_MOCK: "0" });
+  const ref = await cast.createReference({
+    castId: "mini",
+    name: "Mini",
+    identityText: "curious girl",
+    anchorUrl: local,
+  });
+  const httpsRef = await cast.createReference({
+    castId: "chintu",
+    name: "Chintu",
+    identityText: "cartoon boy",
+    anchorUrl: "https://cdn.example/chintu.png",
+  });
+  let sent: unknown;
+  const images = createImageGen({ IMAGE_MOCK: "0" }, {
+    cast,
+    higgsfield: {
+      async generate(_endpoint: string, body: Record<string, unknown>) {
+        sent = body;
+        return { request_id: "job", status: "completed", images: [{ url: "https://cdn.example/out.png" }] };
+      },
+      async upload() {
+        return "https://cdn.example/upload.png";
+      },
+    } as never,
+  });
+  const generated = await images.generate({
+    prompt: "scene",
+    elementIds: [ref.higgsfieldElementId, httpsRef.higgsfieldElementId],
+    aspectRatio: "9:16",
+    resolution: "720p",
+  });
+  assert.equal(generated.url, "https://cdn.example/out.png");
+  const payload = sent as { image_urls?: string[] };
+  assert.deepEqual(payload.image_urls, ["https://cdn.example/chintu.png"]);
 });

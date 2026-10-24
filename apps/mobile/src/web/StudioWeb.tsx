@@ -1393,6 +1393,9 @@ export function WebConversation({
     (a) => a.state === "awaiting_approval",
   );
   const activity = chat.messages.filter((m) => m.kind === "progress");
+  const stepError = chat.artefacts.find(
+    (item) => item.state === "failed" && str(item.payload.error),
+  );
   const [arriving] = useState(
     () => sessionStorage.getItem("chotu-arriving") === chatId,
   );
@@ -1930,16 +1933,22 @@ export function WebConversation({
                   </button>
                 </section>
               )}
-              {chat.busy && (
-                <p className="thinking" role="status">
-                  <LoaderCircle className="spin" size={16} />
-                  {revision
-                    ? "Making those changes…"
-                    : activity.length &&
-                        activity[activity.length - 1]?.kind === "progress"
-                      ? (activity[activity.length - 1] as { text: string }).text
-                      : label[chat.stage]}
+              {chat.busy && stepError ? (
+                <p className="error-note" role="alert">
+                  {generationError(stepError.payload.error)}
                 </p>
+              ) : (
+                chat.busy && (
+                  <p className="thinking" role="status">
+                    <LoaderCircle className="spin" size={16} />
+                    {revision
+                      ? "Making those changes…"
+                      : activity.length &&
+                          activity[activity.length - 1]?.kind === "progress"
+                        ? (activity[activity.length - 1] as { text: string }).text
+                        : label[chat.stage]}
+                  </p>
+                )
               )}
               {activity.length > 0 && (
                 <details className="activity">

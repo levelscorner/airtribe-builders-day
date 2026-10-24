@@ -70,5 +70,5 @@ export interface ClipGenDeps {
 export function createClipGen(env: EnvLike = process.env, deps: ClipGenDeps = {}): ClipGenPort {
   const cast = deps.cast ?? createCastAdapter(env);
   if (moduleMock(env, "CLIP_MOCK")) return new MockClipGen(env, cast);
-  return new LiveClipGen(env.CLIP_RESOLUTION, cast, deps.higgsfield ?? createHiggsfieldClient(env));
+  return new LiveClipGen(env, cast, deps.higgsfield ?? createHiggsfieldClient(env));
 }
