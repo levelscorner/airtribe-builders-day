@@ -7,8 +7,7 @@ import type {
   RegeneratePreviewResponse,
   Stage,
 } from "@chotu/shared";
-import { getStudioClient } from "../api";
-import { StudioMockError } from "../mock-studio";
+import { getStudioClient, StudioHttpError, StudioMockError } from "../api";
 
 export type ChatLoadStatus = "loading" | "ready" | "error";
 
@@ -17,6 +16,7 @@ const STATE_RANK: Record<ArtefactState, number> = {
   awaiting_approval: 1,
   approved: 2,
   rejected: 2,
+  failed: 2,
   generating: 3,
 };
 
@@ -233,7 +233,12 @@ export function useChatStream(chatId: string) {
     try {
       await work();
     } catch (err) {
-      if (err instanceof StudioMockError && err.code === "bad_state") return;
+      if (
+        (err instanceof StudioMockError || err instanceof StudioHttpError) &&
+        err.code === "bad_state"
+      ) {
+        return;
+      }
       setError(err instanceof Error ? err.message : "Nahi ho paya.");
     } finally {
       locks.current.delete(key);
@@ -307,7 +312,7 @@ export function useChatStream(chatId: string) {
     async (artefactId: string): Promise<RegeneratePreviewResponse> => {
       const result = await client.regenerateArtefact(artefactId, 0);
       if (!("canAfford" in result)) {
-        throw new StudioMockError("preview", "Cost abhi nahi mili.");
+        throw new StudioHttpError("preview", "Cost abhi nahi mili.");
       }
       return result;
     },
@@ -359,10 +364,20 @@ export function useChatStream(chatId: string) {
     [client, run, writeArtefact],
   );
 
-  const awaitingCount = useMemo(
-    () => Object.values(artefacts).filter((item) => item.state === "awaiting_approval").length,
-    [artefacts],
-  );
+  const awaitingCount = useMemo(() => {
+    const ids = new Set(
+      Object.values(artefacts)
+        .filter((item) => item.state === "awaiting_approval")
+        .map((item) => item.id),
+    );
+    // Approval cards can arrive over SSE before the artefact map hydrates.
+    for (const message of messages) {
+      if (message.kind === "approval" && message.state === "awaiting_approval") {
+        ids.add(message.artefactId);
+      }
+    }
+    return ids.size;
+  }, [artefacts, messages]);
 
   const thinking = useMemo(() => {
     const generating = Object.values(artefacts).some((item) => item.state === "generating");

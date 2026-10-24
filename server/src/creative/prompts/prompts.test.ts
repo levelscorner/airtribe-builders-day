@@ -110,3 +110,30 @@ test("live PromptGen does not copy skill text into the prompt", async () => {
   assert.ok(prompts.imagePrompt.includes(riya.identityText));
   assert.ok(prompts.imagePrompt.includes("<<<el_riya>>>"));
 });
+
+test("prompt regenerate feedback reaches the mock and the model request", async () => {
+  const cast = getPresets(["preset_chintu"]);
+  const member = cast[0];
+  assert.ok(member);
+  const input: PromptGenInput = {
+    videoId: "video_kids",
+    brief: { topic: "rain", genre: "kids", aspectRatio: "9:16" },
+    cast,
+    scene: scene({ idx: 0, castIds: [member.id], narration: "Rain falls." }),
+    feedback: "use a wider camera angle",
+  };
+  const mock = await createPromptGen({ mock: true }).generate(input);
+  assert.match(mock.imagePrompt, /wider camera angle/);
+  assert.match(mock.videoPrompt, /wider camera angle/);
+  let prompt = "";
+  await createPromptGen({
+    mock: false,
+    llmApiKey: "",
+    complete: async (call: CompleteRequest) => {
+      prompt = call.prompt;
+      return mockPrompts({ ...input, feedback: undefined });
+    },
+  }).generate(input);
+  assert.match(prompt, /wider camera angle/);
+  assert.match(prompt, /Apply this change|feedback/);
+});
