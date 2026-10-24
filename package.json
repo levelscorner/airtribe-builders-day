@@ -10,6 +10,7 @@
     "app:web": "npm --prefix app run web",
     "typecheck": "npm --prefix server run typecheck && npm --prefix app run typecheck",
     "lint": "npm --prefix server run lint && npm --prefix app run lint",
+    "test": "npm --prefix server test",
     "test:mock": "npm --prefix server run test:mock",
     "install:all": "npm --prefix server install && npm --prefix app install"
   }
