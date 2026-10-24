@@ -26,6 +26,7 @@ export function useWebChat(chatId: string) {
   const [artefacts, setArtefacts] = useState<ArtefactSummary[]>([]);
   const [stage, setStage] = useState<Stage>("brief");
   const [credits, setCredits] = useState<number | null>(null);
+  const [creditsEnabled, setCreditsEnabled] = useState(false);
   const [error, setError] = useState("");
   const [sessionNotice, setSessionNotice] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -84,6 +85,7 @@ export function useWebChat(chatId: string) {
           showSessionNotice();
           return;
         }
+        if (/live updates ruk gayi/i.test(event.message)) return;
         setError(event.message);
       }
     });
@@ -116,6 +118,7 @@ export function useWebChat(chatId: string) {
         rememberBrowserSession();
         setSessionNotice(false);
         setCredits(meOutcome.me.creditBalance);
+        setCreditsEnabled(meOutcome.me.creditsEnabled === true);
       } else if (isMissingSession(meOutcome.error)) {
         showSessionNotice();
       }
@@ -152,6 +155,7 @@ export function useWebChat(chatId: string) {
         rememberBrowserSession();
         setSessionNotice(false);
         setCredits(me.creditBalance);
+        setCreditsEnabled(me.creditsEnabled === true);
       } catch (error) {
         if (!isMissingSession(error)) throw error;
         showSessionNotice();
@@ -182,6 +186,7 @@ export function useWebChat(chatId: string) {
     artefacts,
     stage,
     credits,
+    creditsEnabled,
     error,
     setError,
     sessionNotice,

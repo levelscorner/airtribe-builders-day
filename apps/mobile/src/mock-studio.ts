@@ -1027,6 +1027,7 @@ export function createMockStudio(options?: {
         displayName: name,
         phoneOrEmail: email,
         creditBalance: starterCredits,
+        creditsEnabled: false,
         createdAt: now(),
       };
       return user;

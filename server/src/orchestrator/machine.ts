@@ -43,6 +43,7 @@ import {
 import type { IntakeAnswer } from "../creative/index.js";
 import { claudeIntakeEnabled, claudeOpeningBrief, claudeParseFreeText, claudeQuestion } from "../llm/intake.js";
 import { PROMPT_JSON_HINT, SCENE_PLAN_HINT, SCRIPT_JSON_HINT, creativeGenEnv } from "../llm/wire.js";
+import { creditsEnabled } from "../credits/flag.js";
 import { artefactCreditCost, clipChargeAfterAttempt, debitRegenerate } from "../credits/stub.js";
 import type { SqlClient } from "../db/client.js";
 import { sceneCastReference, ensureCharacterSheet } from "../media/cast/sheet.js";
@@ -1757,12 +1758,13 @@ export async function regenerateArtefact(
     throw new Error(
       "This review is already complete. Refresh to see the current step.",
     );
+  const charging = creditsEnabled();
   if (!input.confirm) {
     return {
       artefactId: artefact.id,
       creditCost: cost,
       balance: user.creditBalance,
-      canAfford: user.creditBalance >= cost,
+      canAfford: !charging || user.creditBalance >= cost,
     };
   }
   if (
@@ -1835,7 +1837,7 @@ export async function regenerateArtefact(
   const regenRef = `regen:${artefact.id}:v${nextVersion}`;
   let charged = 0;
   let balance = user.creditBalance;
-  if (!clipRetry) {
+  if (charging && !clipRetry) {
     balance = await debitRegenerate(ctx.db, {
       userId: input.userId,
       videoId: artefact.videoId,
@@ -1860,7 +1862,7 @@ export async function regenerateArtefact(
     ctx,
     video.chatId,
     video.stage,
-    `Dobara bana rahe hain · ${cost} credits.`,
+    charging ? `Dobara bana rahe hain · ${cost} credits.` : "Dobara bana rahe hain.",
     "Regen",
   );
 
@@ -2090,7 +2092,7 @@ export async function regenerateScene(
   const cost = clipRetry ? artefactCreditCost("clip") : current.creditCost;
   const nextVersion = current.version + 1;
   const regenRef = `regen:${current.id}:v${nextVersion}`;
-  if (!clipRetry) {
+  if (creditsEnabled() && !clipRetry) {
     await debitRegenerate(ctx.db, {
       userId: input.userId,
       videoId: input.videoId,

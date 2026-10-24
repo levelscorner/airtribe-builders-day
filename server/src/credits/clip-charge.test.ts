@@ -28,6 +28,7 @@ test("a failed clip is free and a later success is charged once", async () => {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     ARK_API_KEY: process.env.ARK_API_KEY,
     OPENAI_API_BASE: process.env.OPENAI_API_BASE,
+    CREDITS_ENABLED: process.env.CREDITS_ENABLED,
   };
   const user = await store.insertUser(db, { displayName: "Clip", phoneOrEmail: "clip-charge@example.com" });
   await grantSignupCredits(db, {
@@ -65,6 +66,7 @@ test("a failed clip is free and a later success is charged once", async () => {
   });
 
   try {
+    process.env.CREDITS_ENABLED = "1";
     delete process.env.OPENAI_API_KEY;
     // A missing ARK key stays on the mock clip port and succeeds. A set key
     // with a non-http still fails in seedanceFirstFrame before any network call.

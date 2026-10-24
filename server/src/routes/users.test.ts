@@ -16,6 +16,7 @@ const savedAdmins = process.env.ADMIN_EMAILS;
 before(async () => {
   delete process.env.DEMO_EMAIL_LOGIN;
   delete process.env.ADMIN_EMAILS;
+  delete process.env.CREDITS_ENABLED;
   await resetDbForTests();
   const started = await startServer({ listen: false });
   app = started.app;
@@ -40,6 +41,7 @@ test("without DEMO_EMAIL_LOGIN an existing email stays 409 and does not sign in"
     .send({ displayName: "Asha", phoneOrEmail: "asha-closed@example.com" })
     .expect(201);
   assert.equal(created.body.creditBalance, store.STARTER_CREDITS);
+  assert.equal(created.body.creditsEnabled, false);
 
   const returning = request.agent(app);
   const blocked = await returning
@@ -64,6 +66,7 @@ test("DEMO_EMAIL_LOGIN=1 signs in an existing email and still refuses admin emai
     .post("/v1/users")
     .send({ displayName: "Asha", phoneOrEmail: "asha-return@example.com" })
     .expect(201);
+  assert.equal(created.body.creditsEnabled, false);
 
   const returning = request.agent(app);
   const signedIn = await returning
@@ -74,8 +77,10 @@ test("DEMO_EMAIL_LOGIN=1 signs in an existing email and still refuses admin emai
   assert.equal(signedIn.body.displayName, "Asha");
   assert.equal(signedIn.body.phoneOrEmail, "asha-return@example.com");
   assert.equal(signedIn.body.creditBalance, store.STARTER_CREDITS);
+  assert.equal(signedIn.body.creditsEnabled, false);
   const me = await returning.get("/v1/me").expect(200);
   assert.equal(me.body.id, created.body.id);
+  assert.equal(me.body.creditsEnabled, false);
 
   const admin = await request(app)
     .post("/v1/users")

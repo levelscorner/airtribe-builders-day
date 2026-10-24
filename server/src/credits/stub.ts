@@ -4,6 +4,7 @@
  */
 import type { ArtefactKind, Credits, CreditQuote } from "@chotu/shared";
 import type { SqlClient } from "../db/client.js";
+import { creditsEnabled } from "./flag.js";
 
 const COST: Record<string, number> = {
   video_max: 60,
@@ -54,6 +55,7 @@ export function createCreditsStub(db: SqlClient): Credits {
     },
 
     async reserve(input) {
+      if (!creditsEnabled()) return { reserved: input.amount };
       return runTxn(db, async (tx) => {
         const user = await tx.query<{ credit_balance: number }>(
           db.memory
@@ -155,6 +157,13 @@ export async function debitRegenerate(
   db: SqlClient,
   input: { userId: string; videoId: string; amount: number; ref: string },
 ): Promise<number> {
+  if (!creditsEnabled()) {
+    const user = await db.query<{ credit_balance: number }>(
+      "SELECT credit_balance FROM users WHERE id = $1",
+      [input.userId],
+    );
+    return Number(user.rows[0]?.credit_balance ?? 0);
+  }
   return runTxn(db, async (tx) => {
     const user = await tx.query<{ credit_balance: number }>(
       db.memory

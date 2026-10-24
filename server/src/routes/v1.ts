@@ -10,7 +10,9 @@ import type {
   RejectArtefactRequest,
   RegenerateRequest,
   SceneRegenerateRequest,
+  User,
 } from "@chotu/shared";
+import { creditsEnabled } from "../credits/flag.js";
 import { grantSignupCredits } from "../credits/stub.js";
 import type { SqlClient } from "../db/client.js";
 import { chatBus } from "../orchestrator/bus.js";
@@ -61,7 +63,7 @@ async function signInExistingEmail(
   const existing = await store.findUserByContact(db, phoneOrEmail);
   if (!existing || isAdminContact(existing.phoneOrEmail)) return false;
   bindSessionUser(req, existing.id);
-  res.status(200).json(existing);
+  res.status(200).json(presentUser(existing));
   return true;
 }
 
@@ -81,6 +83,10 @@ export type V1Deps = {
   /** Default true: generation keeps running when the client disconnects. */
   detachStageWork?: boolean;
 };
+
+function presentUser(user: User): User {
+  return { ...user, creditsEnabled: creditsEnabled() };
+}
 
 function writeSse(res: Response, frame: { id?: string; event: unknown }): void {
   if (frame.id) res.write(`id: ${frame.id}\n`);
@@ -117,7 +123,7 @@ export function createV1Router(deps: V1Deps): Router {
       await store.logEvent(deps.db, { userId: user.id, kind: "signup", payload: {} });
       bindSessionUser(req, user.id);
       const refreshed = (await store.getUser(deps.db, user.id))!;
-      res.status(201).json(refreshed);
+      res.status(201).json(presentUser(refreshed));
     } catch (error) {
       const message = error instanceof Error ? error.message : "";
       const duplicate = (error as { code?: string })?.code === "23505" || /duplicate key/i.test(message);
@@ -138,7 +144,7 @@ export function createV1Router(deps: V1Deps): Router {
       res.status(404).json({ error: "not_found" });
       return;
     }
-    res.json(user);
+    res.json(presentUser(user));
   });
 
   router.post("/chats", async (req, res) => {

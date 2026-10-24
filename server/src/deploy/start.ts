@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { createPostgresEventLog } from "../admin/log.js";
 import { adminRouter, type PaymentReview } from "../admin/routes.js";
 import { dbFromSql } from "../admin/sql-db.js";
+import { creditsEnabled } from "../credits/flag.js";
 import { createCredits } from "../credits/index.js";
 import { getDb, migrate } from "../db/client.js";
 import { apiHealthBody } from "../health.js";
@@ -83,7 +84,7 @@ export async function startServer(options?: { port?: number; listen?: boolean })
   const health = () =>
     apiHealthBody({ mock, memory: db.memory, llm: resolveLlmProvider(), payments: payMode });
   app.get("/api/health", (_req, res) => {
-    res.json(health());
+    res.json({ ...health(), creditsEnabled: creditsEnabled() });
   });
   warnIfMcpOpen(process.env);
   app.use(
