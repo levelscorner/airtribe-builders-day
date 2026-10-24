@@ -547,8 +547,7 @@ export function createMockStudio(options?: {
     const targetSeconds = Number.isFinite(seconds) ? seconds : preset.targetSeconds;
     const audience = chat.answers.audience || preset.audience;
     const artStyle = chat.answers.art_style || preset.artStyle;
-    const bundleId = chat.answers.cast || preset.castBundle;
-    const castIds = CAST_BUNDLES[bundleId] ?? presetCast(genre);
+    const castIds = resolveCastIds(chat.answers.cast, genre);
     if (!chat.answers.genre) chat.assumed.push("genre kids");
     if (!chat.answers.aspect_ratio) chat.assumed.push(aspectRatio);
     if (!chat.answers.resolution) chat.assumed.push(resolution);
@@ -556,7 +555,7 @@ export function createMockStudio(options?: {
     if (!chat.answers.language) chat.assumed.push(language);
     if (!chat.answers.audience) chat.assumed.push(audience);
     if (!chat.answers.art_style) chat.assumed.push(styleLabel(artStyle));
-    if (!chat.answers.cast) chat.assumed.push(bundleId);
+    if (!chat.answers.cast) chat.assumed.push(castIds.join(","));
 
     const brief: Brief = {
       genre,
@@ -626,12 +625,31 @@ export function createMockStudio(options?: {
     if (field === "genre" && !asGenre(raw)) return "Kids, ad, ya faceless chuno.";
     if (field === "language" && !asLanguage(raw)) return "Hindi, Hinglish, ya English chuno.";
     if (field === "resolution" && raw !== "720p" && raw !== "1080p") return "720p ya 1080p chuno.";
+    if (field === "cast") {
+      const castIds = resolveCastIds(raw, asGenre(chat.answers.genre) ?? "kids");
+      if (castIds.length < 1 || castIds.length > 2) {
+        return "Cast mein 1 ya 2 members chuno.";
+      }
+      if (castIds.some((id) => !castById(id))) {
+        return "Cast option pehle se bank mein hona chahiye.";
+      }
+      chat.answers[field] = castIds.join(",");
+      chat.qIndex += 1;
+      return null;
+    }
     chat.answers[field] = raw;
     chat.qIndex += 1;
     return null;
   }
 
   function answerLabel(question: IntakeQuestion, raw: string): string {
+    if (raw.includes(",")) {
+      return raw
+        .split(",")
+        .map((id) => question.options?.find((option) => option.id === id.trim())?.label ?? id.trim())
+        .filter(Boolean)
+        .join(" + ");
+    }
     return question.options?.find((option) => option.id === raw)?.label ?? raw;
   }
 
@@ -778,6 +796,18 @@ export function createMockStudio(options?: {
       return { messages: [...mustChat(chatId).messages] };
     },
 
+    async getChat(chatId) {
+      const chat = mustChat(chatId);
+      const bundle = mustVideo(chat.videoId);
+      return {
+        chatId: chat.id,
+        videoId: chat.videoId,
+        stage: bundle.video.stage,
+        messages: [...chat.messages],
+        artefacts: bundle.artefacts.map((item) => ({ ...item, payload: { ...item.payload } })),
+      };
+    },
+
     async postMessage(chatId, body) {
       const chat = mustChat(chatId);
       if (chat.phase !== "brief") {
@@ -795,7 +825,19 @@ export function createMockStudio(options?: {
           throw new StudioMockError("stale_question", "Yeh sawal ab active nahi hai.");
         }
         let echo = body.text?.trim() || "";
-        let raw = body.answer.optionId ?? body.answer.freeText;
+        const optionIds = body.answer.optionIds?.map((id) => id.trim()).filter(Boolean);
+        if (optionIds && optionIds.length > 0) {
+          if (optionIds.length > 2) {
+            throw new StudioMockError("cast", "Cast mein zyada se zyada 2 members.");
+          }
+          if (question.field !== "cast") {
+            throw new StudioMockError("answer", "optionIds sirf cast ke liye hain; single choice pe optionId use karo.");
+          }
+        }
+        let raw =
+          optionIds && optionIds.length > 0
+            ? optionIds.join(",")
+            : (body.answer.optionId ?? body.answer.freeText);
         if (body.answer.useDefaults) {
           echo = echo || "Use defaults";
           void continueBrief(chat, { field: question.field, usedDefaults: true, echo }).catch((error: unknown) =>
@@ -851,8 +893,10 @@ export function createMockStudio(options?: {
       artefact.state = "approved";
       artefact.updatedAt = now();
       patchApproval(chat, artefact);
-      emit(chat, { type: "artefact", artefact: { ...artefact } });
+      const snapshot = { ...artefact, payload: { ...artefact.payload } };
+      emit(chat, { type: "artefact", artefact: snapshot });
       scheduleAdvance(chat);
+      return { artefact: snapshot };
     },
 
     async rejectArtefact(artefactId, body) {
@@ -866,8 +910,10 @@ export function createMockStudio(options?: {
       artefact.payload = { ...artefact.payload, rejectionNote: note };
       artefact.updatedAt = now();
       patchApproval(chat, artefact);
-      emit(chat, { type: "artefact", artefact: { ...artefact } });
+      const snapshot = { ...artefact, payload: { ...artefact.payload } };
+      emit(chat, { type: "artefact", artefact: snapshot });
       emitText(chat, "assistant", `Note le liya: ${note}. Regenerate dabao, tab naya version aayega.`);
+      return { artefact: snapshot };
     },
 
     async regenerateArtefact(artefactId, confirm) {
@@ -888,7 +934,8 @@ export function createMockStudio(options?: {
       const charged = artefact.creditCost;
       artefact.state = "generating";
       artefact.updatedAt = now();
-      emit(chat, { type: "artefact", artefact: { ...artefact } });
+      const snapshot = { ...artefact, payload: { ...artefact.payload } };
+      emit(chat, { type: "artefact", artefact: snapshot });
       emit(chat, {
         type: "message",
         message: {
@@ -910,9 +957,15 @@ export function createMockStudio(options?: {
         artefact.payload = bumpPayload(artefact.kind, artefact.payload, artefact.version);
         artefact.updatedAt = now();
         patchApproval(chat, artefact);
-        emit(chat, { type: "artefact", artefact: { ...artefact } });
+        emit(chat, { type: "artefact", artefact: { ...artefact, payload: { ...artefact.payload } } });
       })().catch((error: unknown) => emitError(chat, error));
-      return { artefactId, state: "generating" as const, charged };
+      return {
+        artefactId,
+        state: "generating" as const,
+        charged,
+        balance: current.creditBalance,
+        artefact: snapshot,
+      };
     },
 
     async approveAllRemaining(videoId) {
@@ -993,6 +1046,16 @@ function presetCast(genre: Genre): string[] {
   return CAST_BUNDLES.kids_pair ?? [];
 }
 
+/** Accepts a bundle key, a single cast id, or comma-joined cast ids (from optionIds). */
+function resolveCastIds(raw: string | undefined, genre: Genre): string[] {
+  if (!raw?.trim()) return presetCast(genre);
+  const trimmed = raw.trim();
+  if (CAST_BUNDLES[trimmed]) return [...(CAST_BUNDLES[trimmed] ?? [])];
+  const parts = trimmed.split(",").map((part) => part.trim()).filter(Boolean);
+  if (parts.length > 0) return parts.slice(0, 2);
+  return presetCast(genre);
+}
+
 function defaultValue(
   field: string,
   preset: ReturnType<typeof defaultsFor>,
@@ -1013,7 +1076,7 @@ function defaultValue(
     case "art_style":
       return preset.artStyle;
     case "cast":
-      return preset.castBundle;
+      return (CAST_BUNDLES[preset.castBundle] ?? presetCast("kids")).join(",");
     default:
       return "";
   }

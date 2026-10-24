@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { QuestionMessage } from "@chotu/shared";
 import { colors, layout } from "../theme";
@@ -6,15 +7,29 @@ export function QuestionCard({
   message,
   open,
   onOption,
+  onOptions,
   onSkip,
   onDefaults,
 }: {
   message: QuestionMessage;
   open: boolean;
   onOption: (optionId: string) => void;
+  /** Cast (and any future multi-pick) uses optionIds: string[] (1–2). */
+  onOptions?: (optionIds: string[]) => void;
   onSkip: () => void;
   onDefaults: () => void;
 }) {
+  const multi = message.field === "cast" && Boolean(onOptions);
+  const [picked, setPicked] = useState<string[]>([]);
+
+  function toggle(id: string): void {
+    setPicked((prev) => {
+      if (prev.includes(id)) return prev.filter((item) => item !== id);
+      if (prev.length >= 2) return [prev[1]!, id];
+      return [...prev, id];
+    });
+  }
+
   return (
     <View style={styles.card} accessibilityLabel={`Brief question, ${message.prompt}`}>
       <View style={styles.head}>
@@ -24,22 +39,46 @@ export function QuestionCard({
       <Text style={styles.prompt}>{message.prompt}</Text>
       {message.options && message.options.length > 0 ? (
         <View style={styles.chips}>
-          {message.options.map((option) => (
-            <Pressable
-              key={option.id}
-              accessibilityRole="button"
-              accessibilityLabel={option.label}
-              disabled={!open}
-              onPress={() => onOption(option.id)}
-              style={[styles.chip, !open ? styles.off : null]}
-            >
-              <Text style={styles.chipText}>{option.label}</Text>
-            </Pressable>
-          ))}
+          {message.options.map((option) => {
+            const selected = multi && picked.includes(option.id);
+            return (
+              <Pressable
+                key={option.id}
+                accessibilityRole="button"
+                accessibilityLabel={option.label}
+                accessibilityState={{ selected }}
+                disabled={!open}
+                onPress={() => {
+                  if (!open) return;
+                  if (multi) toggle(option.id);
+                  else onOption(option.id);
+                }}
+                style={[styles.chip, !open ? styles.off : null, selected ? styles.chipOn : null]}
+              >
+                <Text style={[styles.chipText, selected ? styles.chipTextOn : null]}>{option.label}</Text>
+              </Pressable>
+            );
+          })}
         </View>
       ) : null}
       {open ? (
         <View style={styles.actions}>
+          {multi ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Confirm cast"
+              disabled={picked.length < 1}
+              onPress={() => {
+                if (picked.length < 1 || !onOptions) return;
+                onOptions(picked);
+              }}
+              style={[styles.secondary, picked.length < 1 ? styles.off : null]}
+            >
+              <Text style={styles.secondaryText}>
+                {picked.length === 0 ? "1–2 cast chuno" : `Confirm (${picked.length})`}
+              </Text>
+            </Pressable>
+          ) : null}
           {message.allowDefaults ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Use defaults" onPress={onDefaults} style={styles.secondary}>
               <Text style={styles.secondaryText}>Use defaults</Text>
@@ -100,12 +139,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     backgroundColor: colors.chip,
   },
+  chipOn: {
+    backgroundColor: colors.ink,
+  },
   off: {
     opacity: 0.55,
   },
   chipText: {
     fontSize: 16,
     color: colors.ink,
+  },
+  chipTextOn: {
+    color: colors.paper,
   },
   actions: {
     gap: 8,

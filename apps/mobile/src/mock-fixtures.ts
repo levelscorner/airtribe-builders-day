@@ -223,11 +223,12 @@ export const INTAKE: IntakeQuestion[] = [
   },
   {
     field: "cast",
-    prompt: "Cast kaun sa? Ek preset bundle chuno.",
+    prompt: "Cast kaun? 1 ya 2 members chuno (optionIds).",
     options: [
-      { id: "kids_pair", label: "Chintu + Mini" },
-      { id: "riya", label: "Riya" },
-      { id: "narrator", label: "Sirf narrator" },
+      { id: "cast_chintu", label: "Chintu" },
+      { id: "cast_mini", label: "Mini" },
+      { id: "cast_riya", label: "Riya" },
+      { id: "cast_narrator", label: "Narrator (off screen)" },
     ],
     allowDefaults: true,
   },

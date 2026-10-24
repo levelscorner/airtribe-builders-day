@@ -272,7 +272,13 @@ export interface PostMessageRequest {
   /** Answer to a QuestionMessage */
   answer?: {
     field: string;
+    /** Single-choice chips (genre, resolution, language, …). */
     optionId?: string;
+    /**
+     * Multi-choice chips for cast (1–2 members). Prefer this over packing
+     * several ids into `optionId`. Single-choice fields keep using `optionId`.
+     */
+    optionIds?: string[];
     freeText?: string;
     skip?: boolean;
     useDefaults?: boolean;
@@ -296,6 +302,16 @@ export interface RegenerateRequest {
   confirm?: boolean;
 }
 
+/** POST /v1/artefacts/:id/approve — body may be empty. SSE still broadcasts. */
+export interface ApproveArtefactResponse {
+  artefact: ArtefactSummary;
+}
+
+/** POST /v1/artefacts/:id/reject — SSE still broadcasts. */
+export interface RejectArtefactResponse {
+  artefact: ArtefactSummary;
+}
+
 export interface RegeneratePreviewResponse {
   artefactId: string;
   creditCost: number;
@@ -307,6 +323,19 @@ export interface RegenerateConfirmResponse {
   artefactId: string;
   state: ArtefactState;
   charged: number;
+  /** Wallet balance after the debit. */
+  balance: number;
+  /** Updated artefact (often `generating`); SSE still broadcasts. */
+  artefact: ArtefactSummary;
+}
+
+/** GET /v1/chats/:id — hydrate the chat shell in one round trip. */
+export interface GetChatResponse {
+  chatId: string;
+  videoId: string;
+  stage: Stage;
+  messages: ChatMessage[];
+  artefacts: ArtefactSummary[];
 }
 
 export interface ApproveAllRemainingResponse {
@@ -541,6 +570,7 @@ export const ApiPaths = {
   users: '/v1/users',
   me: '/v1/me',
   chats: '/v1/chats',
+  chat: (chatId: string) => `/v1/chats/${chatId}`,
   chatMessages: (chatId: string) => `/v1/chats/${chatId}/messages`,
   chatEvents: (chatId: string) => `/v1/chats/${chatId}/events`,
   artefactApprove: (id: string) => `/v1/artefacts/${id}/approve`,

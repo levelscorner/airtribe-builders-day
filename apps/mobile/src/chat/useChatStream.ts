@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ArtefactState,
+  ArtefactSummary,
   ChatMessage,
   PostMessageRequest,
   RegeneratePreviewResponse,
@@ -36,6 +37,10 @@ export function useChatStream(chatId: string, videoId: string) {
     });
   }, []);
 
+  const rememberArtefact = useCallback((artefact: ArtefactSummary) => {
+    setArtefacts((prev) => ({ ...prev, [artefact.id]: artefact.state }));
+  }, []);
+
   useEffect(() => {
     let alive = true;
     let unsubscribe = () => {};
@@ -44,9 +49,8 @@ export function useChatStream(chatId: string, videoId: string) {
         if (!alive) return;
         if (event.type === "message") upsert(event.message);
         else if (event.type === "stage") setStage(event.stage);
-        else if (event.type === "artefact") {
-          setArtefacts((prev) => ({ ...prev, [event.artefact.id]: event.artefact.state }));
-        } else if (event.type === "error") setError(event.message);
+        else if (event.type === "artefact") rememberArtefact(event.artefact);
+        else if (event.type === "error") setError(event.message);
       });
     } catch (err) {
       setMissing(true);
@@ -56,15 +60,14 @@ export function useChatStream(chatId: string, videoId: string) {
 
     void (async () => {
       try {
-        const [history, video, me] = await Promise.all([
-          client.listMessages(chatId),
-          client.getVideo(videoId),
-          client.getMe(),
-        ]);
+        const [chat, me] = await Promise.all([client.getChat(chatId), client.getMe()]);
         if (!alive) return;
-        setMessages((prev) => mergeMessages(history.messages, prev));
-        setStage(video.video.stage);
-        setArtefacts(Object.fromEntries(video.artefacts.map((item) => [item.id, item.state])));
+        if (chat.videoId !== videoId) {
+          // Route param is still authoritative for approve-all; keep streaming this chat.
+        }
+        setMessages((prev) => mergeMessages(chat.messages, prev));
+        setStage(chat.stage);
+        setArtefacts(Object.fromEntries(chat.artefacts.map((item) => [item.id, item.state])));
         setCredits(me.creditBalance);
       } catch (err) {
         if (!alive) return;
@@ -77,7 +80,7 @@ export function useChatStream(chatId: string, videoId: string) {
       alive = false;
       unsubscribe();
     };
-  }, [chatId, client, upsert, videoId]);
+  }, [chatId, client, rememberArtefact, upsert, videoId]);
 
   const refreshCredits = useCallback(async () => {
     const me = await client.getMe();
@@ -110,14 +113,21 @@ export function useChatStream(chatId: string, videoId: string) {
   );
 
   const approve = useCallback(
-    (artefactId: string) => run(artefactId, () => client.approveArtefact(artefactId)),
-    [client, run],
+    (artefactId: string) =>
+      run(artefactId, async () => {
+        const response = await client.approveArtefact(artefactId);
+        rememberArtefact(response.artefact);
+      }),
+    [client, rememberArtefact, run],
   );
 
   const reject = useCallback(
     (artefactId: string, note: string) =>
-      run(artefactId, () => client.rejectArtefact(artefactId, { rejectNote: note })),
-    [client, run],
+      run(artefactId, async () => {
+        const response = await client.rejectArtefact(artefactId, { rejectNote: note });
+        rememberArtefact(response.artefact);
+      }),
+    [client, rememberArtefact, run],
   );
 
   const previewRegenerate = useCallback(
@@ -134,10 +144,15 @@ export function useChatStream(chatId: string, videoId: string) {
   const confirmRegenerate = useCallback(
     (artefactId: string) =>
       run(artefactId, async () => {
-        await client.regenerateArtefact(artefactId, 1);
-        await refreshCredits();
+        const result = await client.regenerateArtefact(artefactId, 1);
+        if ("artefact" in result) {
+          rememberArtefact(result.artefact);
+          setCredits(result.balance);
+        } else {
+          await refreshCredits();
+        }
       }),
-    [client, refreshCredits, run],
+    [client, refreshCredits, rememberArtefact, run],
   );
 
   const approveAll = useCallback(

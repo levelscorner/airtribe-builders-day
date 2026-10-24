@@ -21,6 +21,9 @@ export function ChatScreen({ chatId, videoId }: { chatId: string; videoId: strin
       onOption: (field: string, optionId: string) => {
         void stream.send({ answer: { field, optionId } });
       },
+      onOptions: (field: string, optionIds: string[]) => {
+        void stream.send({ answer: { field, optionIds } });
+      },
       onSkip: (field: string) => {
         void stream.send({ answer: { field, skip: true } });
       },

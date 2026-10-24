@@ -23,9 +23,16 @@ async function main(): Promise<void> {
   const opened = await api.createChat({ initialMessage: "barish kaise banti hai" });
   assert(opened.stage === "brief", "chat should open on brief");
 
+  const hydrated = await api.getChat(opened.chatId);
+  assert(hydrated.videoId === opened.videoId, "GET chat returns videoId");
+  assert(hydrated.stage === "brief", "GET chat returns stage");
+  assert(hydrated.messages.length > 0, "GET chat returns messages");
+  assert(Array.isArray(hydrated.artefacts), "GET chat returns artefacts");
+
   let rejectedOnce = false;
   let regenerated = false;
   let charged = 0;
+  let castPicked = false;
 
   for (let step = 0; step < 50; step += 1) {
     await pump();
@@ -36,6 +43,13 @@ async function main(): Promise<void> {
       const history = await api.listMessages(opened.chatId);
       const question = openQuestion(history.messages);
       if (!question || !isQuestion(question)) continue;
+      if (question.field === "cast" && !castPicked) {
+        await api.postMessage(opened.chatId, {
+          answer: { field: "cast", optionIds: ["cast_chintu", "cast_mini"] },
+        });
+        castPicked = true;
+        continue;
+      }
       await api.postMessage(opened.chatId, { answer: { field: question.field, useDefaults: true } });
       continue;
     }
@@ -45,7 +59,9 @@ async function main(): Promise<void> {
 
     if (!rejectedOnce && snap.video.stage === "cast" && awaiting[0]) {
       const target = awaiting[0];
-      await api.rejectArtefact(target.id, { rejectNote: "Sheet ka pose badlo" });
+      const rejectedBody = await api.rejectArtefact(target.id, { rejectNote: "Sheet ka pose badlo" });
+      assert(rejectedBody.artefact.state === "rejected", "reject response returns artefact");
+      assert(rejectedBody.artefact.id === target.id, "reject artefact id");
       const history = await api.listMessages(opened.chatId);
       const card = history.messages.find((item) => item.kind === "approval" && item.artefactId === target.id);
       assert(card && card.kind === "approval" && card.state === "rejected", "reject should update the card");
@@ -69,6 +85,8 @@ async function main(): Promise<void> {
       const confirmed = await api.regenerateArtefact(target.id, 1);
       assert("charged" in confirmed, "confirm=1 returns a charge");
       assert(confirmed.charged === preview.creditCost, "charged cost should match the preview");
+      assert(confirmed.balance === before - confirmed.charged, "confirm returns wallet balance");
+      assert(confirmed.artefact.state === "generating", "confirm returns updated artefact");
       const after = (await api.getMe()).creditBalance;
       assert(after === before - confirmed.charged, "balance should drop by the charged cost");
       charged = confirmed.charged;
@@ -77,7 +95,12 @@ async function main(): Promise<void> {
     }
 
     if (awaiting.length > 0) {
-      await api.approveAllRemaining(opened.videoId);
+      const first = awaiting[0]!;
+      const approved = await api.approveArtefact(first.id);
+      assert(approved.artefact.state === "approved", "approve response returns artefact");
+      if (awaiting.length > 1) {
+        await api.approveAllRemaining(opened.videoId);
+      }
     }
   }
 
@@ -85,13 +108,15 @@ async function main(): Promise<void> {
   assert(done.video.stage === "done", `expected done, got ${done.video.stage}`);
   assert(done.video.outputUrl?.startsWith("mock://"), "final url should be a mock locator");
   assert(rejectedOnce && regenerated && charged > 0, "reject and regenerate path did not run");
+  assert(castPicked, "cast should have been picked via optionIds");
 
-  const history = await api.listMessages(opened.chatId);
-  assert(history.messages.some((item) => item.kind === "question"), "brief questions missing");
-  assert(history.messages.some((item) => item.kind === "approval"), "approval cards missing");
-  assert(history.messages.some((item) => item.kind === "progress"), "progress lines missing");
-  assert(history.messages.some((item) => item.kind === "video"), "video message missing");
-  const blob = JSON.stringify(history.messages);
+  const chatDone = await api.getChat(opened.chatId);
+  assert(chatDone.stage === "done", "GET chat reflects done");
+  assert(chatDone.messages.some((item) => item.kind === "question"), "brief questions missing");
+  assert(chatDone.messages.some((item) => item.kind === "approval"), "approval cards missing");
+  assert(chatDone.messages.some((item) => item.kind === "progress"), "progress lines missing");
+  assert(chatDone.messages.some((item) => item.kind === "video"), "video message missing");
+  const blob = JSON.stringify(chatDone.messages);
   assert(!blob.includes("http://") && !blob.includes("https://"), "mock transcript must not contain network URLs");
 
   const kinds = new Set(done.artefacts.map((item) => item.kind));
@@ -102,7 +127,7 @@ async function main(): Promise<void> {
   assert(done.artefacts.every((item) => item.state === "approved"), "every artefact should be approved");
   assert(done.video.brief.resolution === "720p", "kids default resolution");
   assert(done.video.brief.artStyle?.includes("2D"), "kids default art style");
-  assert((done.video.brief.castIds ?? []).length === 2, "kids default cast bundle");
+  assert((done.video.brief.castIds ?? []).join() === "cast_chintu,cast_mini", "cast optionIds should stick");
 }
 
 main().catch((error: unknown) => {

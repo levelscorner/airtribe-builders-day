@@ -9,6 +9,7 @@ import { QuestionCard } from "./QuestionCard";
 
 interface Actions {
   onOption: (field: string, optionId: string) => void;
+  onOptions: (field: string, optionIds: string[]) => void;
   onSkip: (field: string) => void;
   onDefaults: (field: string) => void;
   onApprove: (artefactId: string) => void;
@@ -43,6 +44,7 @@ const Row = memo(function Row({
         message={message}
         open={open}
         onOption={(optionId) => actions.onOption(message.field, optionId)}
+        onOptions={(optionIds) => actions.onOptions(message.field, optionIds)}
         onSkip={() => actions.onSkip(message.field)}
         onDefaults={() => actions.onDefaults(message.field)}
       />
