@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import type { ArtefactState, ChatMessage, RegeneratePreviewResponse } from "@chotu/shared";
+import type { ArtefactState, ArtefactSummary, ChatMessage, RegeneratePreviewResponse, VoicePreset } from "@chotu/shared";
+import type { MediaProgressEvent } from "../media-contract";
 import { PlayerCard } from "../screens/PlayerCard";
 import { colors } from "../theme";
 import { ApprovalCard } from "./ApprovalCard";
@@ -15,20 +16,29 @@ interface Actions {
   onApprove: (artefactId: string) => void;
   onReject: (artefactId: string, note: string) => void;
   onPreviewRegenerate: (artefactId: string) => Promise<RegeneratePreviewResponse>;
-  onConfirmRegenerate: (artefactId: string) => void;
+  onConfirmRegenerate: (artefactId: string, feedback?: string) => void;
+  onNeedCredits: () => void;
+}
+
+interface RowProps {
+  message: ChatMessage;
+  open: boolean;
+  liveState?: ArtefactState;
+  artefact?: ArtefactSummary;
+  progress?: MediaProgressEvent;
+  voices: VoicePreset[];
+  actions: Actions;
 }
 
 const Row = memo(function Row({
   message,
   open,
   liveState,
+  artefact,
+  progress,
+  voices,
   actions,
-}: {
-  message: ChatMessage;
-  open: boolean;
-  liveState?: ArtefactState;
-  actions: Actions;
-}) {
+}: RowProps) {
   if (message.kind === "text") {
     const mine = message.role === "user";
     return (
@@ -55,10 +65,14 @@ const Row = memo(function Row({
       <ApprovalCard
         message={message}
         liveState={liveState ?? message.state}
+        artefact={artefact}
+        progress={progress}
+        voices={voices}
         onApprove={() => actions.onApprove(message.artefactId)}
         onReject={(note) => actions.onReject(message.artefactId, note)}
         onPreviewRegenerate={() => actions.onPreviewRegenerate(message.artefactId)}
-        onConfirmRegenerate={() => actions.onConfirmRegenerate(message.artefactId)}
+        onConfirmRegenerate={(feedback) => actions.onConfirmRegenerate(message.artefactId, feedback)}
+        onNeedCredits={actions.onNeedCredits}
       />
     );
   }
@@ -83,17 +97,25 @@ const Row = memo(function Row({
 export function MessageList({
   messages,
   artefacts,
+  progress,
+  voices,
   thinking,
+  empty,
+  pin,
   actions,
 }: {
   messages: ChatMessage[];
-  artefacts: Record<string, ArtefactState>;
+  artefacts: Record<string, ArtefactSummary>;
+  progress: Record<string, MediaProgressEvent>;
+  voices: VoicePreset[];
   thinking: boolean;
+  empty: boolean;
+  pin: number;
   actions: Actions;
 }) {
   const active = openQuestion(messages)?.id;
   const listRef = useRef<ScrollView>(null);
-  const count = messages.length + (thinking ? 1 : 0);
+  const count = messages.length + (thinking || empty ? 1 : 0);
 
   useEffect(() => {
     const node = listRef.current as unknown as {
@@ -109,7 +131,7 @@ export function MessageList({
     snap();
     const frame = requestAnimationFrame(snap);
     return () => cancelAnimationFrame(frame);
-  }, [messages, artefacts, thinking]);
+  }, [messages, artefacts, thinking, empty, pin]);
 
   return (
     <ScrollView
@@ -118,17 +140,28 @@ export function MessageList({
       contentContainerStyle={styles.list}
       onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
     >
-      {messages.length === 0 ? <Text style={styles.empty}>Chotu soch raha hai…</Text> : null}
+      {empty ? (
+        <Text accessibilityRole="text" accessibilityLiveRegion="polite" style={styles.empty}>
+          Abhi khaali hai. Neeche message likho.
+        </Text>
+      ) : null}
       {messages.map((message) => (
         <Row
           key={message.id}
           message={message}
           open={message.kind === "question" && message.id === active}
-          liveState={message.kind === "approval" ? artefacts[message.artefactId] : undefined}
+          liveState={message.kind === "approval" ? artefacts[message.artefactId]?.state : undefined}
+          artefact={message.kind === "approval" ? artefacts[message.artefactId] : undefined}
+          progress={message.kind === "approval" ? progress[message.artefactId] : undefined}
+          voices={voices}
           actions={actions}
         />
       ))}
-      {thinking && messages.length > 0 ? <Text style={styles.empty}>Chotu soch raha hai…</Text> : null}
+      {thinking && messages.length > 0 ? (
+        <Text accessibilityRole="text" accessibilityLiveRegion="polite" style={styles.empty}>
+          Chotu soch raha hai…
+        </Text>
+      ) : null}
       <View
         onLayout={() => {
           if (count > 0) listRef.current?.scrollToEnd({ animated: false });

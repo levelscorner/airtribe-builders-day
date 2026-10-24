@@ -197,6 +197,29 @@ export interface Scene {
   castIds: string[];
 }
 
+/**
+ * Statuses the script card renders, plus `mocked` for the local fallback.
+ * The four live statuses match the mobile panel.
+ */
+export type AgentReviewStatus =
+  | 'completed'
+  | 'failed'
+  | 'hitl_triggered'
+  | 'budget_exceeded'
+  | 'mocked';
+
+/**
+ * AgenticOrg review on a script artefact.
+ * `output` is one note, or one suggested fix per entry, so the script card can
+ * import this type. `warning` is set when a live run fails open.
+ */
+export interface AgentReview {
+  status: AgentReviewStatus;
+  confidence?: number;
+  output: string | string[];
+  warning?: string;
+}
+
 export interface ArtefactSummary {
   id: string;
   videoId: string;
@@ -207,6 +230,17 @@ export interface ArtefactSummary {
   creditCost: number;
   version: number;
   updatedAt: string;
+  /**
+   * AgenticOrg script review. Set for `kind: 'script'` (see `ScriptArtefact`).
+   * The same object is stored on `payload.agentReview`.
+   */
+  agentReview?: AgentReview;
+}
+
+/** Whole-video script artefact (`kind: 'script'`). */
+export interface ScriptArtefact extends ArtefactSummary {
+  kind: 'script';
+  agentReview?: AgentReview;
 }
 
 export interface CastMember {

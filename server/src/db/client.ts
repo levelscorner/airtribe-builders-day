@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
+import { createLocalDatabase } from "./local.js";
 import { newDb, type IMemoryDb } from "pg-mem";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -31,7 +32,7 @@ function truthy(v: string | undefined): boolean {
 
 function useMemory(): boolean {
   if (truthy(process.env.MOCK) || truthy(process.env.MOCK_MODE)) return true;
-  return !process.env.DATABASE_URL?.trim();
+  return false;
 }
 
 function patchGenRandomUuid(db: IMemoryDb): void {
@@ -104,7 +105,9 @@ async function openPostgres(url: string): Promise<SqlClient> {
 /** Shared DB handle. MOCK=1 (or missing DATABASE_URL) → pg-mem. */
 export async function getDb(): Promise<SqlClient> {
   if (singleton) return singleton;
-  singleton = useMemory() ? await openMemory() : await openPostgres(process.env.DATABASE_URL!.trim());
+  singleton = useMemory() ? await openMemory() : process.env.DATABASE_URL?.trim()
+    ? await openPostgres(process.env.DATABASE_URL.trim())
+    : await createLocalDatabase(process.env.LOCAL_DATABASE_DIR || join(__dirname, "../../data/slb2-db"));
   return singleton;
 }
 

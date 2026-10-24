@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colors, layout } from "../theme";
+import { colors, hitSlop, layout } from "../theme";
 
 function clock(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000));
@@ -12,9 +12,12 @@ function clock(ms: number): string {
 export function MockMeter({
   durationMs,
   label,
+  glyph,
 }: {
   durationMs: number;
   label: string;
+  /** Compact ▶ control for a voice-preset sample. */
+  glyph?: boolean;
 }) {
   const safe = Math.max(1000, durationMs);
   const [playing, setPlaying] = useState(false);
@@ -40,14 +43,16 @@ export function MockMeter({
     <View style={styles.meter}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={playing ? `${label} pause` : `${label} play`}
+        accessibilityLabel={playing ? `Pause ${label}` : `Play ${label}`}
+        accessibilityState={{ selected: playing }}
+        hitSlop={hitSlop}
         onPress={() => {
           if (position >= safe) setPosition(0);
           setPlaying((value) => !value);
         }}
         style={styles.play}
       >
-        <Text style={styles.playText}>{playing ? "Pause" : "Play"}</Text>
+        <Text style={styles.playText}>{playing ? "Pause" : glyph ? "▶" : "Play"}</Text>
       </Pressable>
       <View style={styles.track}>
         <View style={[styles.fill, { width: `${fraction * 100}%` }]} />
@@ -63,27 +68,44 @@ export function PlayerCard({
   title,
   url,
   durationMs,
+  embedded,
 }: {
   title: string;
   url: string;
   durationMs?: number;
+  /** Inside an approval card or the desktop media rail. The chat video message keeps the full card. */
+  embedded?: boolean;
 }) {
   const local = url.startsWith("mock://");
-  return (
-    <View style={styles.card} accessibilityLabel="Video player">
-      <Text style={styles.stamp}>VIDEO</Text>
-      <Text style={styles.title}>{title}</Text>
-      <View style={styles.poster}>
+  const body = (
+    <>
+      {embedded ? null : <Text style={styles.stamp}>VIDEO</Text>}
+      {embedded ? null : <Text style={styles.title}>{title}</Text>}
+      <View style={[styles.poster, embedded ? styles.posterEmbed : null]}>
         <Text style={styles.posterText}>{local ? "Mock frame" : "Preview band"}</Text>
       </View>
       {local ? (
-        <MockMeter durationMs={durationMs ?? 8000} label="Video" />
+        <MockMeter durationMs={durationMs ?? 8000} label={title || "Video"} />
       ) : (
         <Text style={styles.note}>Yeh link yahin nahi chalega.</Text>
       )}
-      <Text style={styles.note}>
-        Mock preview. Asli MP4 download server se aayegi. Captions narration par hain.
-      </Text>
+      {embedded ? null : (
+        <Text style={styles.note}>
+          Mock preview. Asli MP4 download server se aayegi. Captions narration par hain.
+        </Text>
+      )}
+    </>
+  );
+  if (embedded) {
+    return (
+      <View style={styles.embed} accessibilityLabel={`Video player, ${title}`}>
+        {body}
+      </View>
+    );
+  }
+  return (
+    <View style={styles.card} accessibilityLabel="Video player">
+      {body}
     </View>
   );
 }
@@ -109,12 +131,19 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontWeight: "700",
   },
+  embed: {
+    gap: 8,
+  },
   poster: {
     aspectRatio: 9 / 16,
     maxHeight: 220,
     backgroundColor: colors.swatch.clay,
     alignItems: "center",
     justifyContent: "center",
+  },
+  posterEmbed: {
+    width: "100%",
+    maxHeight: 420,
   },
   posterText: {
     fontSize: 18,

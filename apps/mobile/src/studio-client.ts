@@ -21,7 +21,6 @@ import type {
   RejectArtefactRequest,
   RejectArtefactResponse,
 } from "@chotu/shared";
-
 import type { StudioEvent } from "./media-contract";
 import type { StudioRuntime } from "./web/generation";
 

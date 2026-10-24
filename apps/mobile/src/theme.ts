@@ -18,6 +18,12 @@ export const colors = {
 
 export const layout = {
   maxWidth: 440,
+  /** Chat plus a media side panel. Used from 1024px up. */
+  desktop: 1120,
+  side: 380,
   pad: 16,
   hit: 48,
 };
+
+/** Extra press area so a 48px control stays easy to hit with a thumb. */
+export const hitSlop = { top: 8, bottom: 8, left: 8, right: 8 };

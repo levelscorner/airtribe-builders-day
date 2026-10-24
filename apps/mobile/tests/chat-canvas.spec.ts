@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 const review = resolve(__dirname, "../../../.impeccable/review");
 const detailed =
-  "Create a 45 second English cartoon video explaining why bees make honey for kids in vertical format.";
+  "Create a 45 second English cartoon video explaining why bees make honey for kids in vertical format, 1080p, with Chintu and Mini.";
 async function start(page: Page, prompt = detailed) {
   await page.goto("/");
   await page.getByRole("textbox", { name: "Describe your video" }).fill(prompt);
@@ -285,7 +285,7 @@ test("phone keyboard flow and Hindi content fit with reduced motion", async ({
   await page.emulateMedia({ reducedMotion: "reduce" });
   await start(
     page,
-    "45 second Hindi cartoon video about why bees make honey for kids in vertical format",
+    "45 second Hindi cartoon video about why bees make honey for kids in vertical format, 1080p, with Chintu and Mini",
   );
   await expect(page.locator(".script-scenes")).toContainText("मधुमक्खियाँ");
   expect(
@@ -330,14 +330,22 @@ test("phone keyboard flow and Hindi content fit with reduced motion", async ({
   ).toHaveAttribute("aria-hidden", "true");
 });
 
-test("SLB2 branding, generated script review and live media contract render without sample substitutions", async ({ page }) => {
-  await page.route("**/api/health", route => route.fulfill({ json: { ok: true, mock: false, memory: true, llm: "claude" } }));
+test("SLB2 branding, generated script review and live media contract render without sample substitutions", async ({
+  page,
+}) => {
+  await page.route("**/api/health", (route) =>
+    route.fulfill({
+      json: { ok: true, mock: false, memory: true, llm: "claude" },
+    }),
+  );
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Wake up to Reality" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Wake up to Reality" }),
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: "SLB2 home" })).toBeVisible();
   await expect(page).toHaveTitle("SLB2 — Video Studio");
   await start(page);
-  await page.route(/\/v1\/chats\/[^/?]+$/, async route => {
+  await page.route(/\/v1\/chats\/[^/?]+$/, async (route) => {
     const response = await route.fetch();
     const data = await response.json();
     for (const item of data.artefacts ?? []) {
@@ -345,8 +353,15 @@ test("SLB2 branding, generated script review and live media contract render with
         item.provider = "anthropic";
         item.model = "claude-sonnet-4-5";
         item.providerLabel = "Claude";
-        item.agentReview = { status: "completed", confidence: 0.91, output: ["Make the opening clearer.", "Keep each line short."] };
-        item.payload.agentReview = { status: "mocked", output: "This payload fallback must not win." };
+        item.agentReview = {
+          status: "completed",
+          confidence: 0.91,
+          output: ["Make the opening clearer.", "Keep each line short."],
+        };
+        item.payload.agentReview = {
+          status: "mocked",
+          output: "This payload fallback must not win.",
+        };
       }
       if (["image", "sheet", "anchor"].includes(item.kind)) {
         item.payload.url = `/test-media/${item.kind}-${item.id}.jpg`;
@@ -356,57 +371,115 @@ test("SLB2 branding, generated script review and live media contract render with
     }
     await route.fulfill({ response, json: data });
   });
-  await page.route("**/test-media/*.jpg", route => route.fulfill({ path: resolve(__dirname, "../public/demo/honey-storyboard.jpg"), contentType: "image/jpeg" }));
+  await page.route("**/test-media/*.jpg", (route) =>
+    route.fulfill({
+      path: resolve(__dirname, "../public/demo/honey-storyboard.jpg"),
+      contentType: "image/jpeg",
+    }),
+  );
   await page.reload();
   await expect(page.locator(".script-sample")).toContainText("Claude");
   await expect(page.locator(".script-sample")).not.toContainText("Sample");
   await page.locator(".script-review summary").click();
   await expect(page.locator(".script-review")).toContainText("91%");
-  await expect(page.locator(".script-review")).not.toContainText("fallback must not win");
+  await expect(page.locator(".script-review")).not.toContainText(
+    "fallback must not win",
+  );
   await page.getByRole("button", { name: "Use suggestions to revise" }).click();
-  await expect(page.getByRole("textbox", { name: "Message SLB2" })).toBeFocused();
-  await expect(page.getByRole("textbox", { name: "Message SLB2" })).toHaveValue(/Make the opening clearer/);
+  await expect(
+    page.getByRole("textbox", { name: "Message SLB2" }),
+  ).toBeFocused();
+  await expect(page.getByRole("textbox", { name: "Message SLB2" })).toHaveValue(
+    /Make the opening clearer/,
+  );
   // Suggestions enter the ordinary revision flow; no generation or charge without confirmation.
-  expect((await state(page)).artefacts.find((a: { kind: string }) => a.kind === "script").version).toBe(1);
+  expect(
+    (await state(page)).artefacts.find(
+      (a: { kind: string }) => a.kind === "script",
+    ).version,
+  ).toBe(1);
   await page.getByRole("button", { name: "Cancel revision" }).click();
   await page.getByRole("textbox", { name: "Message SLB2" }).fill("");
   await screenshot(page, "provider-script-desktop.png");
-  await page.getByRole("button", { name: "Approve script & explore visuals" }).click();
+  await page
+    .getByRole("button", { name: "Approve script & explore visuals" })
+    .click();
   const canvas = page.getByRole("complementary", { name: "Visual canvas" });
   await expect(canvas.locator(".frame-card .real-frame")).toHaveCount(3);
   await expect(canvas.locator(".frame-card .story-art")).toHaveCount(0);
-  await expect(canvas.locator(".character-reference .real-frame")).toHaveCount(2);
+  await expect(canvas.locator(".character-reference .real-frame")).toHaveCount(
+    2,
+  );
   await expect(canvas.locator(".character-art")).toHaveCount(0);
-  await expect(canvas.locator(".frame-card .provider-label").first()).toHaveText("Qwen Image");
-  await expect(canvas.locator(".canvas-intro .sample-label")).toHaveText("AI-generated visuals");
+  await expect(
+    canvas.locator(".frame-card .provider-label").first(),
+  ).toHaveText("Qwen Image");
+  await expect(canvas.locator(".canvas-intro .sample-label")).toHaveText(
+    "AI-generated visuals",
+  );
   await screenshot(page, "provider-canvas-desktop.png");
   await page.setViewportSize({ width: 390, height: 844 });
   await screenshot(page, "provider-canvas-mobile.png");
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
 });
 
-test("provider progress events update in place and missing media never becomes a sample frame", async ({ page }) => {
+test("provider progress events update in place and missing media never becomes a sample frame", async ({
+  page,
+}) => {
   await start(page);
-  await page.getByRole("button", { name: "Approve script & explore visuals" }).click();
+  await page
+    .getByRole("button", { name: "Approve script & explore visuals" })
+    .click();
   await expect(page.locator(".frame-card").first()).toBeVisible();
   const chat = await state(page);
-  const frame = chat.artefacts.find((a: { kind: string }) => a.kind === "image");
-  await page.route(/\/v1\/chats\/[^/?]+$/, async route => {
+  const frame = chat.artefacts.find(
+    (a: { kind: string }) => a.kind === "image",
+  );
+  await page.route(/\/v1\/chats\/[^/?]+$/, async (route) => {
     const response = await route.fetch();
     const data = await response.json();
-    const target = data.artefacts.find((a: { id: string }) => a.id === frame.id);
-    if (target) { target.payload.url = ""; target.payload.provider = "higgsfield"; }
+    const target = data.artefacts.find(
+      (a: { id: string }) => a.id === frame.id,
+    );
+    if (target) {
+      target.payload.url = "";
+      target.payload.provider = "higgsfield";
+    }
     await route.fulfill({ response, json: data });
   });
-  const progress = { type: "media.progress", artefactId: frame.id, jobId: "fixture-job", kind: "image", provider: "higgsfield", model: "alibaba/qwen-image-3/text-to-image" };
-  await page.route("**/v1/chats/*/events", route => route.fulfill({ contentType: "text/event-stream", body: [
-    { ...progress, status: "queued" },
-    { ...progress, status: "generating", percent: 62 },
-  ].map(event => `data: ${JSON.stringify(event)}\n\n`).join("") }));
+  const progress = {
+    type: "media.progress",
+    artefactId: frame.id,
+    jobId: "fixture-job",
+    kind: "image",
+    provider: "higgsfield",
+    model: "alibaba/qwen-image-3/text-to-image",
+  };
+  await page.route("**/v1/chats/*/events", (route) =>
+    route.fulfill({
+      contentType: "text/event-stream",
+      body: [
+        { ...progress, status: "queued" },
+        { ...progress, status: "generating", percent: 62 },
+      ]
+        .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+        .join(""),
+    }),
+  );
   await page.reload();
-  await expect(page.getByRole("region", { name: "Generation progress" })).toContainText("Generating 62%");
+  await expect(
+    page.getByRole("region", { name: "Generation progress" }),
+  ).toContainText("Generating 62%");
   await expect(page.locator(".generation-status > div")).toHaveCount(1);
   const canvas = page.getByRole("complementary", { name: "Visual canvas" });
-  await expect(canvas.locator(".frame-card").first().getByText("Image not available yet")).toBeVisible();
-  await expect(canvas.locator(".frame-card").first().locator(".story-art")).toHaveCount(0);
+  await expect(
+    canvas.locator(".frame-card").first().getByText("Image not available yet"),
+  ).toBeVisible();
+  await expect(
+    canvas.locator(".frame-card").first().locator(".story-art"),
+  ).toHaveCount(0);
 });

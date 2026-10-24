@@ -19,12 +19,14 @@
     "preview:build": "npm run mobile:export",
     "typecheck": "npm --prefix server run typecheck && npm --prefix app run typecheck && npm --prefix apps/mobile run typecheck",
     "lint": "npm --prefix server run lint && npm --prefix app run lint",
+    "test": "npm --prefix server test",
     "test:mock": "npm --prefix server run test:mock && npm --prefix apps/mobile run check:mock",
     "test:creative": "npm --prefix server run test:creative",
     "sample:creative": "npm --prefix server run sample:creative",
     "test:media": "npm --prefix server run test:media",
     "db:migrate": "npm --prefix server run db:migrate",
     "test:db": "npm --prefix server run test:db",
-    "install:all": "npm --prefix server install && npm --prefix app install && npm --prefix apps/mobile install"
+    "install:all": "npm --prefix server install && npm --prefix app install && npm --prefix apps/mobile install",
+    "start:live": "MOCK=0 LLM_PROVIDER=claude npm --prefix server run start"
   }
 }

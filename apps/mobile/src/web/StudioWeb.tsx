@@ -118,7 +118,9 @@ function Shell({
 }) {
   const router = useRouter();
   const runtime = useStudioRuntime();
-  useEffect(() => { document.title = "SLB2 — Video Studio"; }, []);
+  useEffect(() => {
+    document.title = "SLB2 — Video Studio";
+  }, []);
   const [expanded, setExpanded] = useState(false);
   const recent = readLocal<RecentChat[]>("recents", []);
   return (
@@ -943,11 +945,14 @@ function Canvas({
         ]
       : frames;
   const shownFrames = showAll ? frames : representative;
-  const characters = artefacts.filter((a) => a.kind === "identity");
+  const characters = artefacts.filter(
+    (a) => a.kind === "identity" && !a.payload.failedStage,
+  );
   const script = artefacts.find((a) => a.kind === "script");
   const scenes = records(script?.payload.scenes);
   const selected = artefacts.find((a) => a.id === focus);
   const sampleFrames = frames.some(isSample);
+  const preparationFailed = artefacts.some((a) => a.state === "failed");
   const scenery =
     frames.find((a) => mediaUrl(a.payload.url) && !isSample(a)) ?? frames[0];
   useEffect(() => {
@@ -1031,7 +1036,9 @@ function Canvas({
                 ? "Sample artwork"
                 : frames.length
                   ? "AI-generated visuals"
-                  : "Preparing your visuals"}
+                  : preparationFailed
+                    ? "Visual preparation needs attention"
+                    : "Preparing your visuals"}
             </span>
           </div>
           <section className="frame-section">
@@ -1081,6 +1088,11 @@ function Canvas({
                           {str(scene.title) || `Scene ${i + 1}`}
                         </span>
                         <ProviderLine source={item} />
+                        {!!item.payload.needsRegeneration && (
+                          <span className="review-warning">
+                            Character changed · regenerate this scene
+                          </span>
+                        )}
                         <span className="frame-caption">
                           {str(scene.narration)}
                         </span>
@@ -1090,7 +1102,11 @@ function Canvas({
                 : [0, 1, 2].map((i) => (
                     <div className="frame-placeholder" key={i}>
                       <ImageIcon size={23} />
-                      <span>Preparing scene {i + 1}</span>
+                      <span>
+                        {preparationFailed
+                          ? "Frame not created yet"
+                          : `Preparing scene ${i + 1}`}
+                      </span>
                     </div>
                   ))}
             </div>
@@ -1319,7 +1335,11 @@ function Canvas({
           <div className="inspector-actions">
             <button
               className="primary-button"
-              disabled={busy || selected.state === "approved"}
+              disabled={
+                busy ||
+                selected.state === "approved" ||
+                Boolean(selected.payload.needsRegeneration)
+              }
               onClick={() => onApprove(selected.id)}
             >
               {selected.state === "approved" ? "Approved" : "Approve frame"}
@@ -1731,22 +1751,20 @@ export function WebConversation({
                     );
                   }
                   if (message.artefactKind === "prompt")
-                    return (
+                    return art?.state === "approved" ? null : (
                       <details className="message" key={message.id}>
                         <summary>
                           Scene direction
                           <ChevronDown size={14} />
                         </summary>
                         <p>{str(message.preview.imagePrompt)}</p>
-                        {art?.state !== "approved" && (
-                          <button
-                            className="secondary-button"
-                            onClick={() => approve(message.artefactId)}
-                            disabled={chat.busy}
-                          >
-                            Approve direction
-                          </button>
-                        )}
+                        <button
+                          className="secondary-button"
+                          onClick={() => approve(message.artefactId)}
+                          disabled={chat.busy}
+                        >
+                          Approve direction
+                        </button>
                       </details>
                     );
                   return (
@@ -1848,10 +1866,26 @@ export function WebConversation({
                 .filter((a) => a.state === "failed")
                 .map((a) => (
                   <div className="error-note" key={a.id} role="alert">
-                    This generation didn’t finish.
-                    <button onClick={() => requestFeedback(a)}>
-                      Retry with a note
-                    </button>
+                    <p>This generation didn’t finish.</p>
+                    <p>
+                      {str(a.payload.error) || "Please try this step again."}
+                    </p>
+                    {a.payload.failedStage && a.kind !== "script" ? (
+                      <button
+                        disabled={chat.busy}
+                        onClick={() =>
+                          void chat.run(() =>
+                            chat.client.regenerateArtefact(a.id, 1),
+                          )
+                        }
+                      >
+                        Retry this step
+                      </button>
+                    ) : (
+                      <button onClick={() => requestFeedback(a)}>
+                        Retry with a note
+                      </button>
+                    )}
                   </div>
                 ))}
               <GenerationProgress events={chat.mediaProgress} />
@@ -1899,7 +1933,12 @@ export function WebConversation({
               {chat.busy && (
                 <p className="thinking" role="status">
                   <LoaderCircle className="spin" size={16} />
-                  {revision ? "Making those changes…" : label[chat.stage]}
+                  {revision
+                    ? "Making those changes…"
+                    : activity.length &&
+                        activity[activity.length - 1]?.kind === "progress"
+                      ? (activity[activity.length - 1] as { text: string }).text
+                      : label[chat.stage]}
                 </p>
               )}
               {activity.length > 0 && (

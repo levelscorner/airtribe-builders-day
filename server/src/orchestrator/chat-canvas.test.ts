@@ -46,7 +46,7 @@ test("detailed web prompt goes directly to script; visuals wait for approval", a
     userId: owner.id,
     experience: "chat_canvas",
     initialMessage:
-      "45 second English cartoon video about honey for kids in vertical format",
+      "45 second English cartoon video about honey for kids in vertical format, 1080p, with Chintu and Mini",
   });
   assert.equal(chat.stage, "script");
   let arts = await store.listArtefacts(db, chat.videoId);
@@ -146,7 +146,7 @@ test("a stale script action cannot change the already approved web review", asyn
     userId: owner.id,
     experience: "chat_canvas",
     initialMessage:
-      "45 second English cartoon video about honey for kids in vertical format",
+      "45 second English cartoon video about honey for kids in vertical format, 1080p, with Chintu and Mini",
   });
   const script = (await store.listArtefacts(db, chat.videoId))[0]!;
   await approveArtefact(ctx, { userId: owner.id, artefactId: script.id });

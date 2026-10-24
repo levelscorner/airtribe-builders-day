@@ -34,12 +34,26 @@ export function noteValue(notes: string | undefined, key: string): string | unde
   return value ? value : undefined;
 }
 
+function freeformLines(notes: string | undefined): string[] {
+  if (!notes) return [];
+  const lines: string[] = [];
+  for (const line of notes.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || NOTE_LINE.test(trimmed)) continue;
+    lines.push(trimmed);
+  }
+  return lines;
+}
+
 export function upsertNote(notes: string | undefined, key: string, value: string): string | undefined {
   const fields = readNotes(notes);
+  const freeform = freeformLines(notes);
   const clean = value.trim().replace(/\s+/g, " ");
   if (!clean) delete fields[key];
   else fields[key] = clean;
-  return writeNotes(fields);
+  const structured = writeNotes(fields);
+  const lines = [...(structured ? structured.split("\n") : []), ...freeform];
+  return lines.length > 0 ? lines.join("\n") : undefined;
 }
 
 export function skippedFields(notes?: string): Set<string> {

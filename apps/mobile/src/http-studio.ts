@@ -22,7 +22,7 @@ import type {
   RejectArtefactRequest,
   RejectArtefactResponse,
 } from "@chotu/shared";
-import type { StudioEvent } from "./media-contract";
+import { parseMediaProgress, type StudioEvent } from "./media-contract";
 import type { StudioRuntime } from "./web/generation";
 import type { StudioClient } from "./studio-client";
 
@@ -159,7 +159,9 @@ export function createHttpStudio(baseUrl = ""): StudioClient {
       if (!openedOnce) void hydrateChat(chatId, onEvent);
       source.onmessage = (message) => {
         try {
-          onEvent(JSON.parse(message.data) as StudioEvent);
+          const parsed: unknown = JSON.parse(message.data);
+          const progress = parseMediaProgress(parsed);
+          onEvent(progress ?? (parsed as StudioEvent));
         } catch {
           /* ignore malformed frames */
         }
@@ -192,9 +194,11 @@ export function createHttpStudio(baseUrl = ""): StudioClient {
       });
     },
     regenerateArtefact(artefactId: string, confirm: 0 | 1, feedback?: string) {
+      const note = feedback?.trim();
+      const body = confirm === 1 && note ? JSON.stringify({ feedback: note, confirm: true }) : "{}";
       return api<RegeneratePreviewResponse | RegenerateConfirmResponse>(
         `${ApiPaths.artefactRegenerate(artefactId)}?confirm=${confirm}`,
-        { method: "POST", body: JSON.stringify({ feedback }) },
+        { method: "POST", body },
       );
     },
     approveAllRemaining(videoId: string) {

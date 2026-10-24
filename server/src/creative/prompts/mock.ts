@@ -109,12 +109,17 @@ export function mockPrompts(input: PromptGenInput): PromptGenOutput {
     ...tokens,
     "AI-generated scene.",
   ];
+  const feedback = input.feedback?.trim();
+  const change = feedback ? `Apply this change: ${feedback}` : "";
   const imagePrompt = [
     `${traits.join(", ")}.`,
     `One still frame, aspect ${ratio}, no text, no letters, no logo, no watermark.`,
     action,
     ...shared,
-  ].join(" ");
+    change,
+  ]
+    .filter((line) => line.length > 0)
+    .join(" ");
   const videoPrompt = [
     "Motion continues from the still.",
     action,
@@ -122,7 +127,10 @@ export function mockPrompts(input: PromptGenInput): PromptGenOutput {
     `Duration ${input.scene.durationMs ?? 1000} milliseconds.`,
     "No burned-in text.",
     ...shared,
-  ].join(" ");
+    change,
+  ]
+    .filter((line) => line.length > 0)
+    .join(" ");
   return { imagePrompt, videoPrompt, elementIds };
 }
 

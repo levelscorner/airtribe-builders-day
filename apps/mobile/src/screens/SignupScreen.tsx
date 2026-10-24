@@ -1,13 +1,17 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getStudioClient } from "../api";
-import { colors, layout } from "../theme";
+import { scrollFocusedField, useKeyboardInset } from "../chat/useKeyboardInset";
+import { useWideLayout } from "../shell";
+import { colors, hitSlop, layout } from "../theme";
 
 export function SignupScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const keyboard = useKeyboardInset();
+  const wide = useWideLayout();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +36,7 @@ export function SignupScreen() {
       const chat = await client.createChat({
         initialMessage: "Why do bees make honey — kids explainer",
       });
-      router.replace(`/chat/${chat.chatId}?videoId=${chat.videoId}`);
+      router.replace(`/chat/${chat.chatId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Shuru nahi ho paya.");
       setBusy(false);
@@ -41,7 +45,14 @@ export function SignupScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.column, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 16 }]}>
+      <KeyboardAvoidingView
+        style={[
+          styles.column,
+          wide ? styles.columnWide : null,
+          { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 16 + keyboard },
+        ]}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
         <View style={styles.stripe} />
         <Text style={styles.brand}>Chotu Studio</Text>
         <Text style={styles.lead}>Chat karke short video banao. Hindi, Hinglish, ya English.</Text>
@@ -52,6 +63,7 @@ export function SignupScreen() {
           autoCapitalize="words"
           autoComplete="name"
           accessibilityLabel="Naam"
+          onFocus={scrollFocusedField}
           placeholder="Asha"
           placeholderTextColor={colors.inkSoft}
           style={styles.input}
@@ -64,6 +76,7 @@ export function SignupScreen() {
           autoComplete="email"
           keyboardType="email-address"
           accessibilityLabel="Email"
+          onFocus={scrollFocusedField}
           placeholder="asha@email.com"
           placeholderTextColor={colors.inkSoft}
           style={styles.input}
@@ -76,7 +89,9 @@ export function SignupScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Shuru karo"
+          accessibilityState={{ disabled: busy, busy }}
           disabled={busy}
+          hitSlop={hitSlop}
           onPress={() => {
             void submit();
           }}
@@ -84,7 +99,7 @@ export function SignupScreen() {
         >
           <Text style={styles.buttonText}>{busy ? "Jud rahe hain…" : "Shuru karo"}</Text>
         </Pressable>
-      </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -93,6 +108,10 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.paper,
+    alignItems: "center",
+  },
+  columnWide: {
+    maxWidth: 720,
   },
   column: {
     flex: 1,

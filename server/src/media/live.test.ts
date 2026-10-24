@@ -41,6 +41,7 @@ const liveEnv = {
 
 test("higgsfield credentials accept the combined key and the split pair", () => {
   assert.equal(higgsfieldAuthorization({ HIGGSFIELD_API_KEY: "id:secret" }), "Key id:secret");
+  assert.equal(higgsfieldAuthorization({ HF_API_KEY: "id:secret" }), "Key id:secret");
   assert.equal(
     higgsfieldAuthorization({ HF_API_KEY_ID: "split-id", HF_API_KEY_SECRET: "split-secret" }),
     "Key split-id:split-secret",
@@ -440,4 +441,10 @@ test("polling gives up when the request never finishes", async () => {
   });
   assert.equal(job.status, "failed");
   assert.match(job.error ?? "", /timed out/);
+});
+
+test("creating image ports does not require an unrelated voice credential", () => {
+  const ports = createMediaPorts({ MOCK: "0", HIGGSFIELD_API_KEY: "id:secret" });
+  assert.equal(ports.images.mode, "live");
+  assert.throws(() => ports.voice, /ELEVENLABS_API_KEY/);
 });

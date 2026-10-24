@@ -37,7 +37,7 @@ export function createMediaPorts(env: EnvLike = process.env, deps: MediaPortDeps
     cast,
     images: createImageGen(env, { cast, higgsfield }),
     clips: createClipGen(env, { cast, higgsfield }),
-    voice: createVoiceGen(env, deps.voice),
+    get voice() { return createVoiceGen(env, deps.voice); },
   };
 }
 
