@@ -39,7 +39,8 @@ The room’s build spec for 24 Oct 2026 is the vernacular Learning coach. Start 
 | [08 Shopping components](08-shopping-ai-saturday-components.md) | Named boxes and 2-coder ownership. Replit-only host |
 | [09 Shared orchestration](09-shared-orchestration.md) | Lite DAG. Shopping: Ranker / Checkout / Verify. Chotu: Script / Voice / Verify |
 | [10 Tomorrow’s approach](10-tomorrow-problem-approach.md) | Eight steps if a booth card changes the product |
-| [11 Chotu mini](11-chotu-mini.md) | Runnable Expo + Node kids explainer short-video maker (mock mode, Replit + Expo Go) |
+| [11 Chotu Studio](11-chotu-mini.md) | Runnable Expo + Node AI production team (HITL approvals, Pine Labs packs, traction log, MCP visuals/voice) |
+| [12 Pitch](12-pitch.md) | Track 04 one-liner, agent team, money, differentiators, submission checklist |
 
 ## Research archive
 

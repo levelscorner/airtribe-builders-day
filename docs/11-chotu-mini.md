@@ -1,148 +1,113 @@
-# Chotu mini
+# Chotu Studio
 
-Hackathon slice: a **kids explainer short-video** maker. Phone/web app talks only to a thin Node server. No API keys in the client.
+Hackathon product for **Track 04 — AI for Creators**: an AI production team for Indian creators (Hindi/Hinglish first). Phone/web app talks only to a thin Node server. No API keys in the client.
 
-The **server is an MCP client** (Vercel AI SDK `experimental_createMCPClient` / `@ai-sdk/mcp`, HTTP or SSE). Nodes call discovered MCP tools for visuals and voice; assets are downloaded locally for ffmpeg.
+Formerly referred to as “Chotu mini” in early scaffolding; product name for pitch and UI is **Chotu Studio**.
+
+Pitch one-pager: [docs/12-pitch.md](12-pitch.md).
+
+## Must-haves (Track 04)
+
+| Requirement | How we ship it |
+|---|---|
+| **HITL approval** | After Script, status `awaiting_script_approval` until `POST /api/jobs/:id/approve-script`. After Verify, `awaiting_final_approval` until `approve-final` → `published` + download unlocked. Each approval is logged. |
+| **Pine Labs packs** | `POST /api/packs/checkout` → payment URL (Pine Labs link from env, or **mock** pay page). Credits gate `POST /api/jobs`. |
+| **Traction proof** | Signup (`name` + email/phone). Timestamped events: `signup`, `job_created`, `approval`, `payment`, `render_done`, … Admin: `/admin` HTML + CSV. |
+| **Agent activity log** | Per-job `activity[]`: node, MCP tool/provider, status, message — visible in the app for the demo video. |
 
 ## Pipeline (lite DAG)
 
-Plain-code **Supervisor** (no LLM) routes a fixed chain:
+Plain-code **Supervisor** (no LLM) routes:
 
 ```
-Supervisor → Script → Visuals → Voice → Render → Verify
+Supervisor → Script → [creator approves] → Visuals → Voice → Render → Verify → [creator approves] → Publish
 ```
 
 | Node | What it does |
 |---|---|
-| **Supervisor** | Fixed order only. No model call. |
-| **Script** | Vercel AI SDK `generateObject` + Zod: 4–5 scenes `{ narration, imagePrompt }`, ~30–45s kids explainer. Language: English / Hindi. |
-| **Visuals** | Pluggable provider via `VISUALS_PROVIDER`: `higgsfield` \| `openart` \| `mock`. Higgsfield/OpenArt go through **MCP** (image, then optional image-to-video). |
-| **Voice** | ElevenLabs **MCP** TTS (`text_to_speech`); on failure, **REST** `eleven_multilingual_v2`. One MP3 per scene, cache by text hash. |
-| **Render** | ffmpeg: stills → Ken Burns; **clips** → trim or loop to audio length; captions as **PNG overlay** (not `drawtext`); concat **9:16 MP4**. |
-| **Verify** | Schema valid, every scene has image+audio (and video if `visualKind=video`), output non-empty. **One retry**, then fail cleanly. |
+| **Supervisor** | Fixed order; records activity. |
+| **Script** | AI SDK `generateObject` + Zod: 4–5 scenes, ~30–45s. Hindi or English. |
+| **Visuals** | `VISUALS_PROVIDER`: `higgsfield` \| `openart` \| `mock` via **MCP**. |
+| **Voice** | ElevenLabs **MCP** TTS; **REST** fallback. Cache by text hash. |
+| **Render** | ffmpeg: Ken Burns stills or trim/loop clips; PNG captions; 9:16 MP4. |
+| **Verify** | Schema + assets; one retry then fail cleanly. |
 
-If ffmpeg render fails, the job sets `slideshowFallback: true` and the app plays **images + audio + captions**.
-
-**Mock mode:** `MOCK_MODE=true` (or missing live tokens) skips MCP connects and uses sample stills + tone audio so the UI demos end-to-end.
+Slideshow fallback if ffmpeg fails. **Mock mode** skips MCP and still demos end-to-end (auto-approvable in `npm run test:mock`).
 
 ## MCP architecture
 
-```
-Expo app ──HTTP──► Chotu server (MCP client)
-                      ├─ Higgsfield MCP  (image + i2v tools)
-                      ├─ OpenArt MCP     (image + video tools; no public REST API)
-                      └─ ElevenLabs MCP  (TTS; REST fallback)
-```
+Server is an MCP client (`experimental_createMCPClient` / `@ai-sdk/mcp`, HTTP or SSE).
 
-At startup the server:
-
-1. Connects to each configured MCP URL (HTTP streamable preferred, SSE supported).
-2. Discovers tools (`client.tools()`).
-3. Picks tools by **configured name**, then substring aliases.
-4. Exposes `GET /api/mcp` with the discovered tool list.
-
-Async generations: if a tool returns a job/request id instead of a URL, the node polls the status tool until an asset URL appears (timeout + **one retry** of the generate call).
-
-### Endpoints & auth
-
-| Server | Default URL | Auth env | Notes |
-|---|---|---|---|
-| **Higgsfield** | `https://mcp.higgsfield.ai/mcp` | `HIGGSFIELD_MCP_TOKEN` → `Authorization: Bearer …` | Product MCP is often OAuth in chat apps; for this server paste a Bearer/access token (or full `Authorization` header value). Transport: `HIGGSFIELD_MCP_TRANSPORT=http\|sse`. |
-| **OpenArt** | `https://mcp.openart.ai/mcp` | `OPENART_MCP_TOKEN` | **No public REST API** ([OpenArt help](https://openart.ai/help)). MCP is the supported programmatic path. Without a token/connection, the OpenArt adapter errors with setup guidance. |
-| **ElevenLabs** | `https://api.elevenlabs.io/v1/mcp` | `ELEVENLABS_API_KEY` (also used as MCP Bearer) | Hosted MCP is OAuth-oriented in assistants; for Replit we send the API key as Bearer. If MCP TTS fails, Voice node falls back to ElevenLabs **REST** TTS. |
-
-Tool name overrides (matched after discovery):
-
-| Env | Default | Role |
+| Server | Default URL | Auth |
 |---|---|---|
-| `HIGGSFIELD_IMAGE_TOOL` | `generate_image` | Text → image |
-| `HIGGSFIELD_VIDEO_TOOL` | `image_to_video` | Image → short clip |
-| `HIGGSFIELD_STATUS_TOOL` | `get_generation` | Poll async job |
-| `OPENART_IMAGE_TOOL` / `OPENART_VIDEO_TOOL` / `OPENART_STATUS_TOOL` | `generate_image` / `generate_video` / `get_generation` | Same roles |
-| `ELEVENLABS_TTS_TOOL` | `text_to_speech` | TTS |
+| Higgsfield | `https://mcp.higgsfield.ai/mcp` | `HIGGSFIELD_MCP_TOKEN` |
+| OpenArt | `https://mcp.openart.ai/mcp` | `OPENART_MCP_TOKEN` (no public REST API) |
+| ElevenLabs | `https://api.elevenlabs.io/v1/mcp` | `ELEVENLABS_API_KEY` (+ REST fallback) |
 
-If your account’s MCP tool names differ, set these env vars to the exact names shown in `GET /api/mcp`.
+Tool names are env-configurable; discover at `GET /api/mcp`. Async jobs: poll status tool until asset URL; timeout + one retry.
 
-### Getting tokens (booth)
+## Credits & Pine Labs
 
-- **Higgsfield / OpenArt:** complete OAuth once in Cursor/Claude against their MCP URL, then copy a usable access token into Replit secrets as `*_MCP_TOKEN`, **or** use whatever Bearer token their console issues for agent access. Without a token, keep `MOCK_MODE=true` / `VISUALS_PROVIDER=mock`.
-- **ElevenLabs:** create an API key; set `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID`. MCP is attempted first; REST always remains the safety net.
-
-## Job API
-
-| Method | Path | Notes |
-|---|---|---|
-| `GET` | `/api/health` | `{ ok, mockMode, visualsProvider }` |
-| `GET` | `/api/mcp` | Discovered MCP tool names per server |
-| `POST` | `/api/jobs` | body `{ topic, language: "en"\|"hi", style }` |
-| `GET` | `/api/jobs/:id` | poll stages, `videoUrl`, scene URLs |
-| static | `/assets/...` | generated files under `server/data/` |
-
-## Env (summary)
-
-See [`.env.example`](../.env.example) and [`server/.env.example`](../server/.env.example).
-
-| Var | Role |
+| Env | Role |
 |---|---|
-| `MOCK_MODE` | Force mock pipeline (no MCP) |
-| `VISUALS_PROVIDER` | `mock` \| `higgsfield` \| `openart` |
-| `OPENAI_API_KEY` | Script node |
-| `HIGGSFIELD_MCP_URL` / `HIGGSFIELD_MCP_TOKEN` | Higgsfield MCP |
-| `OPENART_MCP_URL` / `OPENART_MCP_TOKEN` | OpenArt MCP |
-| `ELEVENLABS_MCP_URL` / `ELEVENLABS_API_KEY` / `ELEVENLABS_VOICE_ID` | Voice MCP + REST |
-| `PUBLIC_BASE_URL` | Absolute asset URLs on Replit |
-| `EXPO_PUBLIC_API_URL` | App → server |
+| `STARTER_CREDITS` | Credits on signup (default `1`) |
+| `VIDEO_PACK_CREDITS` | Pack size (default `5`) |
+| `VIDEO_PACK_PRICE_INR` | Pack price (default `99`) |
+| `PINE_LABS_MOCK` | `true` → mock checkout URL (default in dev) |
+| `PINE_LABS_PAYMENT_LINK_BASE` | Live payment-link base when mock is off |
+| `PINE_LABS_MERCHANT_ID` | Optional merchant id for ops notes |
+
+Flow: signup → (optional buy pack) → create job spends 1 credit → produce → approvals.
+
+## Traction / admin
+
+- `POST /api/signup` — name + contact  
+- `GET /admin` — screenshot-friendly event table  
+- `GET /api/admin/events` · `GET /api/admin/events.csv`
+
+Event types include: `signup`, `job_created`, `approval`, `payment`, `render_done`, `credit_spent`, `credit_granted`.
+
+## Job API (high level)
+
+| Method | Path |
+|---|---|
+| `POST` | `/api/signup` |
+| `POST` | `/api/jobs` `{ userId, topic, language, style }` |
+| `POST` | `/api/jobs/:id/approve-script` `{ userId }` |
+| `POST` | `/api/jobs/:id/approve-final` `{ userId }` |
+| `GET` | `/api/jobs/:id` — stages, script, activity, publishUnlocked |
+| `GET` | `/api/packs` · `POST /api/packs/checkout` |
+| `GET` | `/admin` |
 
 ## Run locally
 
 ```bash
-# 1) Server
-cd server
-cp .env.example .env   # MOCK_MODE=true is fine for booth rehearsal
-npm install
-npm run start          # http://localhost:8787 — MCP discovery logged at boot
+cd server && cp .env.example .env && npm install && npm run start
+npm run test:mock   # auto-approves HITL gates
 
-# 2) Smoke (mock)
-npm run test:mock      # playable MP4 under data/jobs/...
-
-# 3) Expo web
-cd ../app
-npm install
+cd ../app && npm install
 EXPO_PUBLIC_API_URL=http://localhost:8787 npm run web
 ```
 
-Root helpers: `npm run install:all`, `npm run typecheck`, `npm run test:mock`.
+Open `/admin` for the traction screenshot. Expo Go: set `EXPO_PUBLIC_API_URL` to a public HTTPS API.
 
 ## Run on Replit
 
-1. Import this repo. Use a **Node** Replit with `ffmpeg` + `ffprobe`.
-2. Secrets: paste from `.env.example`. Live booth: `MOCK_MODE=false`, `VISUALS_PROVIDER=higgsfield` (or `openart`), MCP tokens, ElevenLabs key + voice id, `PUBLIC_BASE_URL=https://YOUR-REPLIT-HOST`.
-3. `npm run install:all`
-4. API: `cd server && npm run start`
-5. Check `GET /api/mcp` — confirm image/video/TTS tools were discovered (adjust `*_TOOL` env names if needed).
-6. Expo web: `cd app && EXPO_PUBLIC_API_URL=https://YOUR-REPLIT-HOST npm run web`
-
-## Open in Expo Go
-
-1. Server must be reachable from the phone (Replit HTTPS).
-2. Set `EXPO_PUBLIC_API_URL` to that URL.
-3. `cd app && npx expo start` → scan QR with Expo Go.
-
-## Demo script (booth)
-
-1. Topic “Why bees make honey”, English, watercolor.
-2. Watch stages: Script → Visuals → Voice → Render → Verify.
-3. Play MP4 (or slideshow). Share copies the asset URL.
-4. Optional: Hindi second run.
+1. Node Replit with ffmpeg.  
+2. Secrets from `.env.example`. Live: `MOCK_MODE=false`, MCP tokens, ElevenLabs, `PINE_LABS_MOCK=false` + `PINE_LABS_PAYMENT_LINK_BASE`, `PUBLIC_BASE_URL`.  
+3. `npm run install:all` → start server + Expo web.  
+4. Verify `GET /api/mcp` and `/admin`.
 
 ## Layout
 
 ```
-app/                 Expo (web + Expo Go)
+app/                 Expo — signup, topic, approvals, packs, admin, activity
 server/
-  src/mcp/           AI SDK MCP client, discovery, poll, download
-  src/visuals/       mock | higgsfield | openart adapters
-  src/pipeline/      script → visuals → voice → render → verify
+  src/mcp/           MCP client
+  src/visuals/       higgsfield | openart | mock
+  src/payments/      Pine Labs / mock packs
+  src/users/ events/ traction
+  src/pipeline/      script → visuals → voice → render → verify (+ gates)
 docs/11-chotu-mini.md
-.env.example
+docs/12-pitch.md
 ```

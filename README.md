@@ -38,7 +38,7 @@ Official track briefs and the partner roster are **CONFIRM**. Numbered booth cha
 | [Shared orchestration](docs/09-shared-orchestration.md) | Lite DAG for Saturday: supervisor routes, then Ranker / Checkout / Verify (Shopping) or Script / Voice / Verify (Chotu). AI SDK runtime. Not an agentswitch port. | Shared / Saturday build | Locked extract |
 | [Tomorrow’s approach](docs/10-tomorrow-problem-approach.md) | Eight steps for any booth card. Default demo is Shopping AI; pivot keeps the same orchestration pattern. | Saturday build | Locked extract |
 | [Backlog demos](docs/07-backlog-demos.md) | L1 Interview Drill Coach, B1 Multiplayer Prompt Room, B3 Small Software Deploy, CR1 Clip Autopilot | Learning / Builders / Creators | Backlog, not first-class |
-| [Chotu mini](docs/11-chotu-mini.md) | Expo + Node kids explainer short-video maker (Script → Images → Voice → Render → Verify). Mock mode for booth. | Creators / Saturday build | **Runnable** `app/` + `server/` |
+| [Chotu Studio](docs/11-chotu-mini.md) | AI production team for Indian creators: Script → approval → Visuals → Voice → Render → final approval. Pine Labs packs, traction log. [Pitch](docs/12-pitch.md). | Creators / Track 04 | **Runnable** `app/` + `server/` |
 
 Shopping AI and Grocery AI are both Commerce. They are different products. Grocery is the recurring-cadence vertical. Shopping AI is the open-category agent that can check out. Read both before treating one as a mode of the other.
 
@@ -77,8 +77,9 @@ docs/08-shopping-ai-saturday-components.md
 docs/09-shared-orchestration.md
 docs/10-tomorrow-problem-approach.md
 docs/11-chotu-mini.md
-app/   Expo client (web + Expo Go)
-server/  Node pipeline + job API
+docs/12-pitch.md
+app/   Expo client (web + Expo Go) — Chotu Studio
+server/  Node MCP client + HITL + packs + traction
 docs/research/builders-day-vc-research.md
 docs/research/builders-day-partners-and-market.md
 docs/research/builders-day-partner-problem-statements.md

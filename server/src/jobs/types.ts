@@ -35,7 +35,6 @@ export interface SceneAssets {
   imagePrompt: string;
   imagePath?: string;
   imageUrl?: string;
-  /** Optional motion clip from Visuals MCP (Higgsfield/OpenArt i2v). */
   videoPath?: string;
   videoUrl?: string;
   visualKind?: "image" | "video";
@@ -46,10 +45,33 @@ export interface SceneAssets {
   caption?: string;
 }
 
-export type JobStatus = "queued" | "running" | "done" | "failed";
+export type JobStatus =
+  | "queued"
+  | "running"
+  | "awaiting_script_approval"
+  | "awaiting_final_approval"
+  | "published"
+  | "failed";
+
+export interface ApprovalRecord {
+  kind: "script" | "final";
+  at: string;
+  byUserId: string;
+}
+
+export interface ActivityEntry {
+  id: string;
+  at: string;
+  node: string;
+  tool?: string;
+  provider?: string;
+  status: "started" | "done" | "failed" | "skipped" | "waiting";
+  message?: string;
+}
 
 export interface Job {
   id: string;
+  userId: string;
   topic: string;
   language: Language;
   style: Style;
@@ -59,20 +81,28 @@ export interface Job {
   scenes: SceneAssets[];
   videoPath?: string;
   videoUrl?: string;
-  /** When ffmpeg fails, app can still play slideshow from scenes. */
   slideshowFallback: boolean;
   error?: string;
   createdAt: string;
   updatedAt: string;
   retryCount: number;
+  approvals: ApprovalRecord[];
+  activity: ActivityEntry[];
+  /** Download/publish unlocked only after final approval. */
+  publishUnlocked: boolean;
 }
 
 export const CreateJobBodySchema = z.object({
+  userId: z.string().uuid(),
   topic: z.string().min(2).max(200),
   language: LanguageSchema.default("en"),
   style: StyleSchema.default("watercolor-storybook"),
 });
 export type CreateJobBody = z.infer<typeof CreateJobBodySchema>;
+
+export const ApproveBodySchema = z.object({
+  userId: z.string().uuid(),
+});
 
 export function initialStages(): StageState[] {
   return (["script", "visuals", "voice", "render", "verify"] as StageName[]).map((name) => ({
