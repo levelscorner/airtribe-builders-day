@@ -227,9 +227,71 @@ async function main(): Promise<void> {
   assert(done.video.brief.resolution === "720p", "kids default resolution");
   assert(done.video.brief.artStyle?.includes("2D"), "kids default art style");
   assert((done.video.brief.castIds ?? []).join() === "cast_chintu,cast_mini", "cast optionIds should stick");
+  assert(done.video.brief.topic?.includes("barish"), "opening line should stay the topic");
 }
 
-main().catch((error: unknown) => {
-  console.error(error);
-  process.exit(1);
-});
+async function answerBrief(api: ReturnType<typeof createMockStudio>, chatId: string, videoId: string): Promise<void> {
+  for (let step = 0; step < 20; step += 1) {
+    await pump();
+    const snap = await api.getVideo(videoId);
+    if (snap.video.stage !== "brief") return;
+    const history = await api.listMessages(chatId);
+    const question = openQuestion(history.messages);
+    if (!question || !isQuestion(question)) continue;
+    await api.postMessage(chatId, { answer: { field: question.field, useDefaults: true } });
+  }
+  throw new Error("brief did not finish");
+}
+
+async function briefEdges(): Promise<void> {
+  const api = createMockStudio({ delayMs: 0 });
+  await api.createUser({ displayName: "Asha", phoneOrEmail: "asha@example.com" });
+  const opened = await api.createChat({});
+  await pump();
+  const first = openQuestion((await api.listMessages(opened.chatId)).messages);
+  assert(first && isQuestion(first) && first.field === "topic", "signup with no topic must ask for one");
+  await api.postMessage(opened.chatId, { text: "barish kaise banti hai" });
+  await pump();
+  const genre = openQuestion((await api.listMessages(opened.chatId)).messages);
+  assert(genre && isQuestion(genre) && genre.field === "genre", "free-text topic should advance to genre");
+
+  await answerBrief(api, opened.chatId, opened.videoId);
+  for (let step = 0; step < 30; step += 1) {
+    await pump();
+    const snap = await api.getVideo(opened.videoId);
+    if (snap.video.stage === "script") break;
+    if (snap.artefacts.some((item) => item.state === "awaiting_approval")) {
+      await api.approveAllRemaining(opened.videoId);
+    }
+  }
+  const scriptSnap = await api.getVideo(opened.videoId);
+  assert(scriptSnap.video.stage === "script", "expected the script stage");
+  assert(scriptSnap.video.brief.topic === "barish kaise banti hai", "typed topic should lock on the brief");
+  const script = scriptSnap.artefacts.find((item) => item.kind === "script");
+  assert(script, "script card missing");
+  const before = JSON.stringify(script.payload);
+  await api.regenerateArtefact(script.id, 1);
+  await pump();
+  const regenerated = (await api.getVideo(opened.videoId)).artefacts.find((item) => item.id === script.id);
+  assert(regenerated?.state === "awaiting_approval", "regenerated script should wait for approval");
+  assert(JSON.stringify(regenerated?.payload) !== before, "regenerate should change the script");
+  await api.approveArtefact(script.id);
+  for (let step = 0; step < 20; step += 1) {
+    await pump();
+    const snap = await api.getVideo(opened.videoId);
+    if (snap.video.stage === "prompts") {
+      const prompt = snap.artefacts.find((item) => item.kind === "prompt");
+      const imagePrompt = prompt?.payload.imagePrompt;
+      assert(typeof imagePrompt === "string" && imagePrompt.includes("(v2)"), "later prompts must use the regenerated narration");
+      return;
+    }
+  }
+  throw new Error("prompts did not open after the regenerated script");
+}
+
+main()
+  .then(() => briefEdges())
+  .catch((error: unknown) => {
+    console.error(error);
+    process.exit(1);
+  });

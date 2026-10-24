@@ -533,7 +533,7 @@ export function createMockStudio(options?: {
 
   function chatTopic(bundle: VideoBundle): string {
     const chat = chats.get(bundle.video.chatId);
-    return chat?.topic || bundle.video.brief.notes || "aaj ka topic";
+    return chat?.answers.topic?.trim() || chat?.topic?.trim() || bundle.video.brief.topic || "aaj ka topic";
   }
 
   async function finishBrief(chat: ChatRuntime): Promise<void> {
@@ -557,7 +557,9 @@ export function createMockStudio(options?: {
     if (!chat.answers.art_style) chat.assumed.push(styleLabel(artStyle));
     if (!chat.answers.cast) chat.assumed.push(castIds.join(","));
 
+    const topic = chatTopic(bundle);
     const brief: Brief = {
+      topic,
       genre,
       language,
       aspectRatio,
@@ -567,7 +569,7 @@ export function createMockStudio(options?: {
       artStyle: styleLabel(artStyle),
       artStyleTraits: styleTraits(artStyle),
       castIds,
-      notes: chat.topic,
+      notes: topic,
     };
     bundle.video = {
       ...bundle.video,
@@ -615,6 +617,14 @@ export function createMockStudio(options?: {
       return null;
     }
     if (!raw) return "Jawab khali hai.";
+    if (field === "topic") {
+      const value = raw.trim().slice(0, 200);
+      if (!value) return "Topic likho, ek line mein.";
+      chat.answers.topic = value;
+      chat.topic = value;
+      chat.qIndex += 1;
+      return null;
+    }
     if (field === "target_seconds") {
       const parsed = Number.parseInt(raw, 10);
       if (!Number.isFinite(parsed)) return "Seconds mein number likho, jaise 45.";
@@ -676,6 +686,7 @@ export function createMockStudio(options?: {
       const label = answerLabel(question, value);
       emitText(chat, "user", label);
       chat.answers[input.field] = value;
+      if (input.field === "topic") chat.topic = value;
       chat.assumed.push(label);
       chat.qIndex += 1;
     } else {
@@ -687,6 +698,21 @@ export function createMockStudio(options?: {
       }
     }
     await askNext(chat);
+  }
+
+  function syncScriptScenes(artefact: ArtefactSummary): void {
+    const scenes = artefact.payload.scenes;
+    if (!Array.isArray(scenes)) return;
+    const bundle = mustVideo(artefact.videoId);
+    for (const item of scenes) {
+      if (!item || typeof item !== "object") continue;
+      const row = item as { idx?: unknown; narration?: unknown; title?: unknown };
+      if (typeof row.idx !== "number") continue;
+      const scene = bundle.scenes.find((candidate) => candidate.idx === row.idx);
+      if (!scene) continue;
+      if (typeof row.narration === "string") scene.narration = row.narration;
+      if (typeof row.title === "string") scene.title = row.title;
+    }
   }
 
   function bumpPayload(kind: ArtefactKind, payload: Record<string, unknown>, version: number): Record<string, unknown> {
@@ -739,7 +765,8 @@ export function createMockStudio(options?: {
       const chatId = nid("chat");
       const videoId = nid("vid");
       const created = now();
-      const topic = body.initialMessage?.trim() || "aaj ka topic";
+      const heardTopic = body.initialMessage?.trim() ?? "";
+      const topic = heardTopic || "aaj ka topic";
       const video: VideoSummary = {
         id: videoId,
         userId: current.id,
@@ -762,9 +789,9 @@ export function createMockStudio(options?: {
         videoId,
         messages: [],
         listeners: new Set(),
-        answers: {},
+        answers: heardTopic ? { topic: heardTopic } : {},
         assumed: [],
-        qIndex: 0,
+        qIndex: heardTopic ? 1 : 0,
         topic,
         phase: "brief",
         advanceTimer: null,
@@ -786,7 +813,7 @@ export function createMockStudio(options?: {
             : "Namaste. Main Chotu hoon, aapki chhoti production team. Hindi, Hinglish, ya English — pehle brief, phir video.",
         );
         emit(chat, { type: "stage", videoId, stage: "brief" });
-        const first = INTAKE[0];
+        const first = INTAKE[chat.qIndex];
         if (first) emitQuestion(chat, first);
       })().catch((error: unknown) => emitError(chat, error));
       return { chatId, videoId, stage: "brief" };
@@ -978,6 +1005,7 @@ export function createMockStudio(options?: {
         artefact.version += 1;
         artefact.state = "awaiting_approval";
         artefact.payload = bumpPayload(artefact.kind, artefact.payload, artefact.version);
+        if (artefact.kind === "script") syncScriptScenes(artefact);
         artefact.updatedAt = now();
         patchApproval(chat, artefact);
         emit(chat, { type: "artefact", artefact: { ...artefact, payload: { ...artefact.payload } } });
@@ -1127,6 +1155,8 @@ function defaultValue(
   preset: ReturnType<typeof defaultsFor>,
 ): string {
   switch (field) {
+    case "topic":
+      return "aaj ka topic";
     case "genre":
       return "kids";
     case "aspect_ratio":
