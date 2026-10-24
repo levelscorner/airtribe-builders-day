@@ -8,6 +8,7 @@ import { assertPromptRules, mockPrompts } from "./mock.js";
 function userPrompt(input: PromptGenInput): string {
   return JSON.stringify({
     videoId: input.videoId,
+    feedback: input.feedback,
     artStyle: input.artStyle ?? input.brief.artStyle,
     artStyleTraits: input.brief.artStyleTraits,
     aspectRatio: input.brief.aspectRatio ?? "9:16",

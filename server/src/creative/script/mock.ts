@@ -64,11 +64,21 @@ export function mockScript(input: ScriptGenInput): ScriptGenOutput {
         doubts.push("A new character was requested and is not in the cast bank yet.");
       }
       if (castIds.length === 0) doubts.push("No cast member is attached to this scene.");
-      const narration = lines[index] ?? lines[lines.length - 1] ?? topic;
+      let narration = lines[index] ?? lines[lines.length - 1] ?? topic;
+      if (feedback) {
+        const quoted = feedback.match(/(?:say|replace.*?with|opening.*?:)\s*["“]([^"”]+)["”]/i)?.[1];
+        if (index === 0 && quoted) narration = stripBlockedNames(quoted);
+        else if (/simple|simpler|short|easy|easier/i.test(feedback)) {
+          narration = narration.split(/(?<=[.!?।])\s+/)[0] ?? narration;
+          if (index === 0) narration = input.language === "hi" ? "क्या आपने कभी सोचा है? आओ, मिलकर पता करें!" : input.language === "hinglish" ? "Kabhi socha aisa kyun hota hai? Chalo, pata karein!" : "Ever wondered why? Let’s find out together!";
+        } else if (index === 0) {
+          narration = input.language === "hi" ? `ज़रा सोचो! ${narration}` : input.language === "hinglish" ? `Socho zara! ${narration}` : `Picture this! ${narration}`;
+        }
+      }
       return {
         idx: index,
         title: titleFor(beat, index, genre.beats),
-        narration: index === 0 && feedback ? `${narration} ${feedback}` : narration,
+        narration,
         durationMs: timing[index] ?? 1000,
         doubts,
         castIds,

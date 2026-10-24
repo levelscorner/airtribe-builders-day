@@ -48,7 +48,9 @@ test("mock script returns one cast list per scene and durations that add up", as
 
 test("regenerate feedback is applied to the hook", async () => {
   const script = await createScriptGen({ mock: true }).generate(input({ feedback: "ZARQON" }));
-  assert.match(script.scenes[0]?.narration ?? "", /ZARQON/);
+  assert.doesNotMatch(script.scenes[0]?.narration ?? "", /ZARQON/);
+  const original = await createScriptGen({ mock: true }).generate(input());
+  assert.notEqual(script.scenes[0]?.narration, original.scenes[0]?.narration);
   assert.doesNotMatch(script.scenes[1]?.narration ?? "", /ZARQON/);
 });
 

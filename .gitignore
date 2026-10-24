@@ -11,3 +11,7 @@ server/.env
 *.tsbuildinfo
 app/.expo/
 coverage/
+
+apps/mobile/test-results/
+apps/mobile/playwright-report/
+.impeccable/review/*.png

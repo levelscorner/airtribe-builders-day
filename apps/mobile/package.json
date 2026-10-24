@@ -10,7 +10,8 @@
     "ios": "expo start --ios",
     "typecheck": "tsc --noEmit",
     "export:web": "expo export --platform web",
-    "check:mock": "tsx scripts/check-mock.ts"
+    "check:mock": "tsx scripts/check-mock.ts",
+    "test:web": "playwright test"
   },
   "dependencies": {
     "@chotu/shared": "file:../../packages/shared",
@@ -20,6 +21,7 @@
     "expo-linking": "~7.0.5",
     "expo-router": "~4.0.21",
     "expo-status-bar": "~2.0.1",
+    "lucide-react": "^0.468.0",
     "query-string": "^6.14.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
@@ -31,6 +33,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",
+    "@playwright/test": "^1.64.1",
     "@types/react": "~18.3.12",
     "babel-preset-expo": "~12.0.0",
     "tsx": "^4.19.3",

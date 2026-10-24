@@ -23,7 +23,21 @@ export function briefFromMessage(text: string): Brief {
   const trimmed = text.trim().replace(/\s+/g, " ");
   return parseBrief({
     genre: trimmed ? guessGenre(trimmed) : undefined,
-    topic: trimmed || undefined,
+    topic: trimmed ? trimmed
+      .replace(/\b(?:create|make|produce|generate)\s+(?:me\s+)?(?:an?\s+)?/i, "")
+      .replace(/\b\d{1,2}[ -]?(?:seconds?|secs?|s)\b/gi, "")
+      .replace(/\b(?:in\s+)?(?:English|Hindi|Hinglish)\b/gi, "")
+      .replace(/\b(?:cartoon(?:ish)?|animated|watercolou?r|stick figure|vertical|landscape|square)(?:\s+format)?\b/gi, "")
+      .replace(/\b(?:an?\s+)?(?:video|explainer|short)\s+(?:about|explaining|on)\s+/i, "")
+      .replace(/\bfor\s+(?:kids|children)(?:\s+aged?\s+[\d -]+)?/gi, "")
+      .replace(/\b(?:in\s+)?(?:9:16|16:9|1:1|720p|1080p)\b/gi, "")
+      .replace(/\s+/g, " ").replace(/\s+in\s*(?:format)?[.!]?$/i, "").trim() || trimmed : undefined,
+    language: /hinglish/i.test(trimmed) ? "hinglish" : /hindi|[\u0900-\u097f]/i.test(trimmed) ? "hi" : /english/i.test(trimmed) ? "en" : undefined,
+    aspectRatio: /16:9|landscape|widescreen/i.test(trimmed) ? "16:9" : /1:1|square/i.test(trimmed) ? "1:1" : /9:16|vertical|reel|shorts/i.test(trimmed) ? "9:16" : undefined,
+    targetSeconds: (() => { const n = Number(trimmed.match(/\b(\d{1,2})[ -]?(?:seconds?|secs?|s)\b/i)?.[1]); return n >= 5 && n <= 60 ? n : undefined; })(),
+    resolution: /1080p/i.test(trimmed) ? "1080p" : /720p/i.test(trimmed) ? "720p" : undefined,
+    artStyle: /watercolou?r/i.test(trimmed) ? "watercolor" : /stick figures?/i.test(trimmed) ? "stick figure" : /3d/i.test(trimmed) ? "soft-3d-toon" : /cartoon/i.test(trimmed) ? "bright-2d-cartoon" : undefined,
+    audience: /kids|children/i.test(trimmed) ? "Children" : undefined,
   });
 }
 
@@ -193,7 +207,9 @@ export function questionsFor(brief: Brief): IntakeQuestion[] {
 }
 
 export function nextQuestion(brief: Brief): IntakeQuestion | null {
-  return questionsFor(brief).find((question) => !isAnswered(brief, question.field)) ?? null;
+  return questionsFor(brief).find((question) =>
+    !(brief.experience === "chat_canvas" && ["resolution", "cast_ids", "audience"].includes(question.field)) &&
+    !isAnswered(brief, question.field)) ?? null;
 }
 
 function parseSeconds(raw: string): number | undefined {
@@ -221,7 +237,7 @@ function fillField(brief: Brief, field: string, raw: string): { brief: Brief; er
       return { brief: { ...brief, resolution: value } };
     }
     case "aspect_ratio": {
-      const value = useDefault ? (genre?.defaultAspectRatio ?? "9:16") : raw;
+      const value = useDefault ? (genre?.defaultAspectRatio ?? "9:16") : /vertical|reels?|shorts?/i.test(raw) ? "9:16" : /wide|landscape|youtube/i.test(raw) ? "16:9" : /square/i.test(raw) ? "1:1" : raw;
       if (!/^\d{1,2}:\d{1,2}$/.test(value)) return { brief, error: "Use a ratio like 9:16." };
       return { brief: { ...brief, aspectRatio: value } };
     }
@@ -233,7 +249,8 @@ function fillField(brief: Brief, field: string, raw: string): { brief: Brief; er
       return { brief: { ...brief, targetSeconds: value } };
     }
     case "language": {
-      const value = useDefault ? (genre?.defaultLanguage ?? "hinglish") : raw.trim().toLowerCase();
+      const word = raw.trim().toLowerCase();
+      const value = useDefault ? (genre?.defaultLanguage ?? "hinglish") : ({ hindi: "hi", english: "en" }[word] ?? word);
       if (value !== "hi" && value !== "hinglish" && value !== "en") {
         return { brief, error: "Language is Hindi, Hinglish, or English." };
       }
@@ -291,7 +308,7 @@ export function applyAnswer(brief: Brief, answer: IntakeAnswer): { brief: Brief;
     if (filled.error || !answer.skip) return filled;
     return { brief: { ...filled.brief, notes: markSkipped(filled.brief.notes, answer.field) } };
   }
-  const raw = (answer.optionId ?? answer.freeText ?? "").trim();
+  const raw = (answer.optionIds?.join(",") ?? answer.optionId ?? answer.freeText ?? "").trim();
   if (!raw) return { brief, error: "Choose an option, type an answer, or skip." };
   return fillField(brief, answer.field, raw);
 }

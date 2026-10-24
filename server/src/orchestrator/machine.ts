@@ -217,10 +217,10 @@ async function markStageFailed(
   });
 }
 
-function stageKinds(stage: Stage): ArtefactKind[] {
+function stageKinds(stage: Stage, experience?: Brief["experience"]): ArtefactKind[] {
   switch (stage) {
     case "cast":
-      return ["identity", "sheet", "anchor", "voice_sample"];
+      return experience === "chat_canvas" ? ["identity", "sheet", "anchor", "voice_sample", "image"] : ["identity", "sheet", "anchor", "voice_sample"];
     case "script":
       return ["script"];
     case "prompts":
@@ -239,10 +239,26 @@ function stageKinds(stage: Stage): ArtefactKind[] {
 }
 
 async function stageSettled(ctx: OrchestratorContext, videoId: string, stage: Stage): Promise<boolean> {
-  const kinds = new Set(stageKinds(stage));
+  const video = await store.getVideoRow(ctx.db, videoId);
+  const kinds = new Set(stageKinds(stage, video?.brief.experience));
   if (kinds.size === 0) return true;
   const artefacts = (await store.listArtefacts(ctx.db, videoId)).filter((item) => kinds.has(item.kind));
   if (artefacts.length === 0) return false;
+  if (video?.brief.experience === "chat_canvas" && stage === "cast") {
+    // SSE exposes references as they finish. A second browser must not be able
+    // to approve the first item and advance while the rest are still generating.
+    const members = getPresetCast().filter(member => video.brief.castIds?.includes(member.id));
+    const visible = members.filter(member => member.role !== "narrator");
+    const scenes = await store.listScenes(ctx.db, videoId);
+    const expected: Partial<Record<ArtefactKind, number>> = {
+      identity: members.length, voice_sample: members.length,
+      sheet: visible.length, anchor: visible.length, image: scenes.length,
+    };
+    if (!scenes.length || !members.length) return false;
+    for (const [kind, count] of Object.entries(expected)) {
+      if (artefacts.filter(item => item.kind === kind).length < count) return false;
+    }
+  }
   return artefacts.every((item) => item.state === "approved");
 }
 
@@ -336,7 +352,7 @@ async function beginScript(ctx: OrchestratorContext, chatId: string, videoId: st
   await approvalCard(ctx, chatId, "script", artefact, "Script");
 }
 
-async function beginPrompts(ctx: OrchestratorContext, chatId: string, videoId: string): Promise<void> {
+async function beginPrompts(ctx: OrchestratorContext, chatId: string, videoId: string, review = true): Promise<void> {
   const video = (await store.getVideoRow(ctx.db, videoId))!;
   const scenes = await store.listScenes(ctx.db, videoId);
   const cast = await store.listCastMembers(ctx.db, video.brief.castIds);
@@ -356,11 +372,11 @@ async function beginPrompts(ctx: OrchestratorContext, chatId: string, videoId: s
       videoId,
       sceneId: scene.id,
       kind: "prompt",
-      state: "awaiting_approval",
+      state: review ? "awaiting_approval" : "approved",
       creditCost: artefactCreditCost("prompt"),
       payload: { ...output, sceneIdx: scene.idx, title: scene.title },
     });
-    await approvalCard(ctx, chatId, "prompts", artefact, `Prompt · ${scene.title ?? scene.idx}`);
+    if (review) await approvalCard(ctx, chatId, "prompts", artefact, `Prompt · ${scene.title ?? scene.idx}`);
   }
 }
 
@@ -387,7 +403,7 @@ async function beginImages(ctx: OrchestratorContext, chatId: string, videoId: st
       kind: "image",
       state: "awaiting_approval",
       creditCost: artefactCreditCost("image"),
-      payload: { url: generated.url, provider: generated.provider, promptId: prompt.id },
+      payload: { url: generated.url, provider: generated.provider, model: generated.model, promptId: prompt.id },
     });
     await approvalCard(ctx, chatId, "images", artefact, `Image · scene`);
   }
@@ -403,9 +419,7 @@ async function beginClips(ctx: OrchestratorContext, chatId: string, videoId: str
   await progress(ctx, chatId, "clips", "Clips…", "Clips");
   for (const image of images) {
     const prompt = prompts.find((p) => p.id === image.payload.promptId || p.sceneId === image.sceneId);
-    const videoPrompt = String(prompt?.payload.videoPrompt ?? "gentle motion")
-      .replace(/<<<[^>]+>>>/g, " ")
-      .trim();
+    const videoPrompt = String(prompt?.payload.videoPrompt ?? "gentle motion").replace(/<<<[^>]+>>>/g, " ").trim();
     const scene = image.sceneId
       ? (await store.listScenes(ctx.db, videoId)).find((s) => s.id === image.sceneId)
       : undefined;
@@ -422,7 +436,7 @@ async function beginClips(ctx: OrchestratorContext, chatId: string, videoId: str
       kind: "clip",
       state: "awaiting_approval",
       creditCost: artefactCreditCost("clip"),
-      payload: { url: generated.url, provider: generated.provider, imageId: image.id },
+      payload: { url: generated.url, provider: generated.provider, model: generated.model, imageId: image.id },
     });
     await approvalCard(ctx, chatId, "clips", artefact, `Clip · scene`);
   }
@@ -516,6 +530,12 @@ async function runStageWork(
     switch (stage) {
       case "cast":
         await beginCast(ctx, chatId, videoId, cast);
+        if (video.brief.experience === "chat_canvas") {
+          // Script approval authorizes preparing visuals. Prompts are internal inputs;
+          // the resulting images and character references still require approval.
+          await beginPrompts(ctx, chatId, videoId, false);
+          await beginImages(ctx, chatId, videoId);
+        }
         break;
       case "script":
         await beginScript(ctx, chatId, videoId);
@@ -561,8 +581,9 @@ async function advanceIfSettled(ctx: OrchestratorContext, chatId: string, videoI
   const video = await store.getVideoRow(ctx.db, videoId);
   if (!video || video.stage === "done" || video.stage === "brief") return;
   if (!(await stageSettled(ctx, videoId, video.stage))) return;
-  const idx = STAGE_ORDER.indexOf(video.stage);
-  const next = STAGE_ORDER[idx + 1];
+  const order: Stage[] = video.brief.experience === "chat_canvas" ? ["brief", "script", "cast", "clips", "audio", "final", "done"] : STAGE_ORDER;
+  const idx = order.indexOf(video.stage);
+  const next = order[idx + 1];
   if (!next) return;
   await enterStageFrom(ctx, chatId, videoId, video.stage, next);
 }
@@ -586,7 +607,7 @@ function lockBrief(brief: Brief): Brief {
 
 export async function startChat(
   ctx: OrchestratorContext,
-  input: { userId: string; title?: string; initialMessage?: string },
+  input: { userId: string; title?: string; initialMessage?: string; experience?: Brief["experience"] },
 ): Promise<{ chatId: string; videoId: string; stage: Stage }> {
   const { chatId, videoId } = await store.createChatVideo(ctx.db, {
     userId: input.userId,
@@ -604,10 +625,14 @@ export async function startChat(
     brief = briefFromMessage(input.initialMessage.trim());
     await text(ctx, chatId, "user", input.initialMessage.trim());
   }
+  brief.experience = input.experience;
+  await store.updateVideo(ctx.db, videoId, { brief });
   ctx.briefs.set(chatId, brief);
   chatBus.publish(chatId, { type: "stage", videoId, stage: "brief" });
-  await askQuestion(ctx, chatId, brief);
-  return { chatId, videoId, stage: "brief" };
+  if (nextQuestion(brief)) await askQuestion(ctx, chatId, brief);
+  else await handleAnswer(ctx, chatId, { field: "__defaults", useDefaults: true }, "Use the details in my prompt");
+  const current = await store.getVideoRow(ctx.db, videoId);
+  return { chatId, videoId, stage: current?.stage ?? "brief" };
 }
 
 export async function handleAnswer(
@@ -626,14 +651,19 @@ export async function handleAnswer(
     return text(ctx, chatId, "assistant", "Brief already locked — cast stage chalu hai.");
   }
 
-  const brief = ctx.briefs.get(chatId) ?? {};
-  const result = applyAnswer(brief, answer);
+  const brief = ctx.briefs.get(chatId) ?? videoRow.brief;
+  const defaultBrief = brief.experience === "chat_canvas" ? {
+    ...brief, targetSeconds: brief.targetSeconds ?? 45, aspectRatio: brief.aspectRatio ?? "9:16",
+    language: brief.language ?? (/[\u0900-\u097f]/.test(brief.topic ?? "") ? "hi" : "en"),
+  } as Brief : brief;
+  const result = answer.field === "__defaults" && answer.useDefaults ? { brief: applyDefaults(defaultBrief), error: undefined } : applyAnswer(brief, answer);
   if (result.error) {
     await text(ctx, chatId, "assistant", result.error);
     throw new Error(result.error);
   }
   ctx.briefs.set(chatId, result.brief);
-  const userMsg = await text(
+  await store.updateVideo(ctx.db, meta.videoId, { brief: result.brief });
+  const userMsg = echo === "Use the details in my prompt" ? undefined : await text(
     ctx,
     chatId,
     "user",
@@ -661,10 +691,20 @@ export async function handleAnswer(
     ctx,
     chatId,
     "assistant",
-    `Brief lock · ${locked.genre} · ${locked.language} · ${locked.targetSeconds}s · cast ${(locked.castIds ?? []).join(", ")}`,
+    locked.experience === 'chat_canvas' ? [
+      'Your video is set:',
+      `Video type: ${{ kids: 'Educational explainer', ad: 'Product or brand ad', faceless: 'Narrated story' }[locked.genre ?? 'kids']}`,
+      `Duration: ${locked.targetSeconds} seconds`,
+      `Aspect ratio: ${locked.aspectRatio} (${{ '9:16': 'vertical', '16:9': 'landscape', '1:1': 'square' }[locked.aspectRatio ?? '9:16'] ?? 'custom'})`,
+      `Language: ${{ en: 'English', hi: 'Hindi', hinglish: 'Hinglish' }[locked.language ?? 'en']}`,
+      `Visual style: ${getGenre(locked.genre ?? 'kids').artStylePresets.find(style => style.id === locked.artStyle)?.label ?? locked.artStyle ?? 'Illustrated'}`,
+      `Resolution: ${locked.resolution}`,
+      `Audience: ${locked.audience}`,
+      `Characters: ${getPresetCast().filter(member => locked.castIds?.includes(member.id)).map(member => member.name).join(', ') || 'Narrator'}`,
+    ].join('\n') : `Brief lock · ${locked.genre} · ${locked.language} · ${locked.targetSeconds}s · cast ${(locked.castIds ?? []).join(", ")}`,
   );
   // CAS brief→cast so a duplicated final answer cannot spawn cast twice.
-  await enterStageFrom(ctx, chatId, meta.videoId, "brief", "cast");
+  await enterStageFrom(ctx, chatId, meta.videoId, "brief", locked.experience === "chat_canvas" ? "script" : "cast");
   return userMsg;
 }
 
@@ -677,6 +717,7 @@ export async function approveArtefact(
   if (artefact.state !== "awaiting_approval") throw new Error("bad_state");
   const video = (await store.getVideoRow(ctx.db, artefact.videoId))!;
   assertVideoOwner(video, input.userId);
+  if (video.brief.experience === "chat_canvas" && !stageKinds(video.stage, video.brief.experience).includes(artefact.kind)) throw new Error("This review is already complete. Refresh to see the current step.");
   const updated = await store.updateArtefact(ctx.db, artefact.id, { state: "approved" });
   await store.recordApproval(ctx.db, {
     artefactId: artefact.id,
@@ -703,6 +744,7 @@ export async function rejectArtefact(
   if (!artefact) throw new Error("artefact not found");
   const video = (await store.getVideoRow(ctx.db, artefact.videoId))!;
   assertVideoOwner(video, input.userId);
+  if (video.brief.experience === "chat_canvas" && (artefact.state === "approved" || !stageKinds(video.stage, video.brief.experience).includes(artefact.kind))) throw new Error("This review is already complete. Refresh to see the current step.");
   const updated = await store.updateArtefact(ctx.db, artefact.id, {
     state: "rejected",
     payload: { ...artefact.payload, rejectionNote: input.rejectNote },
@@ -736,6 +778,7 @@ export async function regenerateArtefact(
   const user = await store.getUser(ctx.db, input.userId);
   if (!user) throw new Error("user not found");
   const cost = artefact.creditCost;
+  if (video.brief.experience === "chat_canvas" && !stageKinds(video.stage, video.brief.experience).includes(artefact.kind)) throw new Error("This review is already complete. Refresh to see the current step.");
   if (!input.confirm) {
     return {
       artefactId: artefact.id,
@@ -751,6 +794,7 @@ export async function regenerateArtefact(
   ) {
     throw new Error("bad_state");
   }
+  const feedback = input.feedback?.trim().slice(0, 2000) ?? (typeof artefact.payload.rejectionNote === "string" ? artefact.payload.rejectionNote : undefined);
   const nextVersion = artefact.version + 1;
   const balance = await debitRegenerate(ctx.db, {
     userId: input.userId,
@@ -763,7 +807,7 @@ export async function regenerateArtefact(
     version: nextVersion,
     payload: {
       ...artefact.payload,
-      feedback: input.feedback,
+      feedback,
       version: nextVersion,
       generationFailed: false,
       error: undefined,
@@ -773,7 +817,7 @@ export async function regenerateArtefact(
     artefactId: artefact.id,
     userId: input.userId,
     action: "regenerate",
-    note: input.feedback,
+    note: feedback,
     creditCharged: cost,
   });
   await store.logEvent(ctx.db, {
@@ -786,12 +830,46 @@ export async function regenerateArtefact(
   await progress(ctx, video.chatId, video.stage, `Dobara bana rahe hain · ${cost} credits.`, "Regen");
 
   try {
+    let generatedPayload: Record<string, unknown> = {};
+    if (artefact.kind === "script") {
+      const cast = await attachCast(ctx, video.id, video.brief.castIds ?? []);
+      const output = await createScriptGen({ mock: ctx.mock }).generate({
+        videoId: video.id, brief: video.brief, cast, genre: video.genre,
+        language: video.language, targetSeconds: video.targetSeconds, feedback,
+      });
+      const scenes = await store.replaceScenes(ctx.db, video.id, output.scenes);
+      const history = Array.isArray(artefact.payload.previousVersions) ? artefact.payload.previousVersions : [];
+      generatedPayload = { scenes: output.scenes, sceneIds: scenes.map(scene => scene.id),
+        previousVersions: [...history, { version: artefact.version, scenes: artefact.payload.scenes }],
+      };
+    }
+    if (artefact.kind === "image") {
+      const prompt = (await store.listArtefacts(ctx.db, video.id)).find(a => a.id === artefact.payload.promptId);
+      const scene = (await store.listScenes(ctx.db, video.id)).find(s => s.id === artefact.sceneId);
+      if (!prompt || !scene) throw new Error("Scene direction unavailable. Please restart visual generation.");
+      const cast = await attachCast(ctx, video.id, video.brief.castIds ?? []);
+      const direction = await createPromptGen({ mock: ctx.mock }).generate({
+        videoId: video.id, scene, brief: video.brief, cast, artStyle: video.artStyle, feedback,
+      });
+      const generated = await createMediaPorts({ MOCK: ctx.mock ? "1" : "0" }).images.generate({
+        prompt: direction.imagePrompt.replace(/<<<[^>]+>>>/g, " ").trim(),
+        elementIds: [], aspectRatio: video.aspectRatio, resolution: video.resolution,
+      });
+      await store.updateArtefact(ctx.db, prompt.id, { payload: { ...prompt.payload, ...direction } });
+      generatedPayload = { url: generated.url, provider: generated.provider, model: generated.model };
+    }
+    if (artefact.kind === "identity" && feedback) {
+      // This prototype's character bank is preset. Preserve its identity and
+      // record direction rather than pretending a new trained model exists.
+      generatedPayload = { directionNote: feedback };
+    }
     updated = await store.updateArtefact(ctx.db, artefact.id, {
       state: "awaiting_approval",
       payload: {
         ...updated.payload,
         regenerated: true,
         url: typeof artefact.payload.url === "string" ? artefact.payload.url : mockAssets.keyframe,
+        ...generatedPayload,
       },
     });
   } catch (error) {
@@ -823,7 +901,7 @@ export async function approveAllRemaining(
   const video = await store.getVideoRow(ctx.db, input.videoId);
   if (!video) throw new Error("video not found");
   assertVideoOwner(video, input.userId);
-  const kinds = new Set(stageKinds(video.stage));
+  const kinds = new Set(stageKinds(video.stage, video.brief.experience));
   const approvedIds: string[] = [];
   for (const artefact of await store.listArtefacts(ctx.db, input.videoId)) {
     if (!kinds.has(artefact.kind) || artefact.state !== "awaiting_approval") continue;

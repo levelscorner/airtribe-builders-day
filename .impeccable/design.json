@@ -1,0 +1,433 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-24T10:40:53.582876+00:00",
+  "title": "Design System: Chotu Web Studio",
+  "extensions": {
+    "colorMeta": {
+      "paper": {
+        "role": "neutral",
+        "displayName": "Cool Paper",
+        "canonical": "#f8f9fb",
+        "tonalRamp": [
+          "oklch(15% 0.0029 264.5)",
+          "oklch(26% 0.0029 264.5)",
+          "oklch(38% 0.0029 264.5)",
+          "oklch(49% 0.0029 264.5)",
+          "oklch(61% 0.0029 264.5)",
+          "oklch(72% 0.0029 264.5)",
+          "oklch(84% 0.0029 264.5)",
+          "oklch(95% 0.0029 264.5)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "White Surface",
+        "canonical": "#fff",
+        "tonalRamp": [
+          "oklch(15% 0.0000 0.0)",
+          "oklch(26% 0.0000 0.0)",
+          "oklch(38% 0.0000 0.0)",
+          "oklch(49% 0.0000 0.0)",
+          "oklch(61% 0.0000 0.0)",
+          "oklch(72% 0.0000 0.0)",
+          "oklch(84% 0.0000 0.0)",
+          "oklch(95% 0.0000 0.0)"
+        ]
+      },
+      "rail": {
+        "role": "neutral",
+        "displayName": "Quiet Rail",
+        "canonical": "#eff1f5",
+        "tonalRamp": [
+          "oklch(15% 0.0058 264.5)",
+          "oklch(26% 0.0058 264.5)",
+          "oklch(38% 0.0058 264.5)",
+          "oklch(49% 0.0058 264.5)",
+          "oklch(61% 0.0058 264.5)",
+          "oklch(72% 0.0058 264.5)",
+          "oklch(84% 0.0058 264.5)",
+          "oklch(95% 0.0058 264.5)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Graphite",
+        "canonical": "#242932",
+        "tonalRamp": [
+          "oklch(15% 0.0181 262.2)",
+          "oklch(26% 0.0181 262.2)",
+          "oklch(38% 0.0181 262.2)",
+          "oklch(49% 0.0181 262.2)",
+          "oklch(61% 0.0181 262.2)",
+          "oklch(72% 0.0181 262.2)",
+          "oklch(84% 0.0181 262.2)",
+          "oklch(95% 0.0181 262.2)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Slate",
+        "canonical": "#656c79",
+        "tonalRamp": [
+          "oklch(15% 0.0221 262.9)",
+          "oklch(26% 0.0221 262.9)",
+          "oklch(38% 0.0221 262.9)",
+          "oklch(49% 0.0221 262.9)",
+          "oklch(61% 0.0221 262.9)",
+          "oklch(72% 0.0221 262.9)",
+          "oklch(84% 0.0221 262.9)",
+          "oklch(95% 0.0221 262.9)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Cool Divider",
+        "canonical": "#e2e5eb",
+        "tonalRamp": [
+          "oklch(15% 0.0087 264.5)",
+          "oklch(26% 0.0087 264.5)",
+          "oklch(38% 0.0087 264.5)",
+          "oklch(49% 0.0087 264.5)",
+          "oklch(61% 0.0087 264.5)",
+          "oklch(72% 0.0087 264.5)",
+          "oklch(84% 0.0087 264.5)",
+          "oklch(95% 0.0087 264.5)"
+        ]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Muted Studio Blue",
+        "canonical": "#425c9b",
+        "tonalRamp": [
+          "oklch(15% 0.1063 265.7)",
+          "oklch(26% 0.1063 265.7)",
+          "oklch(38% 0.1063 265.7)",
+          "oklch(49% 0.1063 265.7)",
+          "oklch(61% 0.1063 265.7)",
+          "oklch(72% 0.1063 265.7)",
+          "oklch(84% 0.1063 265.7)",
+          "oklch(95% 0.1063 265.7)"
+        ]
+      },
+      "accent-soft": {
+        "role": "primary",
+        "displayName": "Blue Mist",
+        "canonical": "#eaf0fd",
+        "tonalRamp": [
+          "oklch(15% 0.0186 266.0)",
+          "oklch(26% 0.0186 266.0)",
+          "oklch(38% 0.0186 266.0)",
+          "oklch(49% 0.0186 266.0)",
+          "oklch(61% 0.0186 266.0)",
+          "oklch(72% 0.0186 266.0)",
+          "oklch(84% 0.0186 266.0)",
+          "oklch(95% 0.0186 266.0)"
+        ]
+      },
+      "accent-hover": {
+        "role": "primary",
+        "displayName": "Studio Blue Hover",
+        "canonical": "#354d86",
+        "tonalRamp": [
+          "oklch(15% 0.0991 265.3)",
+          "oklch(26% 0.0991 265.3)",
+          "oklch(38% 0.0991 265.3)",
+          "oklch(49% 0.0991 265.3)",
+          "oklch(61% 0.0991 265.3)",
+          "oklch(72% 0.0991 265.3)",
+          "oklch(84% 0.0991 265.3)",
+          "oklch(95% 0.0991 265.3)"
+        ]
+      },
+      "secondary": {
+        "role": "neutral",
+        "displayName": "Secondary Surface",
+        "canonical": "#edf0f6",
+        "tonalRamp": [
+          "oklch(15% 0.0087 264.5)",
+          "oklch(26% 0.0087 264.5)",
+          "oklch(38% 0.0087 264.5)",
+          "oklch(49% 0.0087 264.5)",
+          "oklch(61% 0.0087 264.5)",
+          "oklch(72% 0.0087 264.5)",
+          "oklch(84% 0.0087 264.5)",
+          "oklch(95% 0.0087 264.5)"
+        ]
+      },
+      "secondary-ink": {
+        "role": "neutral",
+        "displayName": "Secondary Ink",
+        "canonical": "#3d4d6b",
+        "tonalRamp": [
+          "oklch(15% 0.0544 262.6)",
+          "oklch(26% 0.0544 262.6)",
+          "oklch(38% 0.0544 262.6)",
+          "oklch(49% 0.0544 262.6)",
+          "oklch(61% 0.0544 262.6)",
+          "oklch(72% 0.0544 262.6)",
+          "oklch(84% 0.0544 262.6)",
+          "oklch(95% 0.0544 262.6)"
+        ]
+      },
+      "secondary-hover": {
+        "role": "neutral",
+        "displayName": "Secondary Hover",
+        "canonical": "#e2e8f3",
+        "tonalRamp": [
+          "oklch(15% 0.0162 262.8)",
+          "oklch(26% 0.0162 262.8)",
+          "oklch(38% 0.0162 262.8)",
+          "oklch(49% 0.0162 262.8)",
+          "oklch(61% 0.0162 262.8)",
+          "oklch(72% 0.0162 262.8)",
+          "oklch(84% 0.0162 262.8)",
+          "oklch(95% 0.0162 262.8)"
+        ]
+      },
+      "summary": {
+        "role": "neutral",
+        "displayName": "Plan Wash",
+        "canonical": "#eff2f8",
+        "tonalRamp": [
+          "oklch(15% 0.0087 264.5)",
+          "oklch(26% 0.0087 264.5)",
+          "oklch(38% 0.0087 264.5)",
+          "oklch(49% 0.0087 264.5)",
+          "oklch(61% 0.0087 264.5)",
+          "oklch(72% 0.0087 264.5)",
+          "oklch(84% 0.0087 264.5)",
+          "oklch(95% 0.0087 264.5)"
+        ]
+      },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Canvas Gray",
+        "canonical": "#f0f2f6",
+        "tonalRamp": [
+          "oklch(15% 0.0058 264.5)",
+          "oklch(26% 0.0058 264.5)",
+          "oklch(38% 0.0058 264.5)",
+          "oklch(49% 0.0058 264.5)",
+          "oklch(61% 0.0058 264.5)",
+          "oklch(72% 0.0058 264.5)",
+          "oklch(84% 0.0058 264.5)",
+          "oklch(95% 0.0058 264.5)"
+        ]
+      },
+      "danger": {
+        "role": "error",
+        "displayName": "Error Red",
+        "canonical": "#a53b42",
+        "tonalRamp": [
+          "oklch(15% 0.1398 19.8)",
+          "oklch(26% 0.1398 19.8)",
+          "oklch(38% 0.1398 19.8)",
+          "oklch(49% 0.1398 19.8)",
+          "oklch(61% 0.1398 19.8)",
+          "oklch(72% 0.1398 19.8)",
+          "oklch(84% 0.1398 19.8)",
+          "oklch(95% 0.1398 19.8)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Opening Display",
+        "purpose": "Instrument Serif introduction; responsive sizes remain in Layout and Typography."
+      },
+      "headline": {
+        "displayName": "Canvas Headline",
+        "purpose": "The visual canvas introduction, regular and italic."
+      },
+      "title": {
+        "displayName": "Configuration Title",
+        "purpose": "The current question inside the single active configuration box."
+      },
+      "body": {
+        "displayName": "Conversation Body",
+        "purpose": "DM Sans reading text and interface copy."
+      },
+      "label": {
+        "displayName": "Scene Metadata",
+        "purpose": "Compact uppercase scene numbers and timing metadata."
+      }
+    },
+    "shadows": [
+      {
+        "name": "composer-rest",
+        "value": "0 6px 28px rgba(41, 53, 80, 0.055)",
+        "purpose": "Diffuse resting lift on the composer."
+      },
+      {
+        "name": "composer-focus",
+        "value": "0 5px 30px rgba(55, 78, 124, 0.1)",
+        "purpose": "Container focus for the composer; the conversation variant uses a border instead."
+      }
+    ],
+    "motion": [
+      {
+        "name": "studio-ease",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Movement for the arriving idea, canvas, and current configuration."
+      },
+      {
+        "name": "idea-rise",
+        "value": "0.55s",
+        "purpose": "Submitted prompt placement."
+      },
+      {
+        "name": "canvas-opacity",
+        "value": "0.4s",
+        "purpose": "Visual canvas fade."
+      },
+      {
+        "name": "canvas-transform",
+        "value": "0.6s",
+        "purpose": "Visual canvas horizontal movement."
+      },
+      {
+        "name": "question-appear",
+        "value": "0.3s",
+        "purpose": "Current question entrance."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "animation: none; transition: none; scroll-behavior: auto",
+        "purpose": "Applied throughout the web surface when prefers-reduced-motion is reduce."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "wide-desktop-min",
+        "value": "1500px"
+      },
+      {
+        "name": "compact-desktop-max",
+        "value": "1150px"
+      },
+      {
+        "name": "canvas-overlay-max",
+        "value": "760px"
+      },
+      {
+        "name": "small-web-max",
+        "value": "450px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The main approval or continue action.",
+      "html": "<button class=\"ds-primary\">Approve script <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" aria-hidden=\"true\"><path d=\"m5 12 4 4L19 6\"/></svg></button>",
+      "css": ".ds-primary{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:42px;padding:11px 17px;border:0;border-radius:10px;font-size:13px;font-weight:500;line-height:1.4;cursor:pointer;font-family:\"DM Sans\",sans-serif;background:#425c9b;color:#fff}.ds-primary:hover{background:#354d86}.ds-primary:focus-visible{outline:2px solid #425c9b;outline-offset:4px;}.ds-primary:disabled{opacity:.45;cursor:default}@media(max-width:450px){.ds-primary{min-height:44px}}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "A supporting filled action beside the primary decision.",
+      "html": "<button class=\"ds-secondary\">Request a change</button>",
+      "css": ".ds-secondary{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:42px;padding:11px 17px;border:0;border-radius:10px;font-size:13px;font-weight:500;line-height:1.4;cursor:pointer;font-family:\"DM Sans\",sans-serif;background:#edf0f6;color:#3d4d6b}.ds-secondary:hover{background:#e2e8f3}.ds-secondary:focus-visible{outline:2px solid #425c9b;outline-offset:4px;}.ds-secondary:disabled{opacity:.45;cursor:default}@media(max-width:450px){.ds-secondary{min-height:44px}}"
+    },
+    {
+      "name": "Text Button",
+      "kind": "button",
+      "refersTo": "button-text",
+      "description": "Low-emphasis revision or back action.",
+      "html": "<button class=\"ds-text\">Back to canvas</button>",
+      "css": ".ds-text{display:inline-flex;align-items:center;gap:7px;padding:8px 0;border:0;background:none;color:#656c79;text-align:left;font-size:12px;cursor:pointer;font-family:\"DM Sans\",sans-serif;}.ds-text:hover{color:#425c9b}.ds-text:focus-visible{outline:2px solid #425c9b;outline-offset:4px;}.ds-text:disabled{opacity:.45;cursor:default}@media(max-width:450px){.ds-text{min-height:36px}}"
+    },
+    {
+      "name": "Prompt Composer",
+      "kind": "input",
+      "refersTo": "composer",
+      "description": "A white input surface with shared container focus and a graphite send action.",
+      "html": "<div class=\"ds-composer\"><textarea class=\"ds-prompt\" aria-label=\"Your idea\" placeholder=\"Tell me what you have in mind…\" rows=\"2\"></textarea><div class=\"ds-tools\"><button class=\"ds-attach\" aria-label=\"Attach reference\"><svg width=\"19\" height=\"19\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" aria-hidden=\"true\"><path d=\"m8 13 6-6a3 3 0 0 1 4 4l-8 8a5 5 0 0 1-7-7l9-9\"/></svg></button><button class=\"ds-send\" aria-label=\"Send idea\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" aria-hidden=\"true\"><path d=\"M12 19V5m-6 6 6-6 6 6\"/></svg></button></div></div>",
+      "css": ".ds-composer{width:min(100%,600px);background:#fff;border-radius:24px;padding:16px 18px 12px;box-shadow:0 6px 28px rgba(41,53,80,.055);transition:box-shadow .2s;font-family:\"DM Sans\",sans-serif;}.ds-composer:focus-within{box-shadow:0 5px 30px rgba(55,78,124,.1)}.ds-prompt{display:block;width:100%;resize:none;border:0;outline:none;background:transparent;color:#242932;font-size:15px;line-height:1.65;padding:5px 6px 8px;caret-color:#425c9b;font-family:\"DM Sans\",sans-serif;}.ds-prompt::placeholder{color:#656d79;opacity:1}.ds-tools{display:flex;justify-content:space-between;align-items:center;gap:10px}.ds-attach,.ds-send{display:flex;align-items:center;justify-content:center;border:0;border-radius:50%;cursor:pointer}.ds-attach{width:40px;height:40px;background:none;color:#242932}.ds-attach:hover{background:#e5e8ef}.ds-send{width:36px;height:36px;background:#242932;color:#fff}.ds-send:hover{background:#425c9b}.ds-attach:focus-visible,.ds-send:focus-visible{outline:2px solid #425c9b;outline-offset:4px;}.ds-send:disabled{background:#e8ebf0;color:#626c7b;cursor:default}@media(prefers-reduced-motion:reduce){.ds-composer{transition:none}}"
+    },
+    {
+      "name": "Recent Conversation",
+      "kind": "nav",
+      "refersTo": "navigation-item",
+      "description": "Quiet expanded-rail navigation with a visible current state.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Recent conversations\"><button class=\"ds-nav-item ds-current\" aria-current=\"page\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" aria-hidden=\"true\"><path d=\"M21 11a8 8 0 0 1-8 8H5l-3 3V11a9 9 0 0 1 19 0Z\"/></svg><span class=\"ds-nav-title\">A story about honey</span></button><button class=\"ds-nav-item\">Morning coffee ad</button></nav>",
+      "css": ".ds-nav{display:grid;gap:7px;width:236px;padding:12px;background:#eff1f5;font-family:\"DM Sans\",sans-serif;}.ds-nav-item{display:flex;align-items:center;gap:12px;min-height:44px;padding:8px 12px;border:0;border-radius:10px;background:none;color:#242932;font-size:13px;text-align:left;cursor:pointer;font-family:\"DM Sans\",sans-serif;}.ds-nav-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ds-nav-item:hover,.ds-current{background:#e2e7ef}.ds-nav-item:focus-visible{outline:2px solid #425c9b;outline-offset:4px;}"
+    },
+    {
+      "name": "Configuration Selection",
+      "kind": "chip",
+      "refersTo": "selection-chip",
+      "description": "A compact read-only reminder of a completed intake choice.",
+      "html": "<div class=\"ds-selections\" aria-label=\"Your selections\"><span class=\"ds-selection\">Hindi</span><span class=\"ds-selection\">30 seconds</span></div>",
+      "css": ".ds-selections{display:flex;gap:7px;flex-wrap:wrap;font-family:\"DM Sans\",sans-serif;}.ds-selection{font-size:11px;color:#56647b;background:#eaf0fd;padding:4px 9px;border-radius:6px;line-height:1.6}"
+    },
+    {
+      "name": "Active Configuration",
+      "kind": "card",
+      "refersTo": "configuration",
+      "description": "The single active question surface; application logic replaces its contents after an answer.",
+      "html": "<section class=\"ds-config\" aria-label=\"Video configuration\"><h2 class=\"ds-config-title\">What language feels right?</h2><div class=\"ds-config-choices\"><button class=\"ds-choice\">Hindi</button><button class=\"ds-choice\">Hinglish</button><button class=\"ds-choice\">English</button></div></section>",
+      "css": ".ds-config{max-width:620px;padding:25px 26px 22px;border:1px solid #e2e5eb;background:#fff;border-radius:18px;color:#242932;font-family:\"DM Sans\",sans-serif;}.ds-config-title{font-size:23px;line-height:1.45;font-weight:500;letter-spacing:-.45px;margin:0 0 22px}.ds-config-choices{display:flex;gap:8px;flex-wrap:wrap}.ds-choice{min-height:42px;border:1px solid #e2e5eb;border-radius:11px;padding:11px 15px;font-size:13px;background:#f8f9fb;color:#242932;cursor:pointer;font-family:\"DM Sans\",sans-serif;}.ds-choice:hover{background:#eaf0fd;border-color:#a8bbdf;color:#425c9b}.ds-choice:focus-visible{outline:2px solid #425c9b;outline-offset:4px;}.ds-choice:disabled{opacity:.45;cursor:default}@media(max-width:760px){.ds-config{padding:21px 18px}.ds-config-title{font-size:21px}}"
+    },
+    {
+      "name": "Completed Video Plan",
+      "kind": "card",
+      "refersTo": "configuration-summary",
+      "description": "The single persisted assistant summary after intake is complete.",
+      "html": "<section class=\"ds-summary\" aria-label=\"Video configuration summary\"><h2 class=\"ds-summary-title\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" aria-hidden=\"true\"><path d=\"m5 12 4 4L19 6\"/></svg>Here’s your video plan.</h2><dl class=\"ds-summary-grid\"><div><dt class=\"ds-term\">Language</dt><dd class=\"ds-value\">Hindi</dd></div><div><dt class=\"ds-term\">Duration</dt><dd class=\"ds-value\">30 seconds</dd></div><div><dt class=\"ds-term\">Style</dt><dd class=\"ds-value\">Warm and cinematic</dd></div><div><dt class=\"ds-term\">Format</dt><dd class=\"ds-value\">Vertical</dd></div></dl></section>",
+      "css": ".ds-summary{max-width:620px;padding:22px 24px;background:#eff2f8;border-radius:15px;color:#242932;font-family:\"DM Sans\",sans-serif;}.ds-summary-title{display:flex;align-items:center;gap:9px;font-size:18px;line-height:1.5;font-weight:500;letter-spacing:-.3px;margin:0 0 21px}.ds-summary-title svg{color:#425c9b}.ds-summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px 28px;margin:0}.ds-term{font-size:11px;color:#626c7c;margin-bottom:4px}.ds-value{font-size:13px;margin:0;line-height:1.6;overflow-wrap:anywhere}@media(max-width:760px){.ds-summary{padding:20px}.ds-summary-grid{gap:16px 20px}.ds-value{font-size:12px}}"
+    },
+    {
+      "name": "Frame Preview",
+      "kind": "custom",
+      "refersTo": "frame-preview",
+      "description": "Portrait review control; this standalone snippet shows the source placeholder treatment without external media.",
+      "html": "<button class=\"ds-frame\" aria-label=\"Review scene 1\"><span class=\"ds-frame-viewport\"><span class=\"ds-frame-index\">01</span><span class=\"ds-frame-placeholder\">Scene preview</span><span class=\"ds-frame-expand\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" aria-hidden=\"true\"><path d=\"M15 3h6v6M21 3l-7 7M9 21H3v-6m0 6 7-7\"/></svg></span></span><span class=\"ds-frame-title\">A golden beginning</span><span class=\"ds-frame-caption\">Sample frame for visual review.</span></button>",
+      "css": ".ds-frame{display:block;width:160px;padding:0;border:0;background:none;color:#242932;text-align:left;cursor:pointer;font-family:\"DM Sans\",sans-serif;}.ds-frame-viewport{display:block;position:relative;aspect-ratio:9/16;max-height:300px;background:#e7ebf2;border-radius:12px;overflow:hidden}.ds-frame-placeholder{display:flex;height:100%;align-items:center;justify-content:center;padding:10px;color:#74839d;font-size:11px;text-align:center}.ds-frame-index{position:absolute;top:11px;left:11px;font-size:10px;font-weight:500;background:rgba(255,255,255,.9);color:#323c47;padding:3px 7px;border-radius:5px}.ds-frame-expand{position:absolute;right:10px;bottom:10px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.9);border-radius:50%;opacity:0;transition:opacity .2s}.ds-frame:hover .ds-frame-expand,.ds-frame:focus-visible .ds-frame-expand{opacity:1}.ds-frame:focus-visible{outline:2px solid #425c9b;outline-offset:4px;}.ds-frame-title{display:block;font-size:12px;font-weight:500;margin:10px 0 3px}.ds-frame-caption{display:block;font-size:10px;line-height:1.65;color:#656c79}@media(prefers-reduced-motion:reduce){.ds-frame-expand{transition:none}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Quiet cool-white studio",
+    "overview": "Chotu's web studio gives an idea room to become a video. Cool white surfaces, graphite reading text, and desaturated blue actions keep attention on the creator's words and reviewable artifacts. The user chose the clarity of ChatGPT and Gemini as the web reference; this is an independent visual system from native mobile.\n\nDM Sans carries the interface and conversation. Instrument Serif brings a human editorial note to the opening question and canvas introduction. Generous empty space, restrained borders, and modest surface changes keep the interface calm while imagery supplies the visual richness.",
+    "keyCharacteristics": [
+      "Cool white surfaces with graphite text and muted blue interactions.",
+      "Spacious reading areas with compact supporting controls.",
+      "Serif display moments surrounded by plain sans-serif UI.",
+      "Flat conversation content, softly lifted composers, and clearly separated review surfaces."
+    ],
+    "rules": [
+      {
+        "name": "The Quiet Accent Rule",
+        "body": "Use blue for actions, focus, selection, and a few display accents; keep continuous reading text graphite.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Voices Rule",
+        "body": "Reserve Instrument Serif for display introductions; use DM Sans for decisions, conversation, labels, and controls.",
+        "section": "typography"
+      },
+      {
+        "name": "The Restrained Depth Rule",
+        "body": "Use tonal separation for reading and review surfaces; keep the diffuse lift concentrated on the composer.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** use the web palette and local web font roles independently from the native mobile theme.",
+      "**Do** keep submitted prompts plain and preserve one active configuration box followed by one completed plan summary.",
+      "**Do** keep primary text graphite, secondary text readable, and interactive focus visibly blue.",
+      "**Do** preserve sample sprite proportions, and label sample artwork and credits honestly.",
+      "**Do** preserve reduced-motion behavior, keyboard access, and clear return controls when surfaces change."
+    ],
+    "donts": [
+      "**Don't** introduce workflow tabs or a setup form into the prompt-first home.",
+      "**Don't** accumulate configuration questions and answers as visible transcript bubbles.",
+      "**Don't** use the serif display face for routine controls or reading text.",
+      "**Don't** stretch sample sprites to fill a mismatched container.",
+      "**Don't** describe sample previews as verified live Higgsfield output."
+    ]
+  }
+}
