@@ -50,6 +50,7 @@ test("concat is faststart and the bed is ducked under the voice", () => {
   assert.equal(duck[duck.indexOf("-filter_complex") + 1], musicDuckFilter());
   assert.match(musicDuckFilter(), /sidechaincompress=/);
   assert.match(musicDuckFilter(), /volume=0\.18/);
+  assert.match(musicDuckFilter(), /asplit=2\[vo\]\[vosc\]/);
   assert.ok(duck.includes("+faststart"));
   assert.ok(duck.includes("-c:v"));
   assert.ok(duck.includes("copy"));

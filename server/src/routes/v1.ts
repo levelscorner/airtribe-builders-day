@@ -46,6 +46,8 @@ function renderedFile(videoId: string): string | undefined {
 export type V1Deps = {
   db: SqlClient;
   mock: boolean;
+  /** Default true: generation keeps running when the client disconnects. */
+  detachStageWork?: boolean;
 };
 
 function writeSse(res: Response, frame: { id?: string; event: unknown }): void {
@@ -56,6 +58,7 @@ function writeSse(res: Response, frame: { id?: string; event: unknown }): void {
 export function createV1Router(deps: V1Deps): Router {
   const router = Router();
   const ctx: OrchestratorContext = createOrchestratorContext(deps.db, deps.mock);
+  ctx.detachStageWork = deps.detachStageWork ?? true;
   router.param("id", (_req, res, next, id: string) => {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) { res.status(400).json({ error: "invalid_id" }); return; }
     next();

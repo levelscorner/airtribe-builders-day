@@ -492,12 +492,9 @@ export function WebHome() {
       try {
         await getStudioClient().getMe();
       } catch (e) {
-        if (
-          e &&
-          typeof e === "object" &&
-          "status" in e &&
-          [401, 404].includes(Number(e.status))
-        ) {
+        const status = e && typeof e === "object" && "status" in e ? Number(e.status) : NaN;
+        const code = e && typeof e === "object" && "code" in e ? String(e.code) : "";
+        if (status === 401 || status === 404 || code === "no_user") {
           setNeedsProfile(true);
           return;
         }

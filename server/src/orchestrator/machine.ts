@@ -45,6 +45,7 @@ import { claudeIntakeEnabled, claudeOpeningBrief, claudeParseFreeText, claudeQue
 import { PROMPT_JSON_HINT, SCENE_PLAN_HINT, SCRIPT_JSON_HINT, creativeGenEnv } from "../llm/wire.js";
 import { artefactCreditCost, debitRegenerate } from "../credits/stub.js";
 import type { SqlClient } from "../db/client.js";
+import { sceneCastReference, ensureCharacterSheet } from "../media/cast/sheet.js";
 import { createMediaPorts } from "../media/index.js";
 import { retainReferences } from "../creative/prompts/create.js";
 import { elementIdForAnchor } from "../media/cast/reference.js";
@@ -54,7 +55,6 @@ import { mediaRoot } from "../media/files.js";
 import { mockAssets, publicUrl } from "../media/placeholders.js";
 import { needsSeedanceNativeAudio, seedanceFallbackNote } from "../media/voice-fallback.js";
 import {
-  castAnchorIds,
   mapWithConcurrency,
   regenScope,
   sceneConcurrency,
@@ -102,6 +102,15 @@ export type OrchestratorContext = {
   briefs: Map<string, Brief>;
   /** Test seam. Production uses the AgenticOrg client. */
   reviewScript?: (input: ScriptReviewInput) => Promise<AgentReview>;
+  /**
+   * When true, long stage work (cast/clips/audio/final) runs detached from the
+   * HTTP request that triggered it, so a client that switches chats, reloads or
+   * drops the connection never stops generation. Clients re-attach via SSE +
+   * GET /v1/chats/:id. Tests may leave it off to await work deterministically.
+   */
+  detachStageWork?: boolean;
+  /** In-flight detached stage work, keyed by videoId (exposed for tests). */
+  inflight?: Map<string, Promise<void>>;
 };
 
 export function createOrchestratorContext(
@@ -109,6 +118,33 @@ export function createOrchestratorContext(
   mock = true,
 ): OrchestratorContext {
   return { db, mock, briefs: new Map() };
+}
+
+/** Run stage work either awaited or detached from the caller's request. */
+async function kickStageWork(
+  ctx: OrchestratorContext,
+  chatId: string,
+  videoId: string,
+  stage: Stage,
+): Promise<void> {
+  if (!ctx.detachStageWork) {
+    await runStageWork(ctx, chatId, videoId, stage);
+    return;
+  }
+  const inflight = (ctx.inflight ??= new Map());
+  const job = runStageWork(ctx, chatId, videoId, stage)
+    .catch((error) => {
+      console.error(`[stage] ${stage} failed for ${videoId}:`, error instanceof Error ? error.message : error);
+      chatBus.publish(chatId, {
+        type: "error",
+        code: "stage_failed",
+        message: error instanceof Error ? error.message : "Stage failed.",
+      });
+    })
+    .finally(() => {
+      if (inflight.get(videoId) === job) inflight.delete(videoId);
+    });
+  inflight.set(videoId, job);
 }
 
 async function publishMessage<T extends ChatMessage>(
@@ -469,6 +505,9 @@ async function beginCast(
     );
 
     if (member.role !== "narrator") {
+      const sheetUrl = await ensureCharacterSheet(imageMediaEnv(ctx), member, {
+        saveSheet: (castId, url) => store.updateCastSheet(ctx.db, castId, url),
+      });
       const reference = ctx.mock
         ? undefined
         : await characterReference(ctx, videoId, member);
@@ -477,11 +516,7 @@ async function beginCast(
         kind: "sheet",
         state: "awaiting_approval",
         creditCost: artefactCreditCost("sheet"),
-        payload: {
-          castId: member.id,
-          ...(reference ?? { url: mockAssets.keyframe, provider: "mock" }),
-          note: reference ? "Character reference" : "Multi-angle sheet (mock)",
-        },
+        payload: { castId: member.id, url: sheetUrl, note: "Character sheet" },
       });
       await approvalCard(ctx, chatId, "cast", sheet, `${member.name} · sheet`);
 
@@ -691,7 +726,7 @@ function mediaEnv(ctx: OrchestratorContext): NodeJS.ProcessEnv {
   return env;
 }
 
-/** The scene pipeline opts into gpt-image-2. A blank IMAGE_PROVIDER elsewhere stays on Ark. */
+/** Scene stills and character sheets use gpt-image-2. MOCK and IMAGE_PROVIDER=mock stay on placeholders. */
 function imageMediaEnv(ctx: OrchestratorContext): NodeJS.ProcessEnv {
   const env = mediaEnv(ctx);
   if (env.MOCK === "1" || env.IMAGE_PROVIDER?.trim().toLowerCase() === "mock") return env;
@@ -739,8 +774,11 @@ async function beginImages(ctx: OrchestratorContext, chatId: string, videoId: st
       .trim();
     const rawIds = Array.isArray(prompt.payload.elementIds) ? prompt.payload.elementIds : [];
     const sceneCast = cast.filter((member) => scene?.castIds.includes(member.id));
-    const elementIds = castAnchorIds(
+    const referenced = await sceneCastReference(
+      imageMediaEnv(ctx),
       sceneCast,
+      imagePrompt,
+      { saveSheet: (castId, url) => store.updateCastSheet(ctx.db, castId, url) },
       rawIds.filter((id): id is string => typeof id === "string"),
     );
     const pending = await store.insertArtefact(ctx.db, {
@@ -763,8 +801,8 @@ async function beginImages(ctx: OrchestratorContext, chatId: string, videoId: st
     });
     try {
       const generated = await media.images.generate({
-        prompt: imagePrompt,
-        elementIds,
+        prompt: referenced.prompt,
+        elementIds: referenced.elementIds,
         aspectRatio: video.aspectRatio,
         resolution: video.resolution,
       });
@@ -1369,7 +1407,7 @@ async function enterStageFrom(
 ): Promise<boolean> {
   const moved = await store.tryTransitionStage(ctx.db, videoId, from, stage);
   if (!moved) return false;
-  await runStageWork(ctx, chatId, videoId, stage);
+  await kickStageWork(ctx, chatId, videoId, stage);
   return true;
 }
 
@@ -1589,9 +1627,14 @@ export async function approveArtefact(
 ): Promise<ArtefactSummary> {
   const artefact = await store.getArtefact(ctx.db, input.artefactId);
   if (!artefact) throw new Error("artefact not found");
-  if (artefact.state !== "awaiting_approval") throw new Error("bad_state");
   const video = (await store.getVideoRow(ctx.db, artefact.videoId))!;
   assertVideoOwner(video, input.userId);
+  if (artefact.state === "failed") {
+    // A failed clip/image/voice (e.g. "ark poll timed out") can't be approved;
+    // "Approve" on it means "try again", so retry generation instead of bad_state.
+    return retryFailedArtefact(ctx, artefact, input.userId);
+  }
+  if (artefact.state !== "awaiting_approval") throw new Error("bad_state");
   if (
     video.brief.experience === "chat_canvas" &&
     !stageKinds(video.stage, video.brief.experience).includes(artefact.kind)
@@ -1617,6 +1660,26 @@ export async function approveArtefact(
   await publishArtefact(video.chatId, updated);
   await advanceIfSettled(ctx, video.chatId, artefact.videoId);
   return updated;
+}
+
+const RETRY_TARGET: Record<string, "image" | "clip" | "voice"> = {
+  image: "image",
+  clip: "clip",
+  voice: "voice",
+  audio: "voice",
+};
+
+async function retryFailedArtefact(
+  ctx: OrchestratorContext,
+  artefact: ArtefactSummary,
+  userId: string,
+): Promise<ArtefactSummary> {
+  const target = RETRY_TARGET[artefact.kind];
+  if (artefact.sceneId && target) {
+    return regenerateScene(ctx, { videoId: artefact.videoId, userId, sceneId: artefact.sceneId, target });
+  }
+  const result = await regenerateArtefact(ctx, { artefactId: artefact.id, userId, confirm: true });
+  return "artefact" in result && result.artefact ? (result.artefact as ArtefactSummary) : (await store.getArtefact(ctx.db, artefact.id))!;
 }
 
 export async function rejectArtefact(
@@ -2016,10 +2079,15 @@ export async function regenerateScene(
       const imagePrompt = `${plan?.imagePrompt || textOf(prompt?.payload.imagePrompt) || textOf(current.payload.prompt)}${feedback ? `\n${feedback}` : ""}`
         .replace(/<<<[^>]+>>>/g, " ")
         .trim();
-      const cast = await store.listCastMembers(ctx.db, scene.castIds);
+      const cast = scene.castIds.length
+        ? (await store.listCastMembers(ctx.db, scene.castIds)).filter((member) => scene.castIds.includes(member.id))
+        : [];
+      const referenced = await sceneCastReference(imageMediaEnv(ctx), cast, imagePrompt || "scene", {
+        saveSheet: (castId, url) => store.updateCastSheet(ctx.db, castId, url),
+      });
       const generated = await media.images.generate({
-        prompt: imagePrompt || "scene",
-        elementIds: castAnchorIds(cast.filter((member) => scene.castIds.includes(member.id))),
+        prompt: referenced.prompt,
+        elementIds: referenced.elementIds,
         aspectRatio: video.aspectRatio,
         resolution: video.resolution,
       });

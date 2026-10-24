@@ -78,8 +78,21 @@ export function useWebChat(chatId: string) {
           setLoaded(true);
         }
       });
+    // Re-attach on return: generation runs server-side, so poll the chat while
+    // it is open in case SSE frames were missed while the user was elsewhere.
+    const poll = setInterval(() => {
+      if (lock.current) return;
+      void client
+        .getChat(chatId)
+        .then((chat) => {
+          if (alive && !lock.current) hydrate(chat);
+        })
+        .catch(() => {});
+    }, 5000);
     return () => {
       alive = false;
+      clearInterval(poll);
+      // Only stops listening. Never cancels server-side generation.
       unsubscribe();
     };
   }, [chatId, client, hydrate]);
