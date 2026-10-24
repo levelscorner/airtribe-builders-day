@@ -30,8 +30,13 @@ export function seedreamModel(env: EnvLike): string {
   return env.SEEDREAM_MODEL?.trim() || ArkModels.seedream;
 }
 
+/**
+ * Smallest 9:16 size Seedream accepts. 720x1280 is 921_600 pixels and the API
+ * rejects anything under 3_686_400. The studio downscales the result to 720x1280.
+ */
+export const SEEDREAM_PORTRAIT_SIZE = "1440x2560";
+
 export function arkImageSize(aspect: string, resolution: string): string {
-  const portrait = resolution === "1080p" ? "1080x1920" : "720x1280";
   const landscape = resolution === "1080p" ? "1920x1080" : "1280x720";
   switch (aspect.trim()) {
     case "16:9":
@@ -43,7 +48,7 @@ export function arkImageSize(aspect: string, resolution: string): string {
     case "3:4":
       return resolution === "1080p" ? "1080x1440" : "768x1024";
     default:
-      return portrait;
+      return SEEDREAM_PORTRAIT_SIZE;
   }
 }
 

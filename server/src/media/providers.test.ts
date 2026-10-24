@@ -11,6 +11,7 @@ import { savePng } from "./files.js";
 import { createCastAdapter } from "./cast/reference.js";
 import { createMediaPorts } from "./index.js";
 import { createVoiceGen } from "./elevenlabs/voice-gen.js";
+import { arkImageSize, SEEDREAM_PORTRAIT_SIZE } from "./ark/request.js";
 import { createStudioClipGen, createStudioImageGen } from "./studio.js";
 import type { FetchLike } from "./ark/client.js";
 
@@ -68,7 +69,60 @@ test("IMAGE_PROVIDER=openai calls gpt-image-2 generations and stores the crop", 
   assert.equal(meta.height, 1280);
 });
 
-test("a cast anchor uses image edits and a failed OpenAI call stays on OpenAI", async () => {
+test("a failed gpt-image-2 frame is retried once before Seedream", async () => {
+  const png = await sharp({
+    create: { width: 1024, height: 1536, channels: 3, background: { r: 9, g: 9, b: 9 } },
+  })
+    .png()
+    .toBuffer();
+  let generations = 0;
+  const calls: string[] = [];
+  const fetch: FetchLike = async (url) => {
+    calls.push(String(url));
+    if (String(url).includes("api.openai.com")) {
+      generations += 1;
+      if (generations === 1) return json(500, { error: { message: "overloaded sk-test-openai" } });
+      return json(200, { data: [{ b64_json: png.toString("base64") }] });
+    }
+    return json(200, { data: [{ url: "https://cdn.example/seedream.png" }] });
+  };
+  const root = mkdtempSync(join(tmpdir(), "chotu-retry-"));
+  const images = createStudioImageGen(
+    {
+      IMAGE_PROVIDER: "openai",
+      OPENAI_API_KEY: "sk-test-openai",
+      ARK_API_KEY: "ark-test-key",
+      PUBLIC_BASE_URL: "http://studio.test",
+      MEDIA_ROOT: root,
+    },
+    { fetch },
+  );
+  const image = await images.generate({
+    prompt: "rooftop",
+    elementIds: [],
+    aspectRatio: "9:16",
+    resolution: "720p",
+  });
+  assert.equal(image.provider, "openai");
+  assert.equal(image.model, "gpt-image-2");
+  assert.equal(generations, 2);
+  assert.equal(calls.filter((url) => url.includes("api.openai.com")).length, 2);
+  assert.equal(calls.some((url) => url.includes("bytepluses.com")), false);
+  assert.equal(JSON.stringify(image).includes("sk-test-openai"), false);
+  assert.equal(JSON.stringify(image).includes("ark-test-key"), false);
+});
+
+test("two failed gpt-image-2 frames fall back to a 1440x2560 Seedream still stored at 720x1280", async () => {
+  assert.equal(arkImageSize("9:16", "720p"), SEEDREAM_PORTRAIT_SIZE);
+  assert.equal(arkImageSize("9:16", "1080p"), SEEDREAM_PORTRAIT_SIZE);
+  assert.equal(arkImageSize("", "720p"), SEEDREAM_PORTRAIT_SIZE);
+  const [width, height] = SEEDREAM_PORTRAIT_SIZE.split("x").map(Number);
+  assert.ok((width ?? 0) * (height ?? 0) >= 3_686_400);
+  const portrait = await sharp({
+    create: { width: width ?? 1440, height: height ?? 2560, channels: 3, background: { r: 20, g: 40, b: 60 } },
+  })
+    .png()
+    .toBuffer();
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   const fetch: FetchLike = async (url, init) => {
     calls.push({ url: String(url), init });
@@ -76,6 +130,9 @@ test("a cast anchor uses image edits and a failed OpenAI call stays on OpenAI", 
       return new Response(Buffer.from("anchor"), { status: 200, headers: { "Content-Type": "image/png" } });
     }
     if (String(url).endsWith("/images/edits")) return json(500, { error: { message: "overloaded sk-test-openai" } });
+    if (String(url).endsWith("/seedream.png")) {
+      return new Response(new Uint8Array(portrait), { status: 200, headers: { "Content-Type": "image/png" } });
+    }
     return json(200, { data: [{ url: "https://cdn.example/seedream.png" }] });
   };
   const cast = createCastAdapter({ CAST_MOCK: "0" });
@@ -85,34 +142,53 @@ test("a cast anchor uses image edits and a failed OpenAI call stays on OpenAI", 
     identityText: "curious girl",
     anchorUrl: "https://cdn.example/mini.png",
   });
+  const root = mkdtempSync(join(tmpdir(), "chotu-seedream-"));
   const images = createStudioImageGen(
-    { IMAGE_PROVIDER: "openai", OPENAI_API_KEY: "sk-test-openai", ARK_API_KEY: "ark-test-key" },
+    {
+      IMAGE_PROVIDER: "openai",
+      OPENAI_API_KEY: "sk-test-openai",
+      ARK_API_KEY: "ark-test-key",
+      PUBLIC_BASE_URL: "http://studio.test",
+      MEDIA_ROOT: root,
+    },
     { cast, fetch },
   );
-  const job = await images.submit({
+  const image = await images.generate({
     prompt: "waves",
     elementIds: [ref.higgsfieldElementId],
     aspectRatio: "9:16",
     resolution: "720p",
   });
-  assert.equal(job.status, "failed");
-  assert.equal(job.provider, "openai");
-  assert.equal((job.error ?? "").includes("sk-test-openai"), false);
-  assert.equal((job.error ?? "").includes("ark-test-key"), false);
-  assert.equal(calls.length, 2);
-  assert.match(calls[1]?.url ?? "", /\/images\/edits$/);
-  assert.ok(calls[1]?.init?.body instanceof FormData);
-  const form = calls[1]?.init?.body as FormData;
+  assert.equal(image.provider, "ark");
+  assert.equal(image.model, "seedream-5-0-260128");
+  assert.equal(image.providerLabel, "Seedream 5.0 · BytePlus");
+  assert.match(image.url, /^http:\/\/studio\.test\/media\/images\/.+\.png$/);
+  const edits = calls.filter((call) => call.url.endsWith("/images/edits"));
+  assert.equal(edits.length, 2);
+  const form = edits[0]?.init?.body as FormData;
   assert.equal(form.get("model"), "gpt-image-2");
   assert.equal(form.get("size"), "1024x1536");
-  assert.equal(form.get("output_format"), null);
-  assert.ok(form.get("image"));
-  assert.equal(calls.some((call) => call.url.includes("bytepluses.com")), false);
-  assert.equal(new Headers(calls[1]?.init?.headers).get("authorization"), "Bearer sk-test-openai");
+  const ark = calls.find((call) => call.url.includes("bytepluses.com"));
+  assert.ok(ark);
+  const body = JSON.parse(String(ark.init?.body));
+  assert.equal(body.model, "seedream-5-0-260128");
+  assert.equal(body.size, "1440x2560");
+  assert.equal(body.watermark, false);
+  assert.deepEqual(body.image, ["https://cdn.example/mini.png"]);
+  const id = image.url.split("/").pop()?.replace(/\.png$/, "");
+  const meta = await sharp(readFileSync(join(root, "images", `${id}.png`))).metadata();
+  assert.equal(meta.width, 720);
+  assert.equal(meta.height, 1280);
+  assert.equal(JSON.stringify(image).includes("ark-test-key"), false);
+  assert.equal(JSON.stringify(image).includes("sk-test-openai"), false);
 });
 
 test("an OpenAI error does not echo the key when Seedream is unavailable", async () => {
-  const fetch: FetchLike = async () => json(401, { error: { message: "rejected sk-test-openai" } });
+  let calls = 0;
+  const fetch: FetchLike = async () => {
+    calls += 1;
+    return json(401, { error: { message: "rejected sk-test-openai" } });
+  };
   const images = createStudioImageGen({ IMAGE_PROVIDER: "openai", OPENAI_API_KEY: "sk-test-openai" }, { fetch });
   const job = await images.submit({
     prompt: "rooftop",
@@ -120,6 +196,7 @@ test("an OpenAI error does not echo the key when Seedream is unavailable", async
     aspectRatio: "9:16",
     resolution: "720p",
   });
+  assert.equal(calls, 2);
   assert.equal(job.status, "failed");
   assert.equal(job.provider, "openai");
   assert.equal((job.error ?? "").includes("sk-test-openai"), false);
