@@ -35,6 +35,15 @@ import {
   type IntakeQuestion,
 } from "./mock-fixtures";
 
+export interface MockStudio extends StudioClient {
+  /** Adds pack credits once per server order so the visible balance matches a confirmed checkout. */
+  noteSettledPack(orderId: string, credits: number): number;
+}
+
+export function isMockStudio(client: StudioClient): client is MockStudio {
+  return typeof (client as MockStudio).noteSettledPack === "function";
+}
+
 export class StudioMockError extends Error {
   readonly code: string;
 
@@ -96,7 +105,7 @@ function stageKinds(stage: Stage): readonly ArtefactKind[] {
 export function createMockStudio(options?: {
   delayMs?: number;
   starterCredits?: number;
-}): StudioClient {
+}): MockStudio {
   const delayMs = options?.delayMs ?? 650;
   const starterCredits = options?.starterCredits ?? STARTER_CREDITS;
 
@@ -744,7 +753,8 @@ export function createMockStudio(options?: {
     return next;
   }
 
-  const api: StudioClient = {
+  const settledOrders = new Set<string>();
+  const api: MockStudio = {
     async createUser(body) {
       const name = body.displayName.trim();
       if (!name) throw new StudioMockError("name", "Naam likho.");
@@ -1084,6 +1094,16 @@ export function createMockStudio(options?: {
         checkoutUrl: `mock://pine-labs/${paymentId}`,
         creditsGranted: pack.credits,
       };
+    },
+
+    noteSettledPack(orderId, credits) {
+      const current = mustUser();
+      if (!orderId) throw new StudioMockError("pack", "Order id missing.");
+      if (!Number.isInteger(credits) || credits <= 0) throw new StudioMockError("pack", "Pack credits missing.");
+      if (settledOrders.has(orderId)) return current.creditBalance;
+      settledOrders.add(orderId);
+      current.creditBalance += credits;
+      return current.creditBalance;
     },
   };
 

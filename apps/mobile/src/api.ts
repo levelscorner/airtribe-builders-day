@@ -22,6 +22,7 @@ function studioMode(): "http" | "mock" {
  * Chat shell talks only to StudioClient.
  * - mock: in-process Gaia fixture (offline / unit checks)
  * - http: Saturn /v1 (+ SSE) for MOCK=1 Replit / preview
+ * Packs checkout is separate: src/checkout.ts posts /v1/packs/checkout.
  */
 export function createStudioClient(): StudioClient {
   if (studioMode() === "http") {
