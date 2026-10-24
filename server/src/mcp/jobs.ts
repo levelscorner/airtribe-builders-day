@@ -1,6 +1,7 @@
 import type { Genre, Language } from "@chotu/shared";
 import { GENRE_ORDER, getGenres } from "../creative/genres/load.js";
 import { grantSignupCredits } from "../credits/stub.js";
+import { requireMcpKey } from "./auth.js";
 import type { SqlClient } from "../db/client.js";
 import { createOrchestratorContext, handleAnswer, startChat } from "../orchestrator/machine.js";
 import * as store from "../orchestrator/store.js";
@@ -45,6 +46,7 @@ export async function createVideoBrief(
   deps: { db: SqlClient; mock: boolean },
   input: { idea: string; genre: Genre; language: Language },
 ): Promise<{ id: string; chatId: string; stage: string }> {
+  requireMcpKey();
   const idea = input.idea.trim();
   if (!idea) throw new Error("idea is required");
   const ctx = createOrchestratorContext(deps.db, deps.mock);

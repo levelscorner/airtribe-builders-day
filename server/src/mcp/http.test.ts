@@ -6,7 +6,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import express from "express";
 import type { ApiHealth } from "../health.js";
-import { warnIfMcpOpen } from "./auth.js";
+import { requireMcpKey, warnIfMcpOpen } from "./auth.js";
 import { createMcpRouter } from "./http.js";
 
 const health: ApiHealth = { ok: true, mock: true, memory: true, llm: "mock", payments: "qr" };
@@ -94,7 +94,23 @@ test("a missing or wrong MCP key is rejected and a matching key is accepted", as
   }
 });
 
-test("an unset MCP key leaves the connector open and warns once", async () => {
+test("an unset MCP key is closed in production and for job creation", async () => {
+  const closed = await listen(appWith({ NODE_ENV: "production" }));
+  try {
+    const base = `http://127.0.0.1:${portOf(closed)}/mcp`;
+    const denied = await fetch(base, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+      body: "{}",
+    });
+    assert.equal(denied.status, 401);
+  } finally {
+    await new Promise<void>((resolve, reject) => closed.close((error) => (error ? reject(error) : resolve())));
+  }
+  assert.throws(() => requireMcpKey({}), /MCP_API_KEY is required/);
+});
+
+test("an unset MCP key leaves the mock connector open and warns once", async () => {
   const notes: string[] = [];
   warnIfMcpOpen({ MCP_API_KEY: KEY }, (message) => notes.push(message));
   warnIfMcpOpen({}, (message) => notes.push(message));
