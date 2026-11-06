@@ -43,6 +43,7 @@ export function PacksScreen() {
   const [error, setError] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
   const [pay, setPay] = useState<PayState>({ status: "idle" });
+  const [creditsOn, setCreditsOn] = useState<boolean | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,6 +57,7 @@ export function PacksScreen() {
         listServerPacks(),
       ]);
       setBalance(me.creditBalance);
+      setCreditsOn(me.creditsEnabled === true);
       setPacks(serverPacks && serverPacks.length > 0 ? serverPacks : catalogue.packs);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Packs nahi khule.";
@@ -129,6 +131,14 @@ export function PacksScreen() {
         >
           <Text style={styles.backText}>Wapas</Text>
         </Pressable>
+        {creditsOn === false ? (
+          <Text style={styles.lead}>Credits are off for this demo.</Text>
+        ) : creditsOn === null ? (
+          <Text accessibilityLiveRegion="polite" style={styles.status}>
+            Packs khul rahe hain…
+          </Text>
+        ) : (
+        <>
         <Text style={styles.brand}>Credit packs</Text>
         <Text style={styles.lead}>
           PhonePe se {PHONEPE_PAYEE} ko pay karo. QR scan karo, UTR daalo, phir I've paid. Credits tab aayenge jab
@@ -255,6 +265,8 @@ export function PacksScreen() {
           })}
           </View>
         </ScrollView>
+        </>
+        )}
       </View>
     </View>
   );

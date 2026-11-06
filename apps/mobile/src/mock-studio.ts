@@ -1020,18 +1020,43 @@ export function createMockStudio(options?: {
       if (!name) throw new StudioMockError("name", "Naam likho.");
       const email = body.phoneOrEmail?.trim();
       if (email && !email.includes("@")) throw new StudioMockError("email", "Email mein @ hona chahiye.");
+      // Demo only: there is no password or OTP, so anyone with the email gets in.
+      if (email && user?.phoneOrEmail === email) return user;
       user = {
         id: nid("usr"),
         displayName: name,
         phoneOrEmail: email,
         creditBalance: starterCredits,
+        creditsEnabled: false,
         createdAt: now(),
+        lastActiveAt: now(),
       };
       return user;
     },
 
     async getMe() {
-      return mustUser();
+      const current = mustUser();
+      const seen = Date.parse(current.lastActiveAt ?? "");
+      if (!current.lastActiveAt || Number.isNaN(seen) || Date.now() - seen >= 60_000) {
+        current.lastActiveAt = now();
+      }
+      return current;
+    },
+
+    async listMyVideos() {
+      const current = mustUser();
+      const videosForUser = [...videos.values()]
+        .map((entry) => entry.video)
+        .filter((video) => video.userId === current.id);
+      return {
+        videos: videosForUser.map((video) => ({
+          id: video.id,
+          title: [...chats.values()].find((chat) => chat.videoId === video.id)?.topic,
+          status: video.status,
+          stage: video.stage,
+          createdAt: video.createdAt,
+        })),
+      };
     },
 
     async createChat(body) {
@@ -1123,6 +1148,25 @@ export function createMockStudio(options?: {
         return { accepted: true, message };
       }
       if (body.answer) {
+        if (body.answer.field === "__defaults") {
+          const echo = body.text?.trim() || "Choose the remaining details for me";
+          emitText(chat, "user", echo);
+          const genre = asGenre(chat.answers.genre) ?? "kids";
+          const preset = defaultsFor(genre);
+          // "__defaults" answers the open question and every later one that
+          // accepts defaults. It is not a mismatched question id.
+          while (INTAKE[chat.qIndex]?.allowDefaults) {
+            const current = INTAKE[chat.qIndex]!;
+            const value = defaultValue(current.field, preset);
+            chat.answers[current.field] = value;
+            if (current.field === "topic") chat.topic = value;
+            chat.assumed.push(answerLabel(current, value));
+            chat.qIndex += 1;
+          }
+          void askNext(chat).catch((error: unknown) => emitError(chat, error));
+          const message = [...chat.messages].reverse().find((item) => item.role === "user");
+          return { accepted: true, message };
+        }
         if (body.answer.field !== question.field) {
           throw new StudioMockError("stale_question", "Yeh sawal ab active nahi hai.");
         }

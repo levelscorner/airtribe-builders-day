@@ -228,6 +228,47 @@
   align-items: center;
   gap: 18px;
 }
+.profile-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.profile-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #1c1915;
+  color: #fff;
+  font-size: 14px;
+}
+.profile-sheet {
+  position: fixed;
+  z-index: 30;
+  top: 84px;
+  right: 16px;
+  width: min(360px, calc(100vw - 32px));
+  padding: 16px;
+  background: #fff;
+  color: #1a1a1a;
+  border: 1px solid #ddd;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+}
+.profile-sheet h2 {
+  font-size: 16px;
+  margin: 12px 0 6px;
+}
+.profile-sheet button {
+  min-height: 44px;
+  margin-top: 8px;
+}
 .brand-home {
   padding: 0 !important;
 }
@@ -1329,6 +1370,27 @@
   max-width: 100%;
   max-height: 350px;
 }
+.media-reviews {
+  display: grid;
+  gap: 18px;
+  margin: 16px 0;
+}
+.later-review h3 {
+  font-size: 15px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  text-transform: capitalize;
+}
+.later-review .script-actions {
+  margin-top: 12px;
+}
+.canvas-mobile-approve,
+.canvas-mobile-ready {
+  display: none;
+}
+.canvas-mobile-approve {
+  margin-top: 16px;
+}
 .idea-arriving {
   animation: idea-rise 0.55s var(--ease);
 }
@@ -1546,6 +1608,10 @@
   }
   .canvas-open .conversation {
     visibility: hidden;
+  }
+  .canvas-mobile-approve,
+  .canvas-mobile-ready {
+    display: block;
   }
   .canvas-heading {
     height: 62px;
@@ -1984,9 +2050,20 @@
 .generated-player audio {
   width: 100%;
 }
+.character-sheet-warning {
+  margin: 0 0 12px;
+}
+.character.is-sheet {
+  flex-direction: column;
+  align-items: stretch;
+}
 .character-reference {
   width: 100px;
   flex-shrink: 0;
+}
+.character-reference.is-sheet {
+  width: 100%;
+  max-width: 100%;
 }
 .character-reference .real-frame {
   display: block;
@@ -1995,6 +2072,16 @@
   max-height: 280px;
   object-fit: contain;
   border-radius: 8px;
+}
+.character-reference.is-sheet .real-frame {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  max-height: none;
+  aspect-ratio: 3 / 2;
+  object-fit: contain;
+  object-position: center;
+  background: #e8edf5;
 }
 .character-reference .frame-placeholder {
   min-height: 150px;

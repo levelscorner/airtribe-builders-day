@@ -1,18 +1,19 @@
 import { randomUUID } from "node:crypto";
 import type { ClipGenInput, ClipGenOutput, ImageGenInput, ImageGenOutput } from "../../../packages/shared/types.ts";
-import type { CastReferenceAdapter } from "./cast/reference.js";
-import { createCastAdapter } from "./cast/reference.js";
+import { createCastAdapter, type CastReferenceAdapter, type ResolvedCastPrompt } from "./cast/reference.js";
 import { PROVISIONAL_CREDITS } from "./credits.js";
 import { MediaInputError } from "./errors.js";
 import type { EnvLike } from "./flags.js";
 import { moduleMock } from "./flags.js";
+import { savePng } from "./files.js";
 import { failedJob, JobStore, newJobId, type MediaJob } from "./job.js";
 import type { ClipGenPort, ImageGenPort, SubmitOpts } from "./ports.js";
 import { createClipGen } from "./higgsfield/clip-gen.js";
 import { createImageGen } from "./higgsfield/image-gen.js";
-import { ArkClient, createArkClient, type ArkDeps } from "./ark/client.js";
-import { buildSeedanceBody, buildSeedreamBody, requirePrompt, seedanceFirstFrame, seedanceModel, seedreamModel } from "./ark/request.js";
-import { generateOpenAiImage, openaiImageModel } from "./openai/images.js";
+import { ArkClient, createArkClient, type ArkDeps, type FetchLike } from "./ark/client.js";
+import { prepareArkImages } from "./ark/references.js";
+import { buildSeedanceBody, buildSeedreamBody, requirePrompt, seedanceFirstFrame, seedanceModel, seedreamModel, SEEDREAM_PORTRAIT_SIZE } from "./ark/request.js";
+import { cropToNineSixteen, generateOpenAiImage, openaiImageModel } from "./openai/images.js";
 
 const OPENAI_LABEL = "GPT Image 2 · OpenAI";
 const SEEDREAM_LABEL = "Seedream 5.0 · BytePlus";
@@ -26,7 +27,7 @@ function imageProvider(env: EnvLike): "openai" | "ark" | "mock" {
   const explicit = env.IMAGE_PROVIDER?.trim().toLowerCase() ?? "";
   if (explicit === "mock" || explicit === "ark" || explicit === "openai") return explicit;
   if (explicit) throw new Error("IMAGE_PROVIDER must be openai, ark, or mock");
-  return "ark";
+  return "openai";
 }
 
 class StudioImageGen implements ImageGenPort {
@@ -47,11 +48,10 @@ class StudioImageGen implements ImageGenPort {
       const resolved = this.cast.resolvePrompt(input.prompt, input.elementIds ?? []);
       requirePrompt(resolved);
       const choice = imageProvider(this.env);
-      const openaiKey = Boolean(this.env.OPENAI_API_KEY?.trim());
-      const tryOpenAi = choice === "openai" && openaiKey;
-      if (tryOpenAi) {
+      let openAiFailure: unknown;
+      if (choice !== "ark" && this.env.OPENAI_API_KEY?.trim()) {
         try {
-          const url = await generateOpenAiImage(this.env, input, resolved, this.deps.fetch ?? fetch);
+          const url = await this.openAiFrame(input, resolved);
           return this.store.insert({
             jobId: newJobId(),
             provider: "openai",
@@ -67,13 +67,19 @@ class StudioImageGen implements ImageGenPort {
           });
         } catch (error) {
           if (error instanceof MediaInputError || !this.env.ARK_API_KEY?.trim()) throw error;
+          openAiFailure = error;
         }
       }
       if (!this.env.ARK_API_KEY?.trim()) {
         throw new Error(choice === "ark" ? "ARK_API_KEY is not set" : "OPENAI_API_KEY is not set");
       }
-      const client = createArkClient(this.env, this.deps);
-      const url = await client.image(buildSeedreamBody(input, resolved, this.env));
+      let url: string;
+      try {
+        url = await this.seedreamFrame(input, resolved);
+      } catch (error) {
+        if (!openAiFailure) throw error;
+        throw new Error(`${providerFailure("openai", openAiFailure)}; ${providerFailure("ark", error)}`);
+      }
       return this.store.insert({
         jobId: newJobId(),
         provider: "ark",
@@ -88,9 +94,41 @@ class StudioImageGen implements ImageGenPort {
         idempotencyKey,
       });
     } catch (error) {
-      const provider = imageProvider(this.env) === "ark" || !this.env.OPENAI_API_KEY?.trim() ? "ark" : "openai";
+      const provider = imageProvider(this.env) === "ark" ? "ark" : "openai";
       return this.store.insert(failedJob(idempotencyKey, error, provider));
     }
+  }
+
+  /** One attempt, then one retry. A second failure falls through to Seedream. */
+  private async openAiFrame(input: ImageGenInput, resolved: ResolvedCastPrompt): Promise<string> {
+    const fetchImpl = this.fetchImpl();
+    let last: unknown;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        return await generateOpenAiImage(this.env, input, resolved, fetchImpl);
+      } catch (error) {
+        if (error instanceof MediaInputError) throw error;
+        last = error;
+      }
+    }
+    throw last instanceof Error ? last : new Error("openai image failed");
+  }
+
+  /** Request the large 9:16 frame, then store the 720x1280 still the pipeline uses. */
+  private async seedreamFrame(input: ImageGenInput, resolved: ResolvedCastPrompt): Promise<string> {
+    const client = createArkClient(this.env, this.deps);
+    const images = await prepareArkImages(this.env, resolved.anchorUrls, this.fetchImpl());
+    const body = buildSeedreamBody(input, resolved, this.env, images);
+    const remote = await client.image(body);
+    if (body.size !== SEEDREAM_PORTRAIT_SIZE) return remote;
+    const response = await this.fetchImpl()(remote);
+    if (!response.ok) throw new Error(`seedream image fetch failed (${response.status})`);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    return savePng(this.env, randomUUID(), await cropToNineSixteen(bytes));
+  }
+
+  private fetchImpl(): FetchLike {
+    return this.deps.fetch ?? fetch;
   }
 
   async getJob(jobId: string): Promise<MediaJob<ImageGenOutput>> {
@@ -163,6 +201,12 @@ class StudioClipGen implements ClipGenPort {
   }
 }
 
+function providerFailure(name: "openai" | "ark", error: unknown): string {
+  const text = (error instanceof Error ? error.message : "image failed").replace(/\s+/g, " ").trim();
+  const detail = text.replace(new RegExp(`^${name}\\s*:?\\s*`, "i"), "");
+  return `${name}: ${detail || text}`;
+}
+
 function mockImages(env: EnvLike, cast: CastReferenceAdapter): ImageGenPort {
   return createImageGen({ ...env, IMAGE_MOCK: "1" }, { cast });
 }
@@ -171,23 +215,20 @@ function mockClips(env: EnvLike, cast: CastReferenceAdapter): ClipGenPort {
   return createClipGen({ ...env, CLIP_MOCK: "1" }, { cast });
 }
 
-/** Blank IMAGE_PROVIDER stays on Seedream. IMAGE_PROVIDER=openai uses gpt-image-2, then Seedream if that call fails. */
+/** Blank IMAGE_PROVIDER is gpt-image-2. A failed frame is retried once, then Seedream when ARK_API_KEY is set. */
 export function createStudioImageGen(env: EnvLike = process.env, deps: StudioDeps = {}): ImageGenPort {
   const cast = deps.cast ?? createCastAdapter(env);
   if (moduleMock(env, "IMAGE_MOCK")) return mockImages(env, cast);
   const provider = imageProvider(env);
   if (provider === "mock") return mockImages(env, cast);
-  const openai = Boolean(env.OPENAI_API_KEY?.trim());
-  const ark = Boolean(env.ARK_API_KEY?.trim());
-  if (provider === "openai" && !openai && !ark) throw new Error("OPENAI_API_KEY is required for GPT Image generation");
-  if (provider === "ark" && !ark) throw new Error("ARK_API_KEY is required for Seedream generation");
+  if (provider === "openai" && !env.OPENAI_API_KEY?.trim()) return mockImages(env, cast);
+  if (provider === "ark" && !env.ARK_API_KEY?.trim()) return mockImages(env, cast);
   return new StudioImageGen(env, cast, deps);
 }
 
-/** Seedance 2.5 image-to-video from the approved still. Live mode requires ARK credentials. */
+/** Seedance 2.5 image-to-video from the approved still. Mock when the ARK key is missing. */
 export function createStudioClipGen(env: EnvLike = process.env, deps: StudioDeps = {}): ClipGenPort {
   const cast = deps.cast ?? createCastAdapter(env);
-  if (moduleMock(env, "CLIP_MOCK")) return mockClips(env, cast);
-  if (!env.ARK_API_KEY?.trim()) throw new Error("ARK_API_KEY is required for Seedance generation");
+  if (moduleMock(env, "CLIP_MOCK") || !env.ARK_API_KEY?.trim()) return mockClips(env, cast);
   return new StudioClipGen(env, cast, deps);
 }

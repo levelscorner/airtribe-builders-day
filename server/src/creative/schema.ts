@@ -99,6 +99,7 @@ export const BriefSchema = z.object({
   aspectRatio: z.string().min(3).optional(),
   resolution: ResolutionSchema.optional(),
   targetSeconds: z.number().int().positive().max(60).optional(),
+  sceneCount: z.number().int().min(1).max(6).optional(),
   audience: z.string().min(1).optional(),
   artStyle: z.string().min(1).optional(),
   artStyleTraits: z.array(z.string().min(1)).optional(),

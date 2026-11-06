@@ -31,7 +31,7 @@ const FUNNEL_RANK: Record<StageBucket, number> = {
   done: 6,
 };
 
-const FUNNEL_STEPS = ["brief", "cast", "script", "visuals", "voice", "done"] as const;
+const FUNNEL_STEPS = ["brief", "cast", "script", "visuals", "voice", "final", "done"] as const;
 type FunnelStep = (typeof FUNNEL_STEPS)[number];
 
 const RECENT_LIMIT = 20;
@@ -511,7 +511,7 @@ function emptyReport(excludeTestAccounts: boolean, database: boolean, now: Date)
     dailyActiveUsers: 0,
     chatsStarted: 0,
     videosByStage: { brief: 0, cast: 0, script: 0, visuals: 0, voice: 0, final: 0, done: 0 },
-    funnel: { brief: 0, cast: 0, script: 0, visuals: 0, voice: 0, done: 0 },
+    funnel: { brief: 0, cast: 0, script: 0, visuals: 0, voice: 0, final: 0, done: 0 },
     videosFinished: 0,
     credits: { granted: 0, spent: 0, refunded: 0 },
     qrPayments: { pending: 0, approved: 0, revenueInr: 0 },

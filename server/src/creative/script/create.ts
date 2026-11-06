@@ -6,7 +6,7 @@ import { INHERITED_RULES, SCRIPT_TASK } from "../skills/rules.js";
 import { loadSkillPacks, systemPrompt } from "../skills/load.js";
 import { withRoutedSkills } from "../skills/router.js";
 import { getGenre } from "../genres/load.js";
-import { assertScriptRules, mockScript } from "./mock.js";
+import { assertScriptRules, fitScriptScenes, mockScript, sceneCountOf } from "./mock.js";
 
 function userPrompt(input: ScriptGenInput): string {
   const genre = getGenre(input.genre);
@@ -15,6 +15,7 @@ function userPrompt(input: ScriptGenInput): string {
     genre: input.genre,
     language: input.language,
     targetSeconds: input.targetSeconds,
+    sceneCount: sceneCountOf(input.brief),
     beats: genre.beats,
     tone: genre.tone,
     shape: genre.shape,
@@ -36,8 +37,9 @@ export const createScriptGen: MockableFactory<ScriptGen> = (env) => ({
     const output = env.mock
       ? mockScript(input)
       : parseScriptGenOutput(await completeScript(input, env));
-    if (env.mock) assertScriptRules(input, output);
-    return output;
+    const fitted = fitScriptScenes(output, sceneCountOf(input.brief), input.targetSeconds);
+    if (env.mock) assertScriptRules(input, fitted);
+    return fitted;
   },
 });
 

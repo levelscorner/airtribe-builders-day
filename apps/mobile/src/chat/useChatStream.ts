@@ -113,6 +113,7 @@ export function useChatStream(chatId: string) {
   const [mediaProgress, setMediaProgress] = useState<Record<string, MediaProgressEvent>>({});
   const [videoId, setVideoId] = useState<string | null>(null);
   const [credits, setCredits] = useState<number | null>(null);
+  const [creditsEnabled, setCreditsEnabled] = useState(false);
   const creditsRef = useRef<number | null>(null);
   const writeCredits = useCallback((next: number | null) => {
     creditsRef.current = next;
@@ -185,7 +186,9 @@ export function useChatStream(chatId: string) {
         else if (event.type === "stage") {
           setStage((current) => (stageIndex(event.stage) >= stageIndex(current) ? event.stage : current));
         } else if (event.type === "artefact") writeArtefact(event.artefact, false);
-        else if (event.type === "error") setError(event.message);
+        else if (event.type === "error" && !/live updates ruk gayi/i.test(event.message)) {
+          setError(event.message);
+        }
       });
     } catch (err) {
       fail(err);
@@ -216,6 +219,7 @@ export function useChatStream(chatId: string) {
           return merged;
         });
         writeCredits(me.creditBalance);
+        setCreditsEnabled(me.creditsEnabled === true);
         setStatus("ready");
       } catch (err) {
         if (!alive) return;
@@ -404,6 +408,7 @@ export function useChatStream(chatId: string) {
     mediaProgress,
     videoId,
     credits,
+    creditsEnabled,
     error,
     missing,
     status,

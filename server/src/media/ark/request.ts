@@ -30,8 +30,13 @@ export function seedreamModel(env: EnvLike): string {
   return env.SEEDREAM_MODEL?.trim() || ArkModels.seedream;
 }
 
+/**
+ * Smallest 9:16 size Seedream accepts. 720x1280 is 921_600 pixels and the API
+ * rejects anything under 3_686_400. The studio downscales the result to 720x1280.
+ */
+export const SEEDREAM_PORTRAIT_SIZE = "1440x2560";
+
 export function arkImageSize(aspect: string, resolution: string): string {
-  const portrait = resolution === "1080p" ? "1080x1920" : "720x1280";
   const landscape = resolution === "1080p" ? "1920x1080" : "1280x720";
   switch (aspect.trim()) {
     case "16:9":
@@ -43,7 +48,7 @@ export function arkImageSize(aspect: string, resolution: string): string {
     case "3:4":
       return resolution === "1080p" ? "1080x1440" : "768x1024";
     default:
-      return portrait;
+      return SEEDREAM_PORTRAIT_SIZE;
   }
 }
 
@@ -56,9 +61,19 @@ export function requirePrompt(resolved: ResolvedCastPrompt): string {
   return prompt;
 }
 
-export function buildSeedreamBody(input: ImageGenInput, resolved: ResolvedCastPrompt, env: EnvLike): Record<string, unknown> {
+const ARK_REFERENCE = /^(?:https:\/\/\S+|data:image\/png;base64,[A-Za-z0-9+/=\s]+)$/;
+
+/** Seedream `image` values are already https URLs or `data:image/png;base64`. */
+export function buildSeedreamBody(
+  input: ImageGenInput,
+  resolved: ResolvedCastPrompt,
+  env: EnvLike,
+  images: readonly string[] = [],
+): Record<string, unknown> {
   const prompt = requirePrompt(resolved);
-  for (const url of resolved.anchorUrls) assertHttpUrl(url, "anchor url");
+  for (const url of images) {
+    if (!ARK_REFERENCE.test(url)) throw new MediaInputError("ark image reference must be an https url or a png data url");
+  }
   const body: Record<string, unknown> = {
     model: seedreamModel(env),
     prompt,
@@ -66,7 +81,7 @@ export function buildSeedreamBody(input: ImageGenInput, resolved: ResolvedCastPr
     response_format: "url",
     watermark: false,
   };
-  if (resolved.anchorUrls.length > 0) body.image = resolved.anchorUrls;
+  if (images.length > 0) body.image = [...images];
   return body;
 }
 

@@ -20,8 +20,8 @@ export interface MediaPortDeps extends CastAdapterDeps, StudioDeps {
 }
 
 /**
- * Images: OpenAI gpt-image-2, Seedream if that key is missing or the call fails.
- * Clips: Seedance 2.5 from the approved still. Samples require explicit mock mode.
+ * Images: OpenAI gpt-image-2, retried once, then Seedream when that call fails and ARK_API_KEY is set.
+ * Clips: Seedance 2.5 when ARK_API_KEY is set. Mock when MOCK=1 or the key is missing.
  * A Higgsfield client is used only when the caller passes one (cast byte upload).
  */
 export function createMediaPorts(env: EnvLike = process.env, deps: MediaPortDeps = {}): MediaPorts {
