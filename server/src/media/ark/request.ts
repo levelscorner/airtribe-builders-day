@@ -61,9 +61,19 @@ export function requirePrompt(resolved: ResolvedCastPrompt): string {
   return prompt;
 }
 
-export function buildSeedreamBody(input: ImageGenInput, resolved: ResolvedCastPrompt, env: EnvLike): Record<string, unknown> {
+const ARK_REFERENCE = /^(?:https:\/\/\S+|data:image\/png;base64,[A-Za-z0-9+/=\s]+)$/;
+
+/** Seedream `image` values are already https URLs or `data:image/png;base64`. */
+export function buildSeedreamBody(
+  input: ImageGenInput,
+  resolved: ResolvedCastPrompt,
+  env: EnvLike,
+  images: readonly string[] = [],
+): Record<string, unknown> {
   const prompt = requirePrompt(resolved);
-  for (const url of resolved.anchorUrls) assertHttpUrl(url, "anchor url");
+  for (const url of images) {
+    if (!ARK_REFERENCE.test(url)) throw new MediaInputError("ark image reference must be an https url or a png data url");
+  }
   const body: Record<string, unknown> = {
     model: seedreamModel(env),
     prompt,
@@ -71,7 +81,7 @@ export function buildSeedreamBody(input: ImageGenInput, resolved: ResolvedCastPr
     response_format: "url",
     watermark: false,
   };
-  if (resolved.anchorUrls.length > 0) body.image = resolved.anchorUrls;
+  if (images.length > 0) body.image = [...images];
   return body;
 }
 

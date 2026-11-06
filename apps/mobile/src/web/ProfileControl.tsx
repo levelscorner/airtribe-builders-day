@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { OwnVideoSummary, User } from "@chotu/shared";
+import { formatIst, formatLastActive, type OwnVideoSummary, type User } from "@chotu/shared";
 import { getStudioClient } from "../api";
 import { loadOwnProfile } from "../profile/load";
 import { profileLines } from "../profile/lines";
@@ -53,7 +53,8 @@ export function ProfileControl() {
           </p>
           <p>Email: {profileLines(user).email}</p>
           <p>Phone: {profileLines(user).phone}</p>
-          <p>Signed up: {profileLines(user).createdAt}</p>
+          <p>Signed up: {formatIst(user.createdAt)}</p>
+          <p>Last active: {formatLastActive(user.lastActiveAt, user.createdAt)}</p>
           <h2>Videos</h2>
           {videos.length ? (
             <ul>

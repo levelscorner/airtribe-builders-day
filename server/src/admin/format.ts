@@ -1,3 +1,4 @@
+import { formatIst, formatLastActive } from "@chotu/shared";
 import { VIEWPORT_META } from "../html.js";
 import type { EventRow } from "./log.js";
 import type { AdminUser, AdminUserVideo } from "./users.js";
@@ -51,7 +52,7 @@ export function renderAdminHtml(input: {
 <p><a href="/admin/payments">Payments</a> · <a href="/admin/export.csv">Download CSV</a></p>
 <h2>Users</h2>
 <table>
-<thead><tr><th>name</th><th>email</th><th>phone</th><th>created_at</th></tr></thead>
+<thead><tr><th>name</th><th>email</th><th>phone</th><th>Signed up</th><th>Last active</th></tr></thead>
 <tbody>${renderUserRows(input.users)}</tbody>
 </table>
 <table>
@@ -62,7 +63,7 @@ export function renderAdminHtml(input: {
 }
 
 function renderUserRows(users: AdminUser[]): string {
-  if (users.length === 0) return `<tr><td colspan="4">No users yet.</td></tr>`;
+  if (users.length === 0) return `<tr><td colspan="5">No users yet.</td></tr>`;
   return users
     .map((user) => {
       const href = `/admin/users/${encodeURIComponent(user.id)}`;
@@ -70,7 +71,8 @@ function renderUserRows(users: AdminUser[]): string {
 <td><a href="${escapeHtml(href)}">${escapeHtml(user.displayName)}</a></td>
 <td><a href="${escapeHtml(href)}">${escapeHtml(user.email) || "—"}</a></td>
 <td><a href="${escapeHtml(href)}">${escapeHtml(user.phone) || "—"}</a></td>
-<td><a href="${escapeHtml(href)}">${escapeHtml(user.createdAt)}</a></td>
+<td><a href="${escapeHtml(href)}">${escapeHtml(formatIst(user.createdAt))}</a></td>
+<td><a href="${escapeHtml(href)}">${escapeHtml(formatLastActive(user.lastActiveAt, user.createdAt))}</a></td>
 </tr>`;
     })
     .join("");
@@ -103,7 +105,8 @@ export function renderUserPage(user: AdminUser, videos: AdminUserVideo[]): strin
 <h1>${escapeHtml(user.displayName)}</h1>
 <p>Email: ${escapeHtml(user.email) || "—"}</p>
 <p>Phone: ${escapeHtml(user.phone) || "—"}</p>
-<p>created_at: ${escapeHtml(user.createdAt)}</p>
+<p>Signed up: ${escapeHtml(formatIst(user.createdAt))}</p>
+<p>Last active: ${escapeHtml(formatLastActive(user.lastActiveAt, user.createdAt))}</p>
 <h2>Videos</h2>
 <table>
 <thead><tr><th>Video</th><th>Title</th><th>Status</th><th>Stage</th></tr></thead>
@@ -142,11 +145,30 @@ export function renderEventsCsv(rows: EventRow[]): string {
   return `${lines.join("\n")}\n`;
 }
 
-/** User rows follow the event table. Every field is quoted, and quotes are doubled. */
+/** User rows follow the event table. Times are ISO and Asia/Kolkata. Every field is quoted. */
 export function renderUsersCsv(users: AdminUser[]): string {
-  const lines = [["display_name", "email", "phone", "created_at"].join(",")];
+  const lines = [[
+    "display_name",
+    "email",
+    "phone",
+    "created_at",
+    "created_at_ist",
+    "last_active_at",
+    "last_active_at_ist",
+  ].join(",")];
   for (const user of users) {
-    lines.push([user.displayName, user.email, user.phone, user.createdAt].map(csvCell).join(","));
+    const lastIso = user.lastActiveAt || user.createdAt;
+    lines.push(
+      [
+        user.displayName,
+        user.email,
+        user.phone,
+        user.createdAt,
+        formatIst(user.createdAt),
+        lastIso,
+        formatLastActive(user.lastActiveAt, user.createdAt),
+      ].map(csvCell).join(","),
+    );
   }
   return `${lines.join("\n")}\n`;
 }

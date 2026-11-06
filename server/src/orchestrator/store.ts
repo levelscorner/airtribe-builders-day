@@ -26,7 +26,8 @@ function asJson(value: unknown): string {
   return JSON.stringify(value ?? {});
 }
 
-const USER_COLUMNS = "id, display_name, phone_or_email, email, phone, credit_balance, created_at";
+const USER_COLUMNS =
+  "id, display_name, phone_or_email, email, phone, credit_balance, created_at, last_active_at";
 
 type UserRow = {
   id: string;
@@ -36,6 +37,7 @@ type UserRow = {
   phone: string | null;
   credit_balance: number;
   created_at: Date | string;
+  last_active_at: Date | string | null;
 };
 
 function toApiUser(row: UserRow): User {
@@ -47,6 +49,7 @@ function toApiUser(row: UserRow): User {
     phone: row.phone ?? undefined,
     creditBalance: row.credit_balance,
     createdAt: new Date(row.created_at).toISOString(),
+    lastActiveAt: isoOrUndefined(row.last_active_at),
   };
 }
 
@@ -66,6 +69,28 @@ export async function insertUser(
   return toApiUser(result.rows[0]!);
 }
 
+const lastActiveTouch = new Map<string, number>();
+
+/** Stamp last_active_at at most once a minute for this process and for the row. */
+export async function touchLastActive(
+  db: { query: (text: string, params?: unknown[]) => Promise<unknown> },
+  userId: string,
+  now = Date.now(),
+): Promise<void> {
+  const previous = lastActiveTouch.get(userId) ?? 0;
+  if (now - previous < 60_000) return;
+  lastActiveTouch.set(userId, now);
+  const stamp = new Date(now).toISOString();
+  const cutoff = new Date(now - 60_000).toISOString();
+  await db.query(
+    `UPDATE users
+     SET last_active_at = $2
+     WHERE id = $1
+       AND (last_active_at IS NULL OR last_active_at < $3)`,
+    [userId, stamp, cutoff],
+  );
+}
+
 /** Look up a demo profile by the email or phone stored on the user. */
 export async function findUserByContact(db: SqlClient, phoneOrEmail: string): Promise<User | null> {
   const contact = phoneOrEmail.trim();
@@ -82,6 +107,12 @@ export async function getUser(db: SqlClient, userId: string): Promise<User | nul
   const result = await db.query<UserRow>(`SELECT ${USER_COLUMNS} FROM users WHERE id = $1`, [userId]);
   const row = result.rows[0];
   return row ? toApiUser(row) : null;
+}
+
+function isoOrUndefined(value: Date | string | null | undefined): string | undefined {
+  if (value == null || value === "") return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
 /** Videos owned by this user. Contact details of other accounts are not selected. */

@@ -25,7 +25,7 @@ after(async () => {
 
 test("storyboard, scene regenerate, and final download use the shared contract", async () => {
   const agent = request.agent(app);
-  await agent.post("/v1/users").send({ displayName: "Asha" }).expect(201);
+  await agent.post("/v1/users").send({ displayName: "Asha", email: "asha-scene@example.com" }).expect(201);
   const opened = await agent.post("/v1/chats").send({ title: "bees" }).expect(201);
   const videoId = opened.body.videoId as string;
   const scenes = await store.replaceScenes(db, videoId, [
@@ -124,7 +124,7 @@ test("storyboard, scene regenerate, and final download use the shared contract",
 
 test("regenerating one scene image rebuilds only that clip and leaves the other scene cached", async () => {
   const agent = request.agent(app);
-  await agent.post("/v1/users").send({ displayName: "Ravi" }).expect(201);
+  await agent.post("/v1/users").send({ displayName: "Ravi", email: "ravi-scene@example.com" }).expect(201);
   const opened = await agent.post("/v1/chats").send({ title: "monsoon" }).expect(201);
   const videoId = opened.body.videoId as string;
   const scenes = await store.replaceScenes(db, videoId, [

@@ -127,7 +127,12 @@ test("two failed gpt-image-2 frames fall back to a 1440x2560 Seedream still stor
   const fetch: FetchLike = async (url, init) => {
     calls.push({ url: String(url), init });
     if (String(url).endsWith("/mini.png")) {
-      return new Response(Buffer.from("anchor"), { status: 200, headers: { "Content-Type": "image/png" } });
+      const png = await sharp({
+        create: { width: 8, height: 8, channels: 3, background: { r: 4, g: 8, b: 12 } },
+      })
+        .png()
+        .toBuffer();
+      return new Response(new Uint8Array(png), { status: 200, headers: { "Content-Type": "image/png" } });
     }
     if (String(url).endsWith("/images/edits")) return json(500, { error: { message: "overloaded sk-test-openai" } });
     if (String(url).endsWith("/seedream.png")) {
@@ -185,6 +190,96 @@ test("two failed gpt-image-2 frames fall back to a 1440x2560 Seedream still stor
   assert.equal(meta.height, 1280);
   assert.equal(JSON.stringify(image).includes("ark-test-key"), false);
   assert.equal(JSON.stringify(image).includes("sk-test-openai"), false);
+});
+
+test("Seedream converts WebP to a png data url and skips HTML", async () => {
+  const webp = await sharp({
+    create: { width: 12, height: 12, channels: 3, background: { r: 30, g: 60, b: 90 } },
+  })
+    .webp()
+    .toBuffer();
+  const portrait = await sharp({
+    create: { width: 1440, height: 2560, channels: 3, background: { r: 1, g: 2, b: 3 } },
+  })
+    .png()
+    .toBuffer();
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const fetch: FetchLike = async (url, init) => {
+    calls.push({ url: String(url), init });
+    const target = String(url);
+    if (target.endsWith("/face.webp")) {
+      return new Response(new Uint8Array(webp), { status: 200, headers: { "Content-Type": "image/webp" } });
+    }
+    if (target.endsWith("/page.html")) {
+      return new Response("<!doctype html><html><body>login</body></html>", {
+        status: 200,
+        headers: { "Content-Type": "text/html" },
+      });
+    }
+    if (target.endsWith("/images/edits")) return json(500, { error: { message: "overloaded" } });
+    if (target.endsWith("/seedream.png")) {
+      return new Response(new Uint8Array(portrait), { status: 200, headers: { "Content-Type": "image/png" } });
+    }
+    return json(200, { data: [{ url: "https://cdn.example/seedream.png" }] });
+  };
+  const images = createStudioImageGen(
+    {
+      IMAGE_PROVIDER: "openai",
+      OPENAI_API_KEY: "sk-test-openai",
+      ARK_API_KEY: "ark-test-key",
+      PUBLIC_BASE_URL: "http://studio.test",
+      MEDIA_ROOT: mkdtempSync(join(tmpdir(), "chotu-webp-")),
+    },
+    { fetch },
+  );
+  const image = await images.generate({
+    prompt: "waves",
+    elementIds: [
+      "ref:" + encodeURIComponent("https://cdn.example/face.webp"),
+      "ref:" + encodeURIComponent("https://cdn.example/page.html"),
+    ],
+    aspectRatio: "9:16",
+    resolution: "720p",
+  });
+  assert.equal(image.provider, "ark");
+  const ark = calls.find((call) => call.url.includes("bytepluses.com"));
+  assert.ok(ark);
+  const body = JSON.parse(String(ark.init?.body));
+  assert.equal(body.image.length, 1);
+  assert.match(body.image[0], /^data:image\/png;base64,/);
+  const decoded = Buffer.from(String(body.image[0]).slice("data:image/png;base64,".length), "base64");
+  assert.equal(decoded.subarray(0, 4).toString("hex"), "89504e47");
+  assert.equal(JSON.stringify(body).includes("<!doctype"), false);
+  assert.equal(calls.filter((call) => call.url.endsWith("/images/edits")).length, 2);
+});
+
+test("gpt-image and Seedream failures are both kept on the image error", async () => {
+  const fetch: FetchLike = async (url) => {
+    if (String(url).includes("api.openai.com")) return json(400, { error: { message: "billing hard limit" } });
+    return json(400, {
+      error: {
+        code: "InvalidParameter.UnsupportedImageFormat",
+        message: "The request failed because the image format is not supported by the API",
+      },
+    });
+  };
+  const images = createStudioImageGen(
+    { IMAGE_PROVIDER: "openai", OPENAI_API_KEY: "sk-test-openai", ARK_API_KEY: "ark-test-key" },
+    { fetch },
+  );
+  const job = await images.submit({
+    prompt: "rooftop",
+    elementIds: [],
+    aspectRatio: "9:16",
+    resolution: "720p",
+  });
+  assert.equal(job.status, "failed");
+  assert.match(
+    job.error ?? "",
+    /^openai: 400: billing hard limit; ark: 400: InvalidParameter\.UnsupportedImageFormat: The request failed because the image format is not supported by the API$/,
+  );
+  assert.equal((job.error ?? "").includes("sk-test-openai"), false);
+  assert.equal((job.error ?? "").includes("ark-test-key"), false);
 });
 
 test("an OpenAI error does not echo the key when Seedream is unavailable", async () => {
