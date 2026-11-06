@@ -3,8 +3,9 @@ import express, { type Request, type Response, Router } from "express";
 import { VIEWPORT_META } from "../html.js";
 import type { PendingPayment } from "../payments/qr.js";
 import { asyncRoute } from "./async-route.js";
-import { escapeHtml, renderAdminHtml, renderEventsCsv } from "./format.js";
+import { escapeHtml, renderAdminCsv, renderAdminHtml, renderMissingUser, renderUserPage } from "./format.js";
 import type { EventLog } from "./log.js";
+import type { UserDirectory } from "./users.js";
 
 export const ADMIN_COOKIE = "chotu_admin";
 
@@ -20,6 +21,7 @@ export function adminRouter(
   log: EventLog,
   flags: { mock: boolean; database: boolean },
   review?: PaymentReview,
+  users?: UserDirectory,
 ): Router {
   const router = Router();
 
@@ -56,8 +58,18 @@ export function adminRouter(
   });
 
   router.get("/admin", asyncRoute(async (_req, res) => {
-    const [rows, counts] = await Promise.all([log.list(100), log.counts()]);
-    res.type("html").send(renderAdminHtml({ rows, counts, mock: flags.mock, database: flags.database }));
+    const [rows, counts, people] = await Promise.all([
+      log.list(100),
+      log.counts(),
+      users?.list(100) ?? Promise.resolve([]),
+    ]);
+    res.type("html").send(renderAdminHtml({
+      rows,
+      counts,
+      users: people,
+      mock: flags.mock,
+      database: flags.database,
+    }));
   }));
 
   router.get("/admin/payments", asyncRoute(async (_req, res) => {
@@ -105,8 +117,29 @@ export function adminRouter(
   );
 
   router.get("/admin/export.csv", asyncRoute(async (_req, res) => {
-    const rows = await log.list(CSV_LIMIT);
-    res.type("text/csv").set("content-disposition", "attachment; filename=\"traction.csv\"").send(renderEventsCsv(rows));
+    const [rows, people] = await Promise.all([
+      log.list(CSV_LIMIT),
+      users?.list(CSV_LIMIT) ?? Promise.resolve([]),
+    ]);
+    res
+      .type("text/csv")
+      .set("content-disposition", "attachment; filename=\"traction.csv\"")
+      .send(renderAdminCsv(rows, people));
+  }));
+
+  router.get("/admin/users/:id", asyncRoute(async (req, res) => {
+    const id = text(req.params.id);
+    if (!users || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      res.status(404).type("html").send(renderMissingUser());
+      return;
+    }
+    const person = await users.get(id);
+    if (!person) {
+      res.status(404).type("html").send(renderMissingUser());
+      return;
+    }
+    const videos = await users.videos(person.id);
+    res.type("html").send(renderUserPage(person, videos));
   }));
 
   return router;
@@ -147,7 +180,20 @@ function sameToken(got: string, expected: string): boolean {
   return timingSafeEqual(left, right);
 }
 
+/** Pages served without ADMIN_TOKEN when ADMIN_OPEN=1. Approve and reject stay gated. */
+const OPEN_ADMIN_PATHS = new Set(["/admin", "/admin/payments", "/admin/export.csv"]);
+const OPEN_USER_PAGE = /^\/admin\/users\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function adminOpen(): boolean {
+  return (process.env.ADMIN_OPEN ?? "").trim() === "1";
+}
+
+function openAdminPath(path: string): boolean {
+  return OPEN_ADMIN_PATHS.has(path) || OPEN_USER_PAGE.test(path);
+}
+
 function allowAdmin(req: Request, res: Response): boolean {
+  if (adminOpen() && openAdminPath(req.path)) return true;
   const expected = adminToken();
   if (!expected) {
     res.status(503).json({ error: "admin_unconfigured" });

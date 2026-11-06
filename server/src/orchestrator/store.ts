@@ -8,6 +8,7 @@ import type {
   Genre,
   Language,
   MediaProviderName,
+  OwnVideoSummary,
   Resolution,
   Scene,
   Stage,
@@ -34,10 +35,11 @@ export async function insertUser(
     phone_or_email: string | null;
     credit_balance: number;
     created_at: Date | string;
+    last_active_at: Date | string | null;
   }>(
     `INSERT INTO users (display_name, phone_or_email, credit_balance)
      VALUES ($1, $2, 0)
-     RETURNING id, display_name, phone_or_email, credit_balance, created_at`,
+     RETURNING id, display_name, phone_or_email, credit_balance, created_at, last_active_at`,
     [input.displayName, input.phoneOrEmail ?? null],
   );
   const row = result.rows[0]!;
@@ -47,6 +49,56 @@ export async function insertUser(
     phoneOrEmail: row.phone_or_email ?? undefined,
     creditBalance: row.credit_balance,
     createdAt: new Date(row.created_at).toISOString(),
+    lastActiveAt: isoOrUndefined(row.last_active_at),
+  };
+}
+
+const lastActiveTouch = new Map<string, number>();
+
+/** Stamp last_active_at at most once a minute for this process and for the row. */
+export async function touchLastActive(
+  db: { query: (text: string, params?: unknown[]) => Promise<unknown> },
+  userId: string,
+  now = Date.now(),
+): Promise<void> {
+  const previous = lastActiveTouch.get(userId) ?? 0;
+  if (now - previous < 60_000) return;
+  lastActiveTouch.set(userId, now);
+  const stamp = new Date(now).toISOString();
+  const cutoff = new Date(now - 60_000).toISOString();
+  await db.query(
+    `UPDATE users
+     SET last_active_at = $2
+     WHERE id = $1
+       AND (last_active_at IS NULL OR last_active_at < $3)`,
+    [userId, stamp, cutoff],
+  );
+}
+
+/** Look up a demo profile by the email or phone stored on the user. */
+export async function findUserByContact(db: SqlClient, phoneOrEmail: string): Promise<User | null> {
+  const contact = phoneOrEmail.trim();
+  if (!contact) return null;
+  const result = await db.query<{
+    id: string;
+    display_name: string;
+    phone_or_email: string | null;
+    credit_balance: number;
+    created_at: Date | string;
+    last_active_at: Date | string | null;
+  }>(
+    "SELECT id, display_name, phone_or_email, credit_balance, created_at, last_active_at FROM users WHERE phone_or_email = $1",
+    [contact],
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    displayName: row.display_name,
+    phoneOrEmail: row.phone_or_email ?? undefined,
+    creditBalance: row.credit_balance,
+    createdAt: new Date(row.created_at).toISOString(),
+    lastActiveAt: isoOrUndefined(row.last_active_at),
   };
 }
 
@@ -57,7 +109,8 @@ export async function getUser(db: SqlClient, userId: string): Promise<User | nul
     phone_or_email: string | null;
     credit_balance: number;
     created_at: Date | string;
-  }>("SELECT id, display_name, phone_or_email, credit_balance, created_at FROM users WHERE id = $1", [
+    last_active_at: Date | string | null;
+  }>("SELECT id, display_name, phone_or_email, credit_balance, created_at, last_active_at FROM users WHERE id = $1", [
     userId,
   ]);
   const row = result.rows[0];
@@ -68,7 +121,40 @@ export async function getUser(db: SqlClient, userId: string): Promise<User | nul
     phoneOrEmail: row.phone_or_email ?? undefined,
     creditBalance: row.credit_balance,
     createdAt: new Date(row.created_at).toISOString(),
+    lastActiveAt: isoOrUndefined(row.last_active_at),
   };
+}
+
+function isoOrUndefined(value: Date | string | null | undefined): string | undefined {
+  if (value == null || value === "") return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
+/** Videos owned by this user. Contact details of other accounts are not selected. */
+export async function listUserVideos(db: SqlClient, userId: string): Promise<OwnVideoSummary[]> {
+  const result = await db.query<{
+    id: string;
+    status: OwnVideoSummary["status"];
+    stage: OwnVideoSummary["stage"];
+    created_at: Date | string;
+    title: string | null;
+  }>(
+    `SELECT v.id, v.status, v.stage, v.created_at, c.title
+     FROM videos v
+     LEFT JOIN chats c ON c.id = v.chat_id
+     WHERE v.user_id = $1
+     ORDER BY v.created_at DESC
+     LIMIT 50`,
+    [userId],
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    title: row.title ?? undefined,
+    status: row.status,
+    stage: row.stage,
+    createdAt: new Date(row.created_at).toISOString(),
+  }));
 }
 
 export async function createChatVideo(

@@ -83,7 +83,8 @@ function failText(payload: Record<string, unknown>, status: number): string {
   return `request failed (${status})`;
 }
 
-function localMediaImage(env: EnvLike, imageUrl: string): string | undefined {
+/** A PNG this process stored under /media/images, when the file is still on disk. */
+export function localMediaImage(env: EnvLike, imageUrl: string): string | undefined {
   let pathname = imageUrl;
   if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
     try {
@@ -168,9 +169,12 @@ async function postImage(
     form.set("model", model);
     form.set("prompt", prompt);
     form.set("size", size);
+    // One reference stays `image`. Two or more must be `image[]` or OpenAI
+    // rejects the multipart body as a duplicate `image` parameter.
+    const imageField = anchorUrls.length > 1 ? "image[]" : "image";
     for (const [index, url] of anchorUrls.entries()) {
       const image = await readImageBytes(env, url, fetchImpl);
-      form.append("image", new Blob([new Uint8Array(image.bytes)], { type: image.type }), `anchor-${index}.png`);
+      form.append(imageField, new Blob([new Uint8Array(image.bytes)], { type: image.type }), `anchor-${index}.png`);
     }
     response = await fetchImpl(`${base}/images/edits`, {
       method: "POST",
@@ -199,14 +203,25 @@ async function postImage(
   throw new Error("openai image result missing image");
 }
 
-/** Turnaround sheet. Same model as scene stills, landscape size, no 9:16 crop. */
+/** Required on an edits sheet so the portrait is not copied as the whole image. */
+export const FACE_SHEET_LINE = "use this face; draw a new multi-view sheet";
+
+/**
+ * Landscape sheet. Same model as scene stills, no 9:16 crop.
+ * Sheets are text-to-image generations. A face anchor, when one is passed,
+ * uses edits and must ask for a new multi-view sheet.
+ */
 export async function generateCharacterSheet(
   env: EnvLike,
   input: { prompt: string; anchorUrl?: string },
   fetchImpl: FetchLike,
 ): Promise<string> {
   const anchor = input.anchorUrl?.trim();
-  const bytes = await postImage(env, fetchImpl, input.prompt.trim(), OPENAI_SHEET_SIZE, anchor ? [anchor] : []);
+  let prompt = input.prompt.trim();
+  if (anchor && !prompt.toLowerCase().includes(FACE_SHEET_LINE)) {
+    prompt = `${prompt}\n${FACE_SHEET_LINE}`;
+  }
+  const bytes = await postImage(env, fetchImpl, prompt, OPENAI_SHEET_SIZE, anchor ? [anchor] : []);
   return savePng(env, randomUUID(), bytes);
 }
 

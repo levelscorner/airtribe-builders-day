@@ -113,32 +113,39 @@ test("G22-txn: withTransaction pins one connection (BEGIN API present)", async (
 });
 
 test("G22-double: debitRegenerate is idempotent on the same ref", async () => {
-  const user = await signup("Debit", "debit-g22@example.com");
-  const opened = await startChat(ctx, { userId: user.id, initialMessage: "honey" });
-  const before = (await store.getUser(db, user.id))!.creditBalance;
-  const ref = `regen:test-${user.id}:v1`;
+  const previous = process.env.CREDITS_ENABLED;
+  process.env.CREDITS_ENABLED = "1";
+  try {
+    const user = await signup("Debit", "debit-g22@example.com");
+    const opened = await startChat(ctx, { userId: user.id, initialMessage: "honey" });
+    const before = (await store.getUser(db, user.id))!.creditBalance;
+    const ref = `regen:test-${user.id}:v1`;
 
-  const first = await debitRegenerate(db, {
-    userId: user.id,
-    videoId: opened.videoId,
-    amount: 5,
-    ref,
-  });
-  assert.equal(first, before - 5);
+    const first = await debitRegenerate(db, {
+      userId: user.id,
+      videoId: opened.videoId,
+      amount: 5,
+      ref,
+    });
+    assert.equal(first, before - 5);
 
-  const second = await debitRegenerate(db, {
-    userId: user.id,
-    videoId: opened.videoId,
-    amount: 5,
-    ref,
-  });
-  // Second call must not debit again.
-  assert.equal(second, before - 5);
-  const after = (await store.getUser(db, user.id))!.creditBalance;
-  assert.equal(after, before - 5);
+    const second = await debitRegenerate(db, {
+      userId: user.id,
+      videoId: opened.videoId,
+      amount: 5,
+      ref,
+    });
+    // Second call must not debit again.
+    assert.equal(second, before - 5);
+    const after = (await store.getUser(db, user.id))!.creditBalance;
+    assert.equal(after, before - 5);
 
-  const ledger = await db.query("SELECT count(*)::int AS n FROM credit_ledger WHERE ref = $1", [ref]);
-  assert.equal(Number(ledger.rows[0]?.n), 1);
+    const ledger = await db.query("SELECT count(*)::int AS n FROM credit_ledger WHERE ref = $1", [ref]);
+    assert.equal(Number(ledger.rows[0]?.n), 1);
+  } finally {
+    if (previous === undefined) delete process.env.CREDITS_ENABLED;
+    else process.env.CREDITS_ENABLED = previous;
+  }
 });
 
 test("G22-twice: parallel stage transitions only advance once", async () => {

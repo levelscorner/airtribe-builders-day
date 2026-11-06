@@ -162,7 +162,11 @@ export interface User {
   displayName: string;
   phoneOrEmail?: string;
   creditBalance: number;
+  /** False unless the server set CREDITS_ENABLED. Omitted means off. */
+  creditsEnabled?: boolean;
   createdAt: string;
+  /** ISO time of the last authenticated request. Omitted until one is recorded. */
+  lastActiveAt?: string;
 }
 
 export interface Brief {
@@ -175,6 +179,8 @@ export interface Brief {
   aspectRatio?: string;
   resolution?: Resolution;
   targetSeconds?: number;
+  /** How many scenes the script must contain. Omitted means 2. */
+  sceneCount?: number;
   audience?: string;
   artStyle?: string;
   artStyleTraits?: string[];
@@ -204,6 +210,15 @@ export interface VideoSummary {
   reservedCredits: number;
   createdAt: string;
   updatedAt: string;
+}
+
+/** A video belonging to the signed-in user. No other account's contact details. */
+export interface OwnVideoSummary {
+  id: string;
+  title?: string;
+  status: VideoSummary['status'];
+  stage: Stage;
+  createdAt: string;
 }
 
 export interface Scene {
@@ -561,6 +576,8 @@ export interface ClipGenInput {
   elementIds: string[];
   durationMs: number;
   aspectRatio: string;
+  /** Seedance native audio. Set only when ElevenLabs produced no line for the scene. */
+  generateAudio?: boolean;
 }
 
 export interface ClipGenOutput {
@@ -685,6 +702,7 @@ export type MockableFactory<T> = (env: {
 export const ApiPaths = {
   users: '/v1/users',
   me: '/v1/me',
+  myVideos: '/v1/me/videos',
   chats: '/v1/chats',
   chat: (chatId: string) => `/v1/chats/${chatId}`,
   chatMessages: (chatId: string) => `/v1/chats/${chatId}/messages`,
@@ -708,3 +726,4 @@ export const ApiPaths = {
 
 export type { VoiceBankPreset } from './voicePresets.ts';
 export { VOICE_PRESETS } from './voicePresets.ts';
+export { formatIst, formatLastActive } from './ist.ts';

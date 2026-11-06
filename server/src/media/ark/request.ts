@@ -21,7 +21,7 @@ export const ArkModels = {
 /**
  * Seedance 2.5 with a first_frame image must not send ratio or --ratio.
  * The output ratio follows the image (400 TaskTypeConstraint otherwise).
- * generate_audio stays false so ElevenLabs owns the voiceover.
+ * generate_audio stays false unless this scene is the ElevenLabs fallback.
  */
 export function seedanceModel(env: EnvLike): string {
   return env.SEEDANCE_MODEL?.trim() || ArkModels.seedance25;
@@ -31,8 +31,13 @@ export function seedreamModel(env: EnvLike): string {
   return env.SEEDREAM_MODEL?.trim() || ArkModels.seedream;
 }
 
+/**
+ * Smallest 9:16 size Seedream accepts. 720x1280 is 921_600 pixels and the API
+ * rejects anything under 3_686_400. The studio downscales the result to 720x1280.
+ */
+export const SEEDREAM_PORTRAIT_SIZE = "1440x2560";
+
 export function arkImageSize(aspect: string, resolution: string): string {
-  const portrait = resolution === "1080p" ? "1080x1920" : "720x1280";
   const landscape = resolution === "1080p" ? "1920x1080" : "1280x720";
   switch (aspect.trim()) {
     case "16:9":
@@ -44,7 +49,7 @@ export function arkImageSize(aspect: string, resolution: string): string {
     case "3:4":
       return resolution === "1080p" ? "1080x1440" : "768x1024";
     default:
-      return portrait;
+      return SEEDREAM_PORTRAIT_SIZE;
   }
 }
 
@@ -57,9 +62,26 @@ export function requirePrompt(resolved: ResolvedCastPrompt): string {
   return prompt;
 }
 
-export function buildSeedreamBody(input: ImageGenInput, resolved: ResolvedCastPrompt, env: EnvLike): Record<string, unknown> {
+const ARK_REFERENCE = /^(?:https:\/\/\S+|data:image\/png;base64,[A-Za-z0-9+/=\s]+)$/;
+
+/** Seedream `image` values are already https URLs or `data:image/png;base64`. */
+export function buildSeedreamBody(
+  input: ImageGenInput,
+  resolved: ResolvedCastPrompt,
+  env: EnvLike,
+  images?: readonly string[],
+): Record<string, unknown> {
   const prompt = requirePrompt(resolved);
-  const anchors = remoteHttpAnchors(env, resolved.anchorUrls);
+  // Callers that already prepared sheets (main) pass them in. Older callers
+  // omit the list, and only http(s) anchors are attached.
+  const refs = images ?? remoteHttpAnchors(env, resolved.anchorUrls);
+  if (images) {
+    for (const url of images) {
+      if (!ARK_REFERENCE.test(url)) {
+        throw new MediaInputError("ark image reference must be an https url or a png data url");
+      }
+    }
+  }
   const body: Record<string, unknown> = {
     model: seedreamModel(env),
     prompt,
@@ -67,7 +89,7 @@ export function buildSeedreamBody(input: ImageGenInput, resolved: ResolvedCastPr
     response_format: "url",
     watermark: false,
   };
-  if (anchors.length > 0) body.image = anchors;
+  if (refs.length > 0) body.image = [...refs];
   return body;
 }
 
@@ -132,6 +154,6 @@ export function buildSeedanceBody(input: ClipGenInput, prompt: string, env: EnvL
     content,
     duration: clipSeconds(input.durationMs),
     resolution: clipResolution(env.CLIP_RESOLUTION),
-    generate_audio: false,
+    generate_audio: input.generateAudio === true,
   };
 }
