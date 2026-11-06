@@ -77,7 +77,13 @@ class MockVoiceGen implements VoiceGenPort {
 
 export type VoiceGenDeps = ElevenLabsDeps;
 
+function voiceForcedLive(env: EnvLike): boolean {
+  const value = env.VOICE_MOCK?.trim().toLowerCase();
+  return value === "0" || value === "false" || value === "no" || value === "off";
+}
+
 export function createVoiceGen(env: EnvLike = process.env, deps: VoiceGenDeps = {}): VoiceGenPort {
   if (moduleMock(env, "VOICE_MOCK")) return new MockVoiceGen(env);
+  if (!env.ELEVENLABS_API_KEY?.trim() && !voiceForcedLive(env)) return new MockVoiceGen(env);
   return new LiveVoiceGen(env, deps);
 }

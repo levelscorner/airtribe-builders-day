@@ -56,7 +56,7 @@ test("image and video prompts repeat identity text and embed element ids", async
     assert.ok(prompts.imagePrompt.includes(`<<<${member.higgsfieldElementId}>>>`));
   }
   assert.deepEqual(prompts.elementIds, ["el_chintu", "el_mini"]);
-  assert.match(prompts.videoPrompt, /Duration 9000 milliseconds/);
+  assert.match(prompts.videoPrompt, new RegExp(`Duration ${hook.durationMs} milliseconds`));
   assert.match(prompts.imagePrompt, /AI-generated scene/);
   assert.doesNotMatch(prompts.imagePrompt, /pixar|disney/i);
 });

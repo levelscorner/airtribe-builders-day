@@ -135,7 +135,10 @@ test("MOCK=1 kids video reaches done via chat HITL", async () => {
         .post(`/v1/artefacts/${target.id}/regenerate?confirm=1`)
         .send({ feedback: "brighter" })
         .expect(200);
-      assert.ok(confirmed.body.charged > 0);
+      const charging = ["1", "true", "yes", "on"].includes(
+        (process.env.CREDITS_ENABLED ?? "").trim().toLowerCase(),
+      );
+      assert.equal(confirmed.body.charged > 0, charging);
       assert.ok(confirmed.body.artefact);
       didRejectRegen = true;
     }

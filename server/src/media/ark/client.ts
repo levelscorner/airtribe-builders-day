@@ -16,9 +16,10 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function timeoutMs(env: EnvLike): number {
-  const parsed = Number(env.ARK_POLL_TIMEOUT_MS ?? "180000");
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 180_000;
+export function timeoutMs(env: EnvLike): number {
+  const parsed = Number(env.ARK_POLL_TIMEOUT_MS ?? "600000");
+  // Seedance clips can take several minutes; never poll for less than 10 min.
+  return Number.isFinite(parsed) && parsed > 0 ? Math.max(parsed, 600_000) : 600_000;
 }
 
 function scrub(message: string, secret: string): string {

@@ -14,6 +14,8 @@ MOCK=1 npm start               # /v1 API + static Expo web (default PORT 8787)
 
 The web client has an independent conversation-first interface: a prompt and local reference attachments, one replacing configuration box, a single completed plan summary, script approval/revision, and a right-hand visual canvas. Native screens remain separate. `chat_canvas` is an opt-in experience in the existing `/v1` contract, so other clients retain their flow.
 
+`POST /v1/users` creates a profile. An email that is already registered returns 409 and does not start a session, unless `DEMO_EMAIL_LOGIN=1`. That flag is off by default. With it set, the same route signs that existing user in (200) and keeps their credits and payments. Emails listed in `ADMIN_EMAILS` (comma-separated) stay on the 409 even when the flag is on. For the Replit demo, set `DEMO_EMAIL_LOGIN=1`.
+
 Run browser flow checks with `npm --prefix apps/mobile run test:web` against the server above. `npm run test:orchestrator` covers script-first approvals, targeted revisions, refresh recovery, and configuration persistence. See [DESIGN.md](DESIGN.md) for the web design system.
 
 This preview uses sample generation and credits. Attachments remain in the current browser; the sample generator does not read them. Actual script/frame generation is awaiting the teammate-owned provider integration and must be verified after those changes are available.
@@ -33,9 +35,9 @@ Four ideas stay first-class in the portfolio. A short backlog records earlier de
 
 Adapters live in `server/src/media`. `createMediaPorts(env)` returns `ImageGen`, `ClipGen`, and `VoiceGen`. `MOCK=1` (or a missing key) returns placeholder files under `server/public/mock/` and does not call a provider.
 
-Live images stay on BytePlus Seedream unless `IMAGE_PROVIDER=openai`. That switch calls `gpt-image-2` (`POST /v1/images/generations`, body `model`, `prompt`, `size: 1024x1536`, `n: 1`, `Authorization: Bearer OPENAI_API_KEY`). The response is `data[0].b64_json` (GPT image models do not return a URL). The server decodes it, center-crops 1024×1536 onto 9:16, scales the still to 720×1280, and serves the PNG at `/media/images/{id}.png`. A cast anchor uses `POST /v1/images/edits` with the anchor file, the same model and size, then the same crop. If that call fails and an Ark key is set, images fall back to Seedream (`seedream-5-0-260128`).
+Live images default to `gpt-image-2` (`POST /v1/images/generations`, body `model`, `prompt`, `size: 1024x1536`, `n: 1`, `Authorization: Bearer OPENAI_API_KEY`). A blank `IMAGE_PROVIDER` selects that path. The response is `data[0].b64_json` (GPT image models do not return a URL). The server decodes it, center-crops 1024×1536 onto 9:16, scales the still to 720×1280, and serves the PNG at `/media/images/{id}.png`. Each non-narrator cast member gets one character sheet (front, 3/4, side, back, and detail panels, `1536x1024`, no 9:16 crop, no expression row) from a text generation, stored on `cast_members.sheet_url`. Every scene still then uses `POST /v1/images/edits` with up to four of those sheets, listed before the face anchors, plus the identity text. The image payload records `references` as `sheet` and `anchor` when those were attached. A failed OpenAI call stays failed. `IMAGE_PROVIDER=ark` is the only way to call Seedream.
 
-The scene runner reads `imagePrompt`, `motionPrompt`, `durationSec` (5 or 10), `vo`, and `voiceId` from the scene plan. Image, clip, and voice stages each run up to 3 scenes at once (`SCENE_CONCURRENCY`). The image stage sets `IMAGE_PROVIDER=openai` so those stills are gpt-image-2, and a cast anchor goes through `/images/edits`. Seedance gets that still as `first_frame`, with `duration` equal to `durationSec`, `generate_audio: false`, and no ratio. ElevenLabs speaks `vo` with `voiceId`. Each still, clip, and voice line stores `provider`, `model`, and `providerLabel`, and the orchestrator emits `media.progress` with `sceneId` for that step. ffmpeg fits every clip to its voiceover (freeze the last frame, or trim with `-t`), concats the scenes, and writes a 9:16 faststart mp4. `BACKGROUND_MUSIC_URL` is optional; it is ducked under the voice with `sidechaincompress` and `volume`. Regenerating a scene's image rebuilds that scene's clip and then the final cut. A clip or voice regenerate keeps the other steps and the other scenes, then re-concats. `MOCK=1` keeps placeholder media and skips ffmpeg.
+The scene runner reads `imagePrompt`, `motionPrompt`, `durationSec` (5 or 10), `vo`, and `voiceId` from the scene plan. Image, clip, and voice stages each run up to 3 scenes at once (`SCENE_CONCURRENCY`). Seedance runs when `ARK_API_KEY` is set and `MOCK` is not `1`. It gets the still as `first_frame`, with `duration` equal to `durationSec`, `generate_audio: false`, and no ratio. ElevenLabs speaks `vo` with `voiceId` when its key is set. Each still, clip, and voice line stores `provider`, `model`, and `providerLabel`, and the orchestrator emits `media.progress` with `sceneId` for that step. ffmpeg fits every clip to its voiceover (freeze the last frame, or trim with `-t`), concats the scenes, and writes a 9:16 faststart mp4. `BACKGROUND_MUSIC_URL` is optional; the voice is split with `asplit` so `sidechaincompress` and the mix can both use it. Regenerating a scene's image rebuilds that scene's clip and then the final cut. A clip or voice regenerate keeps the other steps and the other scenes, then re-concats. `MOCK=1` keeps placeholder media and skips ffmpeg.
 
 Live clips are Seedance 2.5 (`dreamina-seedance-2-5-260628`) image-to-video. The first frame is `role: first_frame`. A still stored on this server is sent as `data:image/png;base64,...` so BytePlus does not have to fetch localhost. Do not send `ratio` or `--ratio` with a first frame (400 `TaskTypeConstraint`); the clip follows the image. The body sets `duration`, `resolution` (default `720p`), and `generate_audio: false`. Poll `GET /contents/generations/tasks/{id}` about every 8 seconds until `succeeded`, then read `content.video_url`.
 
@@ -50,9 +52,9 @@ Voice is the ElevenLabs bank in `packages/shared/voicePresets.ts` (`VOICE_PRESET
 | `MOCK` | `1` mocks ImageGen, ClipGen, VoiceGen, and the cast adapter. |
 | `IMAGE_MOCK`, `CLIP_MOCK`, `VOICE_MOCK`, `CAST_MOCK` | Per-port override. `1` forces mock, `0` forces the live adapter. |
 | `OPENAI_API_KEY` | Bearer token for gpt-image-2. Server-side only. |
-| `ARK_API_KEY` | Bearer token for Seedance and Seedream. Server-side only. |
-| `IMAGE_PROVIDER` | Blank stays on Ark Seedream. `openai` selects gpt-image-2. `mock` forces placeholders. |
-| `SEEDREAM_MODEL` | Seedream model id. Default `seedream-5-0-260128`. |
+| `ARK_API_KEY` | Bearer token for Seedance. Server-side only. Seedream uses it only when `IMAGE_PROVIDER=ark`. |
+| `IMAGE_PROVIDER` | Blank defaults to gpt-image-2. `ark` selects Seedream. `mock` forces placeholders. |
+| `SEEDREAM_MODEL` | Unused unless `IMAGE_PROVIDER=ark`. Default `seedream-5-0-260128`. |
 | `SEEDANCE_MODEL` | Seedance model id. Default `dreamina-seedance-2-5-260628`. |
 | `ELEVENLABS_API_KEY` | ElevenLabs `xi-api-key`. Server-side only. |
 | `VOICE_PRESETS_JSON` | JSON array that replaces the voice catalogue. Each item needs `id` and `elevenlabsVoiceId`. |
@@ -60,6 +62,8 @@ Voice is the ElevenLabs bank in `packages/shared/voicePresets.ts` (`VOICE_PRESET
 | `PUBLIC_BASE_URL` | Prefix for stored media and the final download URL. |
 | `MEDIA_ROOT` | Directory for generated images. Default `server/data/media`. |
 | `MEDIA_DIR` | Directory for live voice bytes. Default `server/data/media/voice`. |
+| `DEMO_EMAIL_LOGIN` | `1` lets `POST /v1/users` sign in an existing email. Unset keeps the 409. Off by default. |
+| `ADMIN_EMAILS` | Comma-separated emails that passwordless sign-in never accepts. |
 
 ## Saturday primary build
 

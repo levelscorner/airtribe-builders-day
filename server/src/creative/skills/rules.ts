@@ -12,7 +12,8 @@ export const INHERITED_RULES = [
 
 export const SCRIPT_TASK = [
   "Write a short video script for an Indian creator.",
-  "Follow the genre beats in order, one scene each.",
+  "Write exactly the sceneCount given in the request. Do not add extra scenes.",
+  "Follow the genre beats in order, one scene each, and stop when you reach sceneCount.",
   "Narration language is Hindi in Devanagari, Hinglish in Latin script, or English, as requested.",
   "Each scene narration includes the narrator line and spoken lines for on-screen cast, each prefixed with the character name.",
   "castIds may only use ids from the cast you were given.",

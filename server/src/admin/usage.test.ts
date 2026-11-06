@@ -113,7 +113,7 @@ test("usage metrics skip test accounts until the toggle is off", async () => {
     assert.equal(hidden.dailyActiveUsers, 1);
     assert.equal(hidden.chatsStarted, 8);
     assert.deepEqual(hidden.videosByStage, { brief: 1, cast: 1, script: 1, visuals: 1, voice: 1, final: 1, done: 1 });
-    assert.deepEqual(hidden.funnel, { brief: 7, cast: 6, script: 5, visuals: 4, voice: 3, done: 1 });
+    assert.deepEqual(hidden.funnel, { brief: 7, cast: 6, script: 5, visuals: 4, voice: 3, final: 2, done: 1 });
     assert.equal(hidden.videosFinished, 1);
     assert.deepEqual(hidden.credits, { granted: 540, spent: 26, refunded: 8 });
     assert.deepEqual(hidden.qrPayments, { pending: 1, approved: 1, revenueInr: 199 });
@@ -305,7 +305,7 @@ function zeros(excludeTestAccounts: boolean): UsageReport {
     dailyActiveUsers: 0,
     chatsStarted: 0,
     videosByStage: { brief: 0, cast: 0, script: 0, visuals: 0, voice: 0, final: 0, done: 0 },
-    funnel: { brief: 0, cast: 0, script: 0, visuals: 0, voice: 0, done: 0 },
+    funnel: { brief: 0, cast: 0, script: 0, visuals: 0, voice: 0, final: 0, done: 0 },
     videosFinished: 0,
     credits: { granted: 0, spent: 0, refunded: 0 },
     qrPayments: { pending: 0, approved: 0, revenueInr: 0 },

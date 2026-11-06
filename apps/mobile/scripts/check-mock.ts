@@ -101,8 +101,8 @@ function providerCases(): void {
     "voices use the shared VoicePreset fields",
   );
   assert(
-    providerChipLabel({ payload: { provider: "mock", model: "alibaba/qwen-image-3/text-to-image" } }) === "Qwen Image",
-    "image model chip uses the Qwen endpoint",
+    providerChipLabel({ payload: { provider: "mock", model: "alibaba/qwen-image-3/text-to-image" } }) === undefined,
+    "qwen image chips stay hidden",
   );
   assert(
     providerChipLabel({ payload: { provider: "mock", model: "bytedance/seedance-2.0/image-to-video" } }) ===

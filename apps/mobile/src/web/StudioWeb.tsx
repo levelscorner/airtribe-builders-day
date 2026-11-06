@@ -48,6 +48,8 @@ import {
   GenerationProgress,
 } from "./GenerationUI";
 import { getStudioClient } from "../api";
+import { ProfileControl } from "./ProfileControl";
+import { rememberBrowserSession } from "./session-notice";
 import { openQuestion } from "../chat/open-question";
 import { useWebChat } from "./useWebChat";
 import {
@@ -202,6 +204,7 @@ function Shell({
             <span className="studio-name">Studio</span>
           </div>
           <div className="topbar-actions">
+            <ProfileControl />
             <span className="demo-badge">
               {runtime?.mock === true
                 ? "Sample mode"
@@ -492,17 +495,15 @@ export function WebHome() {
       try {
         await getStudioClient().getMe();
       } catch (e) {
-        if (
-          e &&
-          typeof e === "object" &&
-          "status" in e &&
-          [401, 404].includes(Number(e.status))
-        ) {
+        const status = e && typeof e === "object" && "status" in e ? Number(e.status) : NaN;
+        const code = e && typeof e === "object" && "code" in e ? String(e.code) : "";
+        if (status === 401 || status === 404 || code === "no_user") {
           setNeedsProfile(true);
           return;
         }
         throw e;
       }
+      rememberBrowserSession();
       await create();
     } catch (e) {
       setError(
@@ -522,6 +523,7 @@ export function WebHome() {
           displayName: name.trim(),
           phoneOrEmail: email.trim(),
         });
+        rememberBrowserSession();
         profileCreated.current = true;
       }
       await create();
@@ -874,6 +876,94 @@ const visualKinds = new Set([
   "anchor",
   "voice_sample",
 ]);
+const reviewKinds = new Set(["clip", "voice", "audio", "final"]);
+function reviewNoun(kind: string): "clip" | "voice" | "final" {
+  if (kind === "clip") return "clip";
+  if (kind === "final") return "final";
+  return "voice";
+}
+function MediaReviews({
+  artefacts,
+  busy,
+  onApprove,
+  onFeedback,
+}: {
+  artefacts: ArtefactSummary[];
+  busy: boolean;
+  onApprove: (id: string) => void;
+  onFeedback: (item: ArtefactSummary) => void;
+}) {
+  const rows = artefacts.filter((item) => reviewKinds.has(item.kind));
+  const seen: Record<string, number> = {};
+  if (!rows.length) return null;
+  return (
+    <div className="media-reviews">
+      {rows.map((item) => {
+        const noun = reviewNoun(item.kind);
+        seen[noun] = (seen[noun] ?? 0) + 1;
+        const label = noun === "final" ? "final cut" : `${noun} ${seen[noun]}`;
+        const title = noun === "final" ? "Final cut" : `${noun === "clip" ? "Clip" : "Voice"} ${seen[noun]}`;
+        const canAct = item.state === "awaiting_approval" || item.state === "failed";
+        return (
+          <article className="later-review" key={item.id}>
+            <h3>{title}</h3>
+            <ProviderLine source={item} />
+            <MediaPlayer
+              kind={noun === "voice" ? "audio" : "video"}
+              name={title}
+              url={str(item.payload.url)}
+            />
+            {item.state === "approved" ? (
+              <span className="approved-line">
+                <Check size={15} />
+                Approved
+              </span>
+            ) : canAct ? (
+              <div className="script-actions">
+                <button
+                  className="primary-button"
+                  disabled={busy}
+                  onClick={() => onApprove(item.id)}
+                >
+                  Approve {label}
+                </button>
+                <button
+                  className="text-button"
+                  disabled={busy}
+                  onClick={() => onFeedback(item)}
+                >
+                  Request a change
+                </button>
+              </div>
+            ) : (
+              <p className="muted">Preparing this {noun === "final" ? "cut" : noun}…</p>
+            )}
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+function CharacterStill({ url, alt }: { url?: string; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [url]);
+  const src = mediaUrl(url);
+  if (!src || failed)
+    return (
+      <div className="frame-placeholder" role="status">
+        <ImageIcon size={22} />
+        <span>{failed ? "Image couldn’t load" : "Image not available yet"}</span>
+      </div>
+    );
+  return (
+    <img
+      className="real-frame"
+      src={src}
+      alt={alt}
+      onError={() => setFailed(true)}
+    />
+  );
+}
 function SceneImage({
   index,
   alt,
@@ -916,8 +1006,10 @@ function Canvas({
   onClose,
   onFeedback,
   onApprove,
+  onApproveVisuals,
   busy,
   stage,
+  sheetsAreMock = false,
 }: {
   artefacts: ArtefactSummary[];
   messages: ChatMessage[];
@@ -925,8 +1017,10 @@ function Canvas({
   onClose: () => void;
   onFeedback: (item: ArtefactSummary) => void;
   onApprove: (id: string) => void;
+  onApproveVisuals: () => void;
   busy: boolean;
   stage: string;
+  sheetsAreMock?: boolean;
 }) {
   const panel = useRef<HTMLElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -1129,40 +1223,70 @@ function Canvas({
                 ? "Sample frames use a honey storyboard to demonstrate this review."
                 : "Review the actual generated frames before continuing."}
             </p>
+            {stage === "cast" &&
+              artefacts.some(
+                (item) =>
+                  visualKinds.has(item.kind) &&
+                  item.state === "awaiting_approval",
+              ) && (
+                <div className="canvas-mobile-approve">
+                  <button
+                    className="primary-button"
+                    disabled={busy}
+                    onClick={onApproveVisuals}
+                  >
+                    Approve visuals & continue
+                    <ArrowUpRight size={16} />
+                  </button>
+                </div>
+              )}
           </section>
           <section>
             <div className="section-heading">
               <h3>Your characters</h3>
               <span>Character references</span>
             </div>
+            {sheetsAreMock && (
+              <p className="review-warning character-sheet-warning" role="status">
+                Character sheets are sample placeholders. Image generation is
+                not connected, so these are not model sheets.
+              </p>
+            )}
             <div className="character-grid">
               {characters.map((item, i) => {
                 const castId = str(item.payload.castId);
                 const name = str(item.payload.name) || `Character ${i + 1}`;
-                const reference =
-                  artefacts.find(
+                const sheet = [...artefacts]
+                  .reverse()
+                  .find(
                     (a) =>
-                      ["sheet", "anchor"].includes(a.kind) &&
+                      a.kind === "sheet" &&
                       a.payload.castId === castId &&
-                      mediaUrl(a.payload.url) &&
-                      !isSample(a),
-                  ) ??
-                  artefacts.find(
-                    (a) =>
-                      ["sheet", "anchor"].includes(a.kind) &&
-                      a.payload.castId === castId,
+                      !a.payload.failedStage,
                   );
-                const characterUrl =
-                  str(reference?.payload.url) ||
-                  str(item.payload.sheetUrl) ||
-                  str(item.payload.anchorUrl);
+                const anchor = [...artefacts]
+                  .reverse()
+                  .find(
+                    (a) =>
+                      a.kind === "anchor" &&
+                      a.payload.castId === castId &&
+                      !a.payload.failedStage,
+                  );
+                const sheetUrl = str(sheet?.payload.url) || str(item.payload.sheetUrl);
+                const anchorUrl = sheetUrl
+                  ? ""
+                  : str(anchor?.payload.url) || str(item.payload.anchorUrl);
+                const characterUrl = sheetUrl || anchorUrl;
                 const sampleCharacter =
-                  isSampleUrl(characterUrl) &&
+                  !characterUrl &&
                   ["preset_chintu", "preset_mini", "preset_riya"].includes(
                     castId,
                   );
                 return (
-                  <article className="character" key={item.id}>
+                  <article
+                    className={`character${sheetUrl ? " is-sheet" : ""}`}
+                    key={item.id}
+                  >
                     {castId !== "preset_narrator" &&
                       (sampleCharacter ? (
                         <div
@@ -1171,11 +1295,16 @@ function Canvas({
                           aria-label={`${name}, sample character model`}
                         />
                       ) : (
-                        <div className="character-reference">
-                          <SceneImage
-                            index={0}
+                        <div
+                          className={`character-reference${sheetUrl ? " is-sheet" : " is-anchor"}`}
+                        >
+                          <CharacterStill
                             url={characterUrl}
-                            alt={`${name}, character reference`}
+                            alt={
+                              sheetUrl
+                                ? `${name}, character sheet`
+                                : `${name}, face anchor`
+                            }
                           />
                         </div>
                       ))}
@@ -1184,23 +1313,36 @@ function Canvas({
                         {name}
                         {item.state === "approved" && <Check size={14} />}
                       </h4>
+                      {sheetUrl && <p>Character sheet</p>}
                       <p>{str(item.payload.identityText)}</p>
                       <ProviderLine
-                        source={reference ?? item}
+                        source={(sheetUrl ? sheet : anchor) ?? item}
                         fallback={
-                          characterUrl
-                            ? "Character reference"
-                            : "Reference pending"
+                          sheetUrl
+                            ? "Character sheet"
+                            : characterUrl
+                              ? "Face anchor"
+                              : "Reference pending"
                         }
                       />
-                      {reference && (
+                      {sheet ? (
                         <button
                           className="text-button"
-                          disabled={busy || reference.state === "approved"}
-                          onClick={() => onFeedback(reference)}
+                          disabled={busy || sheet.state === "approved"}
+                          onClick={() => onFeedback(sheet)}
                         >
-                          Revise reference
+                          Regenerate sheet
                         </button>
+                      ) : (
+                        anchor && (
+                          <button
+                            className="text-button"
+                            disabled={busy || anchor.state === "approved"}
+                            onClick={() => onFeedback(anchor)}
+                          >
+                            Revise reference
+                          </button>
+                        )
                       )}
                       {!!item.payload.directionNote && (
                         <p className="direction-note">
@@ -1275,6 +1417,15 @@ function Canvas({
           {["clips", "audio", "final", "done"].includes(stage) && (
             <section className="later-media">
               <h3>{label[stage]}</h3>
+              {stage === "done" && (
+                <h2 className="canvas-mobile-ready">Your video is ready.</h2>
+              )}
+              <MediaReviews
+                artefacts={artefacts}
+                busy={busy}
+                onApprove={onApprove}
+                onFeedback={onFeedback}
+              />
               {messages
                 .filter((m) => m.kind === "video")
                 .map(
@@ -1477,7 +1628,7 @@ export function WebConversation({
             ...previews[0]!,
             creditCost,
             balance,
-            canAfford: balance >= creditCost,
+            canAfford: chat.creditsEnabled ? balance >= creditCost : true,
           },
         });
       } catch (e) {
@@ -1563,7 +1714,7 @@ export function WebConversation({
   return (
     <Shell
       chatId={chatId}
-      credits={chat.credits}
+      credits={chat.creditsEnabled ? chat.credits : undefined}
       canvasOpen={canvasOpen}
       hasCanvas={hasCanvas}
       onCanvas={() => toggleCanvas(!canvasOpen)}
@@ -1714,6 +1865,52 @@ export function WebConversation({
                         />
                       </div>
                     );
+                  if (message.artefactKind === "sheet") {
+                    const payload = art?.payload ?? message.preview;
+                    const url = str(payload.url);
+                    const names = Array.isArray(payload.names)
+                      ? payload.names.filter((item): item is string => typeof item === "string").join(", ")
+                      : "";
+                    return (
+                      <article className="message assistant sheet-card" key={message.id}>
+                        <span className="assistant-name">
+                          <Brand />
+                        </span>
+                        <h3>{message.title || "Character sheet"}</h3>
+                        {url ? (
+                          <SceneImage index={0} url={url} alt={message.title || "Character sheet"} />
+                        ) : (
+                          <p>{names || str(payload.note) || "Character sheet"}</p>
+                        )}
+                        <p className="muted">Turnaround sheet for this character. Approve it to keep this look.</p>
+                        {art?.state === "approved" ? (
+                          <span className="approved-line">
+                            <Check size={15} />
+                            Approved
+                          </span>
+                        ) : (
+                          <div className="script-actions">
+                            <button
+                              className="primary-button"
+                              disabled={chat.busy}
+                              onClick={() => approve(message.artefactId)}
+                            >
+                              Approve character sheet
+                            </button>
+                            {art && (
+                              <button
+                                className="text-button"
+                                disabled={chat.busy}
+                                onClick={() => requestFeedback(art)}
+                              >
+                                Request a change
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </article>
+                    );
+                  }
                   if (visualKinds.has(message.artefactKind)) {
                     if (message.id !== firstVisualMessage?.id) return null;
                     return (
@@ -1798,7 +1995,14 @@ export function WebConversation({
                             disabled={chat.busy}
                             onClick={() => approve(message.artefactId)}
                           >
-                            Approve
+                            {message.artefactKind === "clip"
+                              ? "Approve clip"
+                              : message.artefactKind === "voice" ||
+                                  message.artefactKind === "audio"
+                                ? "Approve voice"
+                                : message.artefactKind === "final"
+                                  ? "Approve final cut"
+                                  : "Approve"}
                           </button>
                           {art && (
                             <button
@@ -1842,6 +2046,19 @@ export function WebConversation({
                   );
                 return null;
               })}
+              <MediaReviews
+                artefacts={chat.artefacts.filter(
+                  (item) =>
+                    !chat.messages.some(
+                      (message) =>
+                        message.kind === "approval" &&
+                        message.artefactId === item.id,
+                    ),
+                )}
+                busy={chat.busy || quoting || Boolean(revision)}
+                onApprove={approve}
+                onFeedback={requestFeedback}
+              />
               {hasCanvas &&
                 chat.stage === "cast" &&
                 awaiting.some((a) => visualKinds.has(a.kind)) && (
@@ -1904,20 +2121,26 @@ export function WebConversation({
                   </h3>
                   <p>“{revision.note}”</p>
                   <p className="muted">
-                    {revision.quote.creditCost} sample credits ·{" "}
-                    {revision.quote.balance} available.{" "}
+                    {chat.creditsEnabled ? (
+                      <>
+                        {revision.quote.creditCost} sample credits ·{" "}
+                        {revision.quote.balance} available.{" "}
+                      </>
+                    ) : null}
                     {revision.targets[0]?.kind === "script"
                       ? "You’ll review the new script before any visuals are created."
                       : "You’ll review this item again before continuing."}
                   </p>
-                  {revision.quote.canAfford ? (
+                  {!chat.creditsEnabled || revision.quote.canAfford ? (
                     <button
                       className="primary-button"
                       disabled={chat.busy}
                       onClick={() => void confirmRevision()}
                     >
                       <RotateCcw size={15} />
-                      Regenerate · {revision.quote.creditCost} credits
+                      {chat.creditsEnabled
+                        ? `Regenerate · ${revision.quote.creditCost} credits`
+                        : "Regenerate"}
                     </button>
                   ) : (
                     <p role="alert">
@@ -1958,12 +2181,22 @@ export function WebConversation({
             </div>
           </div>
           <div className="conversation-bottom">
+            {chat.sessionNotice && (
+              <div role="alert" className="error-note">
+                Sign up required
+                <button type="button" onClick={() => chat.dismissSessionNotice()}>
+                  Dismiss
+                </button>
+              </div>
+            )}
             {chat.error && (
               <div role="alert" className="error-note">
                 {chat.error === "not_found" || chat.error === "unauthorized"
                   ? "This session has expired. Start a new video to continue."
                   : chat.error}
-                <button onClick={() => chat.setError("")}>Dismiss</button>
+                <button type="button" onClick={() => chat.setError("")}>
+                  Dismiss
+                </button>
               </div>
             )}
             {feedbackTarget && (
@@ -1974,7 +2207,9 @@ export function WebConversation({
                     ? "your script"
                     : feedbackTarget.kind === "image"
                       ? "this scene"
-                      : str(feedbackTarget.payload.name) || "this visual"}
+                      : feedbackTarget.kind === "sheet"
+                        ? "this character sheet"
+                        : str(feedbackTarget.payload.name) || "this visual"}
                 </span>
                 <IconButton
                   title="Cancel revision"
@@ -2015,7 +2250,11 @@ export function WebConversation({
           onClose={() => toggleCanvas(false)}
           onFeedback={requestFeedback}
           onApprove={approve}
+          onApproveVisuals={() =>
+            void chat.run(() => chat.client.approveAllRemaining(videoId))
+          }
           busy={chat.busy || quoting || Boolean(revision)}
+          sheetsAreMock={chat.runtime?.sheetsAreMock === true}
         />
       </main>
     </Shell>

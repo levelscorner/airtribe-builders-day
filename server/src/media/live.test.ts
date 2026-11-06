@@ -11,6 +11,7 @@ import { createClipGen } from "./higgsfield/clip-gen.js";
 import { createImageGen } from "./higgsfield/image-gen.js";
 import { createVoiceGen } from "./elevenlabs/voice-gen.js";
 import { createMediaPorts } from "./index.js";
+import { DEFAULT_VOICE_ID } from "../../../packages/shared/voicePresets.ts";
 
 interface Call {
   url: string;
@@ -386,7 +387,10 @@ test("voice gen posts with-timestamps and writes the mp3", async () => {
   assert.deepEqual(readFileSync(join(dir, filename)), audio);
   assert.equal(header(calls[0]?.init, "xi-api-key"), "test-eleven");
   assert.equal(header(calls[0]?.init, "authorization"), null);
-  assert.match(calls[0]?.url ?? "", /\/v1\/text-to-speech\/T536A2SFCG4AEDVTRucQ\/with-timestamps\?output_format=mp3_44100_128$/);
+  assert.match(
+    calls[0]?.url ?? "",
+    new RegExp(`/v1/text-to-speech/${DEFAULT_VOICE_ID}/with-timestamps\\?output_format=mp3_44100_128$`),
+  );
   const body = JSON.parse(String(calls[0]?.init?.body));
   assert.equal(body.model_id, "eleven_multilingual_v2");
   assert.equal("language_code" in body, false);
@@ -401,6 +405,26 @@ test("voice gen posts with-timestamps and writes the mp3", async () => {
   const sampleBody = JSON.parse(String(calls[1]?.init?.body));
   assert.equal(sampleBody.model_id, "eleven_flash_v2_5");
   assert.equal(sampleBody.language_code, "hi");
+});
+
+test("live voice without PUBLIC_BASE_URL points ffmpeg at the saved file", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "chotu-voice-local-"));
+  const audio = Buffer.from("local-audio");
+  const fetch: FetchLike = async () =>
+    json(200, {
+      audio_base64: audio.toString("base64"),
+      alignment: {
+        characters: ["H", "i"],
+        character_start_times_seconds: [0, 0.1],
+        character_end_times_seconds: [0.1, 0.25],
+      },
+    });
+  const voice = createVoiceGen({ VOICE_MOCK: "0", ELEVENLABS_API_KEY: "test-eleven", MEDIA_DIR: dir }, { fetch });
+  const line = await voice.generate({ text: "Hi", voiceId: "T536A2SFCG4AEDVTRucQ", language: "hi" });
+  const filename = line.url.split("/").pop() ?? "";
+  assert.equal(line.url, join(dir, filename));
+  assert.equal(line.url.startsWith("http"), false);
+  assert.deepEqual(readFileSync(line.url), audio);
 });
 
 test("a voice response without alignment fails the job", async () => {
@@ -446,6 +470,6 @@ test("polling gives up when the request never finishes", async () => {
 test("creating image ports does not require unrelated clip or voice credentials", () => {
   const ports = createMediaPorts({ MOCK: "0", IMAGE_PROVIDER: "openai", OPENAI_API_KEY: "sk-test-openai" });
   assert.equal(ports.images.mode, "live");
-  assert.throws(() => ports.clips, /ARK_API_KEY/);
-  assert.throws(() => ports.voice, /ELEVENLABS_API_KEY/);
+  assert.equal(ports.clips.mode, "mock");
+  assert.equal(ports.voice.mode, "mock");
 });
