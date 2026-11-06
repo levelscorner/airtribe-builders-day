@@ -7,6 +7,8 @@ export interface StudioRuntime {
   memory?: boolean;
   llm?: string;
   creditsEnabled?: boolean;
+  /** True when character sheets are placeholders instead of gpt-image-2 generations. */
+  sheetsAreMock?: boolean;
 }
 export function useStudioRuntime() {
   const [runtime, setRuntime] = useState<StudioRuntime | null>(null);

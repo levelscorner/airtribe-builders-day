@@ -31,6 +31,7 @@ import {
   briefFromMessage,
   createPromptGen,
   createScriptGen,
+  artStylePreset,
   getGenre,
   getPresetCast,
   nextQuestion,
@@ -46,7 +47,13 @@ import { PROMPT_JSON_HINT, SCENE_PLAN_HINT, SCRIPT_JSON_HINT, creativeGenEnv } f
 import { creditsEnabled } from "../credits/flag.js";
 import { artefactCreditCost, clipChargeAfterAttempt, debitRegenerate } from "../credits/stub.js";
 import type { SqlClient } from "../db/client.js";
-import { sceneCastReference, ensureCharacterSheet } from "../media/cast/sheet.js";
+import {
+  includeCastReferences,
+  preferredCastImage,
+  sceneCastReference,
+  ensureCharacterSheet,
+  type CastImageSource,
+} from "../media/cast/sheet.js";
 import { createMediaPorts } from "../media/index.js";
 import { retainReferences } from "../creative/prompts/create.js";
 import { elementIdForAnchor } from "../media/cast/reference.js";
@@ -475,6 +482,8 @@ async function beginCast(
     "Cast bank se characters lock kar rahe hain…",
     "Cast",
   );
+  const castVideo = await store.getVideoRow(ctx.db, videoId);
+  const visualStyle = castVideo ? videoVisualStyle(castVideo) : undefined;
   for (const member of cast) {
     const existing = (await store.listArtefacts(ctx.db, videoId)).filter(
       (a) => a.payload.castId === member.id,
@@ -514,6 +523,7 @@ async function beginCast(
     if (member.role !== "narrator") {
       const sheetUrl = await ensureCharacterSheet(imageMediaEnv(ctx), member, {
         saveSheet: (castId, url) => store.updateCastSheet(ctx.db, castId, url),
+        visualStyle,
       });
       const reference = ctx.mock
         ? undefined
@@ -734,6 +744,16 @@ function mediaEnv(ctx: OrchestratorContext): NodeJS.ProcessEnv {
 }
 
 /** Scene stills and character sheets use gpt-image-2. MOCK and IMAGE_PROVIDER=mock stay on placeholders. */
+/** Style label plus traits for the character-sheet VISUAL STYLE line. */
+function videoVisualStyle(video: { genre?: string; artStyle?: string; brief: Brief }): string {
+  const id = (video.artStyle || video.brief.artStyle || "").trim();
+  const genre = video.genre === "kids" || video.genre === "ad" || video.genre === "faceless" ? video.genre : undefined;
+  const preset = genre && id ? artStylePreset(genre, id) : undefined;
+  const traits = (video.brief.artStyleTraits ?? []).map((item) => item.trim()).filter(Boolean);
+  const look = traits.length > 0 ? traits : (preset?.traits ?? []);
+  return [preset?.label || id, ...look].filter(Boolean).join(" · ");
+}
+
 function imageMediaEnv(ctx: OrchestratorContext): NodeJS.ProcessEnv {
   const env = mediaEnv(ctx);
   if (env.MOCK === "1" || env.IMAGE_PROVIDER?.trim().toLowerCase() === "mock") return env;
@@ -759,6 +779,38 @@ function asMediaProvider(value: string | undefined): MediaProviderName {
   return "mock";
 }
 
+function castImageSources(artefacts: ArtefactSummary[]): CastImageSource[] {
+  const sources: CastImageSource[] = [];
+  for (const artefact of artefacts) {
+    if (artefact.kind !== "sheet" && artefact.kind !== "anchor") continue;
+    const url = typeof artefact.payload.url === "string" ? artefact.payload.url.trim() : "";
+    const castId = typeof artefact.payload.castId === "string" ? artefact.payload.castId : "";
+    if (!url || !castId) continue;
+    sources.push({ kind: artefact.kind, castId, url, state: artefact.state });
+  }
+  return sources;
+}
+
+async function sceneImageRefs(
+  ctx: OrchestratorContext,
+  members: CastMember[],
+  prompt: string,
+  sources: readonly CastImageSource[],
+  extraIds: readonly string[] = [],
+  visualStyle?: string,
+): Promise<{ prompt: string; elementIds: string[]; references: Array<"sheet" | "anchor"> }> {
+  const prepared = members.map((member) => preferredCastImage(member, sources));
+  const referenced = await sceneCastReference(
+    imageMediaEnv(ctx),
+    prepared,
+    prompt,
+    { saveSheet: (castId, url) => store.updateCastSheet(ctx.db, castId, url), visualStyle },
+    extraIds,
+  );
+  const applied = includeCastReferences(referenced.elementIds, prepared);
+  return { prompt: referenced.prompt, elementIds: applied.elementIds, references: applied.references };
+}
+
 function publishMedia(chatId: string, event: Omit<MediaProgressEvent, "type">): void {
   chatBus.publish(chatId, { type: "media.progress", ...event });
 }
@@ -782,12 +834,13 @@ async function beginImages(ctx: OrchestratorContext, chatId: string, videoId: st
       .trim();
     const rawIds = Array.isArray(prompt.payload.elementIds) ? prompt.payload.elementIds : [];
     const sceneCast = cast.filter((member) => scene?.castIds.includes(member.id));
-    const referenced = await sceneCastReference(
-      imageMediaEnv(ctx),
+    const referenced = await sceneImageRefs(
+      ctx,
       sceneCast,
       imagePrompt,
-      { saveSheet: (castId, url) => store.updateCastSheet(ctx.db, castId, url) },
+      castImageSources(artefacts),
       rawIds.filter((id): id is string => typeof id === "string"),
+      videoVisualStyle(video),
     );
     const pending = await store.insertArtefact(ctx.db, {
       videoId,
@@ -819,7 +872,14 @@ async function beginImages(ctx: OrchestratorContext, chatId: string, videoId: st
       const providerLabel = generated.providerLabel ?? (provider === "mock" ? "Mock" : provider);
       const artefact = await store.updateArtefact(ctx.db, pending.id, {
         state: "awaiting_approval",
-        payload: { url: generated.url, provider, model, providerLabel, promptId: prompt.id },
+        payload: {
+          url: generated.url,
+          provider,
+          model,
+          providerLabel,
+          promptId: prompt.id,
+          references: referenced.references,
+        },
       });
       publishMedia(chatId, {
         jobId: pending.id,
@@ -1919,21 +1979,31 @@ export async function regenerateArtefact(
           "Scene direction unavailable. Please restart visual generation.",
         );
       const cast = await attachCast(ctx, video.id, video.brief.castIds ?? []);
+      const sceneCast = cast.filter((member) => scene.castIds.includes(member.id));
       const direction = await createPromptGen(
         creativeGenEnv(PromptGenOutputSchema, PROMPT_JSON_HINT),
       ).generate({
         videoId: video.id,
         scene,
         brief: video.brief,
-        cast: cast.filter((member) => scene.castIds.includes(member.id)),
+        cast: sceneCast,
         artStyle: video.artStyle,
         feedback,
       });
+      const imagePrompt = ctx.mock
+        ? direction.imagePrompt.replace(/<<<[^>]+>>>/g, " ").trim()
+        : direction.imagePrompt;
+      const referenced = await sceneImageRefs(
+        ctx,
+        sceneCast,
+        imagePrompt,
+        castImageSources(await store.listArtefacts(ctx.db, video.id)),
+        ctx.mock ? [] : direction.elementIds,
+        videoVisualStyle(video),
+      );
       const generated = await createMediaPorts(imageMediaEnv(ctx)).images.generate({
-        prompt: ctx.mock
-          ? direction.imagePrompt.replace(/<<<[^>]+>>>/g, " ").trim()
-          : direction.imagePrompt,
-        elementIds: ctx.mock ? [] : direction.elementIds,
+        prompt: referenced.prompt,
+        elementIds: referenced.elementIds,
         aspectRatio: video.aspectRatio,
         resolution: video.resolution,
       });
@@ -1945,6 +2015,7 @@ export async function regenerateArtefact(
         provider: generated.provider,
         model: generated.model,
         needsRegeneration: false,
+        references: referenced.references,
       };
     }
     if (["identity", "sheet", "anchor"].includes(artefact.kind) && feedback) {
@@ -2131,6 +2202,7 @@ export async function regenerateScene(
     let provider: MediaProviderName = "mock";
     let model = "";
     let providerLabel = "Mock";
+    let references: Array<"sheet" | "anchor"> = [];
     if (input.target === "image") {
       const imagePrompt = `${plan?.imagePrompt || textOf(prompt?.payload.imagePrompt) || textOf(current.payload.prompt)}${feedback ? `\n${feedback}` : ""}`
         .replace(/<<<[^>]+>>>/g, " ")
@@ -2138,9 +2210,15 @@ export async function regenerateScene(
       const cast = scene.castIds.length
         ? (await store.listCastMembers(ctx.db, scene.castIds)).filter((member) => scene.castIds.includes(member.id))
         : [];
-      const referenced = await sceneCastReference(imageMediaEnv(ctx), cast, imagePrompt || "scene", {
-        saveSheet: (castId, url) => store.updateCastSheet(ctx.db, castId, url),
-      });
+      const referenced = await sceneImageRefs(
+        ctx,
+        cast,
+        imagePrompt || "scene",
+        castImageSources(artefacts),
+        [],
+        videoVisualStyle(video),
+      );
+      references = referenced.references;
       const generated = await media.images.generate({
         prompt: referenced.prompt,
         elementIds: referenced.elementIds,
@@ -2220,6 +2298,7 @@ export async function regenerateScene(
         model,
         providerLabel,
         regenerated: true,
+        ...(input.target === "image" ? { references } : {}),
       },
     });
     publishMedia(video.chatId, {

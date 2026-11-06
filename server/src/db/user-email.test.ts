@@ -6,8 +6,8 @@ import test from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const dbSql = readFileSync(join(here, "migrations/005_user_email_phone.sql"), "utf8");
-const adminSql = readFileSync(join(here, "../admin/migrations/004_user_email_phone.sql"), "utf8");
+const dbSql = readFileSync(join(here, "migrations/006_user_email_phone.sql"), "utf8");
+const adminSql = readFileSync(join(here, "../admin/migrations/006_user_email_phone.sql"), "utf8");
 
 test("email and phone columns are added and email is backfilled from an address", async () => {
   assert.equal(dbSql, adminSql);

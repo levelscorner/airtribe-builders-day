@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { OwnVideoSummary, User } from "@chotu/shared";
+import { formatIst, formatLastActive, type OwnVideoSummary, type User } from "@chotu/shared";
 import { profileLines } from "../src/profile/lines.ts";
 import { loadOwnProfile } from "../src/profile/load.ts";
 
@@ -39,6 +39,9 @@ test("the profile sheet loads only the signed-in user and their videos", async (
     profileLines({ ...user, email: "asha@example.com", phone: "9876543210" }).phone,
     "9876543210",
   );
+  assert.equal(formatIst(loaded.user.createdAt), "2 Jan, 8:34 AM IST");
+  assert.equal(formatLastActive(loaded.user.lastActiveAt, loaded.user.createdAt), "2 Jan, 8:34 AM IST");
+  assert.equal(formatIst(loaded.user.createdAt).includes("Z"), false);
   assert.equal(loaded.videos[0]?.status, "active");
   assert.equal(JSON.stringify(loaded).includes("other@example.com"), false);
 });

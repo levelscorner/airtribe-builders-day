@@ -6,6 +6,7 @@ export interface AdminUser {
   email: string;
   phone: string;
   createdAt: string;
+  lastActiveAt: string | null;
 }
 
 export interface AdminUserVideo {
@@ -31,10 +32,11 @@ export function createUserDirectory(db: Db): UserDirectory {
         email: string | null;
         phone: string | null;
         created_at: Date | string;
+        last_active_at: Date | string | null;
       }>(
         `SELECT id, display_name,
                 COALESCE(email, CASE WHEN phone_or_email LIKE '%_@_%._%' THEN phone_or_email END) AS email,
-                phone, created_at
+                phone, created_at, last_active_at
          FROM users
          ORDER BY created_at DESC, display_name ASC
          LIMIT $1`,
@@ -49,10 +51,11 @@ export function createUserDirectory(db: Db): UserDirectory {
         email: string | null;
         phone: string | null;
         created_at: Date | string;
+        last_active_at: Date | string | null;
       }>(
         `SELECT id, display_name,
                 COALESCE(email, CASE WHEN phone_or_email LIKE '%_@_%._%' THEN phone_or_email END) AS email,
-                phone, created_at
+                phone, created_at, last_active_at
          FROM users
          WHERE id = $1`,
         [id],
@@ -93,6 +96,7 @@ function toUser(row: {
   email: string | null;
   phone: string | null;
   created_at: Date | string;
+  last_active_at?: Date | string | null;
 }): AdminUser {
   return {
     id: String(row.id),
@@ -100,6 +104,7 @@ function toUser(row: {
     email: row.email ?? "",
     phone: row.phone ?? "",
     createdAt: asIso(row.created_at),
+    lastActiveAt: row.last_active_at == null || row.last_active_at === "" ? null : asIso(row.last_active_at),
   };
 }
 

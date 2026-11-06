@@ -167,6 +167,8 @@ export interface User {
   /** False unless the server set CREDITS_ENABLED. Omitted means off. */
   creditsEnabled?: boolean;
   createdAt: string;
+  /** ISO time of the last authenticated request. Omitted until one is recorded. */
+  lastActiveAt?: string;
 }
 
 export interface Brief {
@@ -730,3 +732,4 @@ export const ApiPaths = {
 export { isEmail } from './email.ts';
 export type { VoiceBankPreset } from './voicePresets.ts';
 export { VOICE_PRESETS } from './voicePresets.ts';
+export { formatIst, formatLastActive } from './ist.ts';
