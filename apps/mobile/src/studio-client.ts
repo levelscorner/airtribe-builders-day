@@ -9,6 +9,7 @@ import type {
   CreateUserResponse,
   GetChatResponse,
   GetMeResponse,
+  OwnVideoSummary,
   GetVideoResponse,
   ListCastResponse,
   ListMessagesResponse,
@@ -32,6 +33,8 @@ export interface StudioClient {
   getRuntime?(): Promise<StudioRuntime>;
   createUser(body: CreateUserRequest): Promise<CreateUserResponse>;
   getMe(): Promise<GetMeResponse>;
+  /** Videos for the signed-in user only. There is no user id argument. */
+  listMyVideos(): Promise<{ videos: OwnVideoSummary[] }>;
   createChat(body: CreateChatRequest): Promise<CreateChatResponse>;
   getChat(chatId: string): Promise<GetChatResponse>;
   listMessages(chatId: string): Promise<ListMessagesResponse>;

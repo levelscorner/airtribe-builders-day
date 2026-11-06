@@ -6,7 +6,7 @@ import { MockMeter, PlayerCard } from "../screens/PlayerCard";
 import { colors } from "../theme";
 import { ImageFrame } from "./MediaFrames";
 
-const MEDIA = new Set(["sheet", "anchor", "voice_sample", "image", "clip", "audio", "final"]);
+const MEDIA = new Set(["sheet", "anchor", "voice_sample", "image", "clip", "audio", "voice", "final"]);
 
 function str(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
@@ -30,7 +30,7 @@ function RailBody({ message }: { message: ApprovalCardMessage }) {
     const url = str(preview.url) ?? `mock://${message.artefactKind}/${message.artefactId}`;
     return <PlayerCard embedded title={message.title} url={url} durationMs={num(preview.durationMs)} />;
   }
-  if (message.artefactKind === "audio" || message.artefactKind === "voice_sample") {
+  if (message.artefactKind === "audio" || message.artefactKind === "voice" || message.artefactKind === "voice_sample") {
     return <MockMeter durationMs={num(preview.durationMs) ?? 2400} label={message.title} />;
   }
   return <ImageFrame large label={str(preview.sceneTitle) ?? message.title} swatch={str(preview.swatch)} />;

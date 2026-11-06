@@ -34,7 +34,44 @@ export function encodeSceneArgs(input: {
   clipSec?: number;
   segment: string;
   drawtext?: string;
+  nativeAudio?: boolean;
 }): string[] {
+  if (input.nativeAudio && input.clip) {
+    const trimSec = round3(Math.max(0.05, input.voSec));
+    const filter = sceneVideoFilter({
+      width: input.width,
+      height: input.height,
+      padSec: 0,
+      drawtext: input.drawtext,
+    });
+    return [
+      "-y",
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-i",
+      input.clip,
+      "-filter_complex",
+      filter,
+      "-map",
+      "[v]",
+      "-map",
+      "0:a",
+      "-t",
+      trimSec.toFixed(3),
+      "-c:v",
+      "libx264",
+      "-preset",
+      "ultrafast",
+      "-pix_fmt",
+      "yuv420p",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "96k",
+      input.segment,
+    ];
+  }
   const hasClip = Boolean(input.clip);
   const fit = hasClip ? fitClipToVoice(input.voSec, input.clipSec) : { padSec: 0, trimSec: round3(Math.max(0.05, input.voSec)) };
   const videoInput = input.clip

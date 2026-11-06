@@ -49,7 +49,7 @@
         "idx": 0,
         "title": "hook",
         "narration": "Ruko! Is hafte ghar jaisa aam ka achaar seedha tumhare table pe.",
-        "durationMs": 5000,
+        "durationMs": 12500,
         "doubts": [],
         "castIds": [
           "preset_riya"
@@ -59,37 +59,7 @@
         "idx": 1,
         "title": "problem",
         "narration": "Bazaar wala achaar aksar ya to bahut namkeen hota hai, ya swaad hi gayab hota hai.",
-        "durationMs": 5000,
-        "doubts": [],
-        "castIds": [
-          "preset_riya"
-        ]
-      },
-      {
-        "idx": 2,
-        "title": "product",
-        "narration": "Yeh ek chhota glass jar hai: kacche aam, sarson, aur haldi. Koi tez chemical nahi.",
-        "durationMs": 5000,
-        "doubts": [],
-        "castIds": [
-          "preset_riya"
-        ]
-      },
-      {
-        "idx": 3,
-        "title": "offer",
-        "narration": "Is weekend ek jar lo, doosra aadhe daam pe. Jab tak stock chale.",
-        "durationMs": 5000,
-        "doubts": [],
-        "castIds": [
-          "preset_riya"
-        ]
-      },
-      {
-        "idx": 4,
-        "title": "cta",
-        "narration": "Link dabao, ya dukaan pe Riya ka naam bol do. Aaj hi try karo.",
-        "durationMs": 5000,
+        "durationMs": 12500,
         "doubts": [
           "Confirm the offer price and expiry with the shop before this airs."
         ],
@@ -103,7 +73,7 @@
     {
       "sceneIdx": 0,
       "imagePrompt": "clean studio backdrop, soft even light, true product colour, uncluttered tabletop. One still frame, aspect 9:16, no text, no letters, no logo, no watermark. The presenter mid greeting in a small shop, before the product appears. Riya is a young Indian woman presenter with a shoulder-length wavy black bob, warm brown eyes, small gold studs, a coral short-sleeve shirt, and a thin brass bangle on her right wrist. <<<el_riya>>> AI-generated scene.",
-      "videoPrompt": "Motion continues from the still. The presenter mid greeting in a small shop, before the product appears. Camera: slow push-in. Pace: snappy, one idea in the shot. Duration 5000 milliseconds. No burned-in text. Riya is a young Indian woman presenter with a shoulder-length wavy black bob, warm brown eyes, small gold studs, a coral short-sleeve shirt, and a thin brass bangle on her right wrist. <<<el_riya>>> AI-generated scene.",
+      "videoPrompt": "Motion continues from the still. The presenter mid greeting in a small shop, before the product appears. Camera: slow push-in. Pace: snappy, one idea in the shot. Duration 12500 milliseconds. No burned-in text. Riya is a young Indian woman presenter with a shoulder-length wavy black bob, warm brown eyes, small gold studs, a coral short-sleeve shirt, and a thin brass bangle on her right wrist. <<<el_riya>>> AI-generated scene.",
       "elementIds": [
         "el_riya"
       ]
@@ -111,31 +81,7 @@
     {
       "sceneIdx": 1,
       "imagePrompt": "clean studio backdrop, soft even light, true product colour, uncluttered tabletop. One still frame, aspect 9:16, no text, no letters, no logo, no watermark. The presenter sets aside a disappointing stand-in for a small glass jar of mango pickle. Riya is a young Indian woman presenter with a shoulder-length wavy black bob, warm brown eyes, small gold studs, a coral short-sleeve shirt, and a thin brass bangle on her right wrist. <<<el_riya>>> AI-generated scene.",
-      "videoPrompt": "Motion continues from the still. The presenter sets aside a disappointing stand-in for a small glass jar of mango pickle. Camera: locked medium shot. Pace: snappy, one idea in the shot. Duration 5000 milliseconds. No burned-in text. Riya is a young Indian woman presenter with a shoulder-length wavy black bob, warm brown eyes, small gold studs, a coral short-sleeve shirt, and a thin brass bangle on her right wrist. <<<el_riya>>> AI-generated scene.",
-      "elementIds": [
-        "el_riya"
-      ]
-    },
-    {
-      "sceneIdx": 2,
-      "imagePrompt": "clean studio backdrop, soft even light, true product colour, uncluttered tabletop. One still frame, aspect 9:16, no text, no letters, no logo, no watermark. a small glass jar of mango pickle centred on a clean surface, label area blank, true colour. Riya is a young Indian woman presenter with a shoulder-length wavy black bob, warm brown eyes, small gold studs, a coral short-sleeve shirt, and a thin brass bangle on her right wrist. <<<el_riya>>> AI-generated scene.",
-      "videoPrompt": "Motion continues from the still. a small glass jar of mango pickle centred on a clean surface, label area blank, true colour. Camera: slow arc around the product. Pace: snappy, one idea in the shot. Duration 5000 milliseconds. No burned-in text. Riya is a young Indian woman presenter with a shoulder-length wavy black bob, warm brown eyes, small gold studs, a coral short-sleeve shirt, and a thin brass bangle on her right wrist. <<<el_riya>>> AI-generated scene.",
-      "elementIds": [
-        "el_riya"
-      ]
-    },
-    {
-      "sceneIdx": 3,
-      "imagePrompt": "clean studio backdrop, soft even light, true product colour, uncluttered tabletop. One still frame, aspect 9:16, no text, no letters, no logo, no watermark. The presenter beside a small glass jar of mango pickle, a friendly offer gesture, no price text. Riya is a young Indian woman presenter with a shoulder-length wavy black bob, warm brown eyes, small gold studs, a coral short-sleeve shirt, and a thin brass bangle on her right wrist. <<<el_riya>>> AI-generated scene.",
-      "videoPrompt": "Motion continues from the still. The presenter beside a small glass jar of mango pickle, a friendly offer gesture, no price text. Camera: locked medium shot. Pace: snappy, one idea in the shot. Duration 5000 milliseconds. No burned-in text. Riya is a young Indian woman presenter with a shoulder-length wavy black bob, warm brown eyes, small gold studs, a coral short-sleeve shirt, and a thin brass bangle on her right wrist. <<<el_riya>>> AI-generated scene.",
-      "elementIds": [
-        "el_riya"
-      ]
-    },
-    {
-      "sceneIdx": 4,
-      "imagePrompt": "clean studio backdrop, soft even light, true product colour, uncluttered tabletop. One still frame, aspect 9:16, no text, no letters, no logo, no watermark. The presenter looks to camera with a small glass jar of mango pickle in frame, a clear stop, no letters. Riya is a young Indian woman presenter with a shoulder-length wavy black bob, warm brown eyes, small gold studs, a coral short-sleeve shirt, and a thin brass bangle on her right wrist. <<<el_riya>>> AI-generated scene.",
-      "videoPrompt": "Motion continues from the still. The presenter looks to camera with a small glass jar of mango pickle in frame, a clear stop, no letters. Camera: locked medium shot with a small nod. Pace: snappy, one idea in the shot. Duration 5000 milliseconds. No burned-in text. Riya is a young Indian woman presenter with a shoulder-length wavy black bob, warm brown eyes, small gold studs, a coral short-sleeve shirt, and a thin brass bangle on her right wrist. <<<el_riya>>> AI-generated scene.",
+      "videoPrompt": "Motion continues from the still. The presenter sets aside a disappointing stand-in for a small glass jar of mango pickle. Camera: locked medium shot. Pace: snappy, one idea in the shot. Duration 12500 milliseconds. No burned-in text. Riya is a young Indian woman presenter with a shoulder-length wavy black bob, warm brown eyes, small gold studs, a coral short-sleeve shirt, and a thin brass bangle on her right wrist. <<<el_riya>>> AI-generated scene.",
       "elementIds": [
         "el_riya"
       ]

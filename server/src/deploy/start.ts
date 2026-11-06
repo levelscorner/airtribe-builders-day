@@ -10,10 +10,17 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPostgresEventLog } from "../admin/log.js";
 import { adminRouter, type PaymentReview } from "../admin/routes.js";
+import { createUserDirectory } from "../admin/users.js";
 import { dbFromSql } from "../admin/sql-db.js";
+import { creditsEnabled } from "../credits/flag.js";
 import { createCredits } from "../credits/index.js";
 import { getDb, migrate } from "../db/client.js";
+import { apiHealthBody } from "../health.js";
 import { resolveLlmProvider } from "../llm/provider.js";
+import { createMcpRouter } from "../mcp/http.js";
+import { warnIfMcpOpen } from "../mcp/auth.js";
+import { createVideoBrief, getJobStatus } from "../mcp/jobs.js";
+import { sheetsAreMock } from "../media/cast/sheet.js";
 import { mediaRoot } from "../media/files.js";
 import { createPayments, paymentsModeFrom, paymentsRouter } from "../payments/index.js";
 import { createV1Router } from "../routes/v1.js";
@@ -74,11 +81,26 @@ export async function startServer(options?: { port?: number; listen?: boolean })
         }
       : undefined;
   app.use(paymentsRouter(payments));
-  app.use(adminRouter(events, { mock, database: !db.memory }, review));
+  app.use(adminRouter(events, { mock, database: !db.memory }, review, createUserDirectory(marsDb)));
 
+  const health = () =>
+    apiHealthBody({ mock, memory: db.memory, llm: resolveLlmProvider(), payments: payMode });
   app.get("/api/health", (_req, res) => {
-    res.json({ ok: true, mock, memory: db.memory, llm: resolveLlmProvider(), payments: payMode });
+    res.json({
+      ...health(),
+      creditsEnabled: creditsEnabled(),
+      sheetsAreMock: sheetsAreMock({ ...process.env, ...(mock ? { MOCK: "1" } : {}) }),
+    });
   });
+  warnIfMcpOpen(process.env);
+  app.use(
+    "/mcp",
+    createMcpRouter({
+      health,
+      createBrief: (input) => createVideoBrief({ db, mock }, input),
+      jobStatus: (jobId) => getJobStatus(db, jobId),
+    }),
+  );
 
   app.use("/v1", createV1Router({ db, mock }));
 
@@ -100,7 +122,8 @@ export async function startServer(options?: { port?: number; listen?: boolean })
         req.path.startsWith("/api") ||
         req.path.startsWith("/mock") ||
         req.path.startsWith("/admin") ||
-        req.path.startsWith("/payments")
+        req.path.startsWith("/payments") ||
+        req.path.startsWith("/mcp")
       ) {
         next();
         return;

@@ -95,7 +95,17 @@ test("detailed web prompt goes directly to script; visuals wait for approval", a
   arts = await store.listArtefacts(db, chat.videoId);
   assert.equal((await store.getVideoRow(db, chat.videoId))!.stage, "cast");
   assert.ok(arts.some((a) => a.kind === "identity"));
-  assert.equal(arts.filter((a) => a.kind === "image").length, 5);
+  assert.ok(arts.some((a) => a.kind === "sheet" && typeof a.payload.url === "string" && a.payload.url.length > 0));
+  assert.equal(arts.filter((a) => a.kind === "image").length, 2);
+  assert.ok(
+    arts
+      .filter((a) => a.kind === "image")
+      .every((a) => Array.isArray(a.payload.references) && a.payload.references.includes("sheet")),
+  );
+  const sheetMessages = (await store.listMessages(db, chat.chatId)).filter(
+    (message) => message.kind === "approval" && message.artefactKind === "sheet",
+  );
+  assert.ok(sheetMessages.length > 0);
   assert.equal(
     arts.some((a) => a.kind === "clip"),
     false,
@@ -170,6 +180,25 @@ test("a stale script action cannot change the already approved web review", asyn
   );
   assert.equal((await store.getArtefact(db, script.id))!.state, "approved");
   assert.equal((await store.getVideoRow(db, chat.videoId))!.stage, "cast");
+});
+
+test("__defaults fills the open intake question instead of a stale-field error", async () => {
+  const owner = await user();
+  const chat = await startChat(ctx, {
+    userId: owner.id,
+    experience: "chat_canvas",
+    initialMessage: "bees",
+  });
+  assert.equal(chat.stage, "brief");
+  await handleAnswer(ctx, chat.chatId, { field: "__defaults", useDefaults: true });
+  const video = (await store.getVideoRow(db, chat.videoId))!;
+  assert.equal(video.stage, "script");
+  assert.equal(video.brief.genre ?? video.genre, "kids");
+  const messages = await store.listMessages(db, chat.chatId);
+  assert.equal(
+    messages.some((item) => item.kind === "text" && item.text.includes("Unknown question field")),
+    false,
+  );
 });
 
 test('one complete configuration summary is persisted before the script', async () => {
